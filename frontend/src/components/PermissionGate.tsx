@@ -70,23 +70,4 @@ export function PermissionGate({
   return <>{children}</>
 }
 
-/**
- * Hook for programmatic permission checking.
- * Useful when you need to check permissions outside JSX.
- */
-export function usePermission() {
-  const { hasPermission, hasAnyPermission, permissions } = useAuth()
-
-  return {
-    /** Check if user has a specific permission */
-    can: hasPermission,
-    /** Check if user has any of the specified permissions */
-    canAny: hasAnyPermission,
-    /** Check if user has all of the specified permissions */
-    canAll: (...codes: string[]) => codes.every((code) => hasPermission(code)),
-    /** All user permissions as a Set */
-    permissions,
-  }
-}
-
 export default PermissionGate

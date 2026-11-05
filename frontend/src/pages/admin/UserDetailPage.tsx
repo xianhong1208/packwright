@@ -42,7 +42,7 @@ export default function UserDetailPage() {
     try {
       const data = await userApi.getUser(Number(userId))
       setUser(data)
-    } catch (err) {
+    } catch {
       message.error('Failed to load user')
       navigate('/admin/users')
     } finally {
