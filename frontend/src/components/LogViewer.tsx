@@ -173,7 +173,7 @@ export default function LogViewer({
           padding: 0,
           height: height,
           overflow: 'hidden',
-          background: '#0b0f14',
+          background: '#171512',
         },
       }}
     >
@@ -238,19 +238,19 @@ function getLogColor(log: string): string {
     /(^|\W)(ERROR|Error:|failed|Failed|FAILED)(\W|$)/.test(log) ||
     log.includes('✗')
   ) {
-    return '#f27d7d' // alert / coral
+    return 'var(--color-alert-400)' // alert / coral
   }
   if (/(^|\W)(WARN|WARNING|Warning)(\W|:|$)/.test(log) || log.includes('⚠')) {
-    return '#f0bd5e' // signal / amber
+    return 'var(--color-signal-400)' // signal / amber
   }
   if (
     /(^|\W)(SUCCESS|COMPLETED?|Complete[d]?)(\W|$)/.test(log) ||
     log.includes('✓')
   ) {
-    return '#56d6a1' // matrix / mint
+    return 'var(--color-matrix-400)' // matrix / mint
   }
   if (/^\[[^\]]+\]/.test(log)) {
-    return '#6ba6f7' // cyber / cobalt
+    return 'var(--color-teal-400)' // cyber / cobalt
   }
-  return '#c9d1d9'
+  return 'var(--ink)'
 }

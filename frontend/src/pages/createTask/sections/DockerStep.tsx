@@ -132,7 +132,7 @@ export default function DockerStep() {
                           </tbody>
                         </table>
                         <div className="mt-2 text-signal-400">
-                          ⚠ If another reverse proxy sits in front of the container (an outer Nginx, a load balancer), that layer has its own timeout.
+                          Note: if another reverse proxy sits in front of the container (an outer Nginx, a load balancer), that layer has its own timeout.
                           Changing only this one does nothing — every layer in the chain applies, and the smallest wins.
                           If it still drops at around 60 seconds after a rebuild, it's the outer layer.
                         </div>

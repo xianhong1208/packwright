@@ -50,7 +50,7 @@ export default function BuildResultPanel({ result }: { result: BuildResult | nul
               <FileZipOutlined className="mr-1" />
               Artifact size
             </div>
-            <div className="text-lg font-semibold text-cyber-300">{result.artifact.size_human}</div>
+            <div className="text-lg font-semibold text-[var(--ink)]">{result.artifact.size_human}</div>
           </div>
           <div className="rounded-lg p-3 bg-void-950">
             <div className="text-xs mb-1" style={{ color: 'var(--ink-faint)' }}>
@@ -84,7 +84,7 @@ export default function BuildResultPanel({ result }: { result: BuildResult | nul
 
       {result.preflight && result.preflight.length > 0 && (
         <div>
-          <div className="text-xs mb-2 uppercase tracking-wider" style={{ color: 'var(--ink-faint)' }}>
+          <div className="text-xs mb-2" style={{ color: 'var(--ink-faint)' }}>
             Preflight checks
           </div>
           <div className="space-y-1.5">
