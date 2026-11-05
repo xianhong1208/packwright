@@ -130,6 +130,7 @@ async def _build_docker_standard(task_id: str, config: BuildConfig, db: AsyncSes
     """Standard Docker build (no host Nuitka compilation)."""
     from app.services.docker_worker import run_docker_build
 
+    await task_manager.set_stage(task_id, "docker")
     success = await run_docker_build(task_id, config, db)
     if success:
         await task_manager.update_task(task_id, "status", TaskStatus.COMPLETED, db)
@@ -164,6 +165,7 @@ async def _build_docker_nuitka(task_id: str, config: BuildConfig, db: AsyncSessi
         await task_manager.append_log(task_id, "=== Step 1: Building Frontend ===")
         await task_manager.append_log(task_id, "")
 
+        await task_manager.set_stage(task_id, "frontend")
         frontend_success = await run_frontend_build(task_id, config, db, frontend_path)
         if not frontend_success:
             await task_manager.update_task(task_id, "status", TaskStatus.FAILED, db)
@@ -203,6 +205,7 @@ async def _build_docker_nuitka(task_id: str, config: BuildConfig, db: AsyncSessi
     await task_manager.append_log(task_id, f"=== {docker_step}: Docker Image Build ===")
     await task_manager.append_log(task_id, "")
 
+    await task_manager.set_stage(task_id, "docker")
     success = await run_docker_build(task_id, config, db, precompiled=True)
     if success:
         await task_manager.update_task(task_id, "status", TaskStatus.COMPLETED, db)
@@ -241,6 +244,7 @@ async def _build_frontend_only(task_id: str, config: BuildConfig, db: AsyncSessi
     project_path = Path(config.project_path)
     frontend_path = project_path / config.frontend_dir
 
+    await task_manager.set_stage(task_id, "frontend")
     success = await run_frontend_build(task_id, config, db, frontend_path)
 
     if success:
@@ -298,6 +302,7 @@ async def _build_fullstack(task_id: str, config: BuildConfig, db: AsyncSession) 
     await task_manager.append_log(task_id, "=== Step 1: Building Frontend ===")
     await task_manager.append_log(task_id, "")
 
+    await task_manager.set_stage(task_id, "frontend")
     frontend_success = await run_frontend_build(task_id, config, db, frontend_path)
 
     if not frontend_success:
