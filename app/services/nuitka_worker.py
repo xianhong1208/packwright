@@ -21,6 +21,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.services.paths import safe_join
 from app.config import get_settings
 from app.schemas.task import BuildConfig, PackMode
+from app.services.source_guard import SourceGuard
 from app.services.task_manager import task_manager
 from app.services.terminal_output import TerminalLineBuffer
 
@@ -941,7 +942,7 @@ async def run_nuitka_build(task_id: str, config: BuildConfig, db: AsyncSession) 
     )
 
     process = None
-    backup_file = None
+    guard = SourceGuard(task_id)  # puts the entry point back however the build ends
     entry_point = None
     master_fd = None
     start_ts = time.monotonic()
@@ -1104,20 +1105,24 @@ async def run_nuitka_build(task_id: str, config: BuildConfig, db: AsyncSession) 
             raise FileNotFoundError(f"Entry point not found: {entry_point}")
 
         # Inject libs loading code into entry point (only for non-FULL modes)
-        backup_file = None
         if config.pack_mode != PackMode.FULL:
-            backup_file = entry_point.with_suffix(".py.backup")
             original_content = entry_point.read_text(encoding="utf-8")
+            # A crash before this guard existed left the loader in the file and the
+            # original in <entry>.py.backup, and later builds skipped both. Undo it.
+            legacy_backup = entry_point.with_suffix(".py.backup")
+            if "[LIBS LOADER]" in original_content and legacy_backup.is_file():
+                await asyncio.to_thread(shutil.move, str(legacy_backup), str(entry_point))
+                original_content = entry_point.read_text(encoding="utf-8")
+                await task_manager.append_log(
+                    task_id, f"Restored {entry_point.name} from a backup left by an interrupted build"
+                )
 
-            # Check if already injected (avoid double injection)
             if "[LIBS LOADER]" not in original_content:
                 await task_manager.append_log(task_id, "Injecting libs loader into entry point...")
-                shutil.copy2(entry_point, backup_file)
-                injected_content = inject_libs_loader(original_content)
-                entry_point.write_text(injected_content, encoding="utf-8")
+                guard.write(entry_point, inject_libs_loader(original_content))
             else:
+                # The user's own file carries the loader (e.g. committed by mistake).
                 await task_manager.append_log(task_id, "Libs loader already present, skipping injection")
-                backup_file = None
         else:
             await task_manager.append_log(task_id, "Full mode: skipping libs loader injection")
 
@@ -1418,9 +1423,10 @@ async def run_nuitka_build(task_id: str, config: BuildConfig, db: AsyncSession) 
         await task_manager.set_process(task_id, None)
 
         # Restore original entry point file
-        if backup_file and backup_file.exists():
+        if guard.active:
             await task_manager.append_log(task_id, "Restoring original entry point...")
-            shutil.move(str(backup_file), str(entry_point))
+            for line in await asyncio.to_thread(guard.restore):
+                await task_manager.append_log(task_id, line)
 
         # Handle completion
         if ret_code == 0:
@@ -1615,12 +1621,8 @@ async def run_nuitka_build(task_id: str, config: BuildConfig, db: AsyncSession) 
     except Exception as e:
         await task_manager.append_log(task_id, f"Error: {e!s}")
         await task_manager.set_process(task_id, None)
-        # Try to restore original entry point if backup exists
-        try:
-            if backup_file and backup_file.exists():
-                shutil.move(str(backup_file), str(entry_point))
-        except Exception:
-            logger.warning("Failed to restore entry point backup for task %s", task_id, exc_info=True)
+        for line in await asyncio.to_thread(guard.restore):
+            await task_manager.append_log(task_id, line)
         # Persist whatever preflight/result data we collected before dying
         try:
             build_result["duration_seconds"] = round(time.monotonic() - start_ts, 1)
@@ -1630,6 +1632,10 @@ async def run_nuitka_build(task_id: str, config: BuildConfig, db: AsyncSession) 
         return False
 
     finally:
+        # Every exit — failure, exception, cancellation — puts the entry point back.
+        if guard.active:
+            for line in guard.restore():
+                logger.info("Task %s: %s", task_id, line)
         # Close PTY if still open (normal path already closed and None'd it)
         if master_fd is not None:
             try:
