@@ -51,7 +51,7 @@ class TestSubmittedConfigIsNotMutated:
         Identity is the whole point: every mutation downstream is in-place, so
         an equal-but-shared object would fix nothing.
         """
-        submitted = BuildConfig(project_path="/media/disk0/x")
+        submitted = BuildConfig(project_path="/srv/projects/x")
 
         await build_dispatcher.dispatch_build("t1", submitted, db=None)
 
@@ -68,7 +68,7 @@ class TestSubmittedConfigIsNotMutated:
         frontend_worker do, rather than asserting on a copy in the abstract.
         """
         submitted = BuildConfig(
-            project_path="/media/disk0/x",
+            project_path="/srv/projects/x",
             project_type=ProjectType.FULLSTACK,
             output_dir="",
             data_dirs="app",
@@ -96,7 +96,7 @@ class TestSubmittedConfigIsNotMutated:
         it forgot, which is a worse bug than the one being fixed.
         """
         submitted = BuildConfig(
-            project_path="/media/disk0/x",
+            project_path="/srv/projects/x",
             project_type=ProjectType.FULLSTACK,
             pack_mode=PackMode.EXTERNAL,
             python_version="3.13",
@@ -122,7 +122,7 @@ class TestSubmittedConfigIsNotMutated:
         so appending to it downstream would still reach the submitted config.
         """
         submitted = BuildConfig(
-            project_path="/media/disk0/x",
+            project_path="/srv/projects/x",
             dependency_groups=["dev"],
         )
 
@@ -144,8 +144,8 @@ class TestSubmittedConfigIsNotMutated:
         builds of one directory must still collide after the copy.
         """
         spy = mocker.spy(build_dispatcher, "get_project_lock")
-        submitted = BuildConfig(project_path="/media/disk0/x")
+        submitted = BuildConfig(project_path="/srv/projects/x")
 
         await build_dispatcher.dispatch_build("t1", submitted, db=None)
 
-        assert spy.call_args.args[0] == "/media/disk0/x"
+        assert spy.call_args.args[0] == "/srv/projects/x"

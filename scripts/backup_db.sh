@@ -2,10 +2,9 @@
 # PostgreSQL backup for Packwright.
 #
 # Why this exists: the database holds things that cannot be rebuilt from code
-# -- 670 build-history records, users and roles, audit logs, login records.
-# Workspaces and artifacts have a TTL and are cleaned up automatically; rerun a
-# build and they come back. These do not. At the time of writing this system
-# had no backup mechanism at all.
+# -- build history (with the exact config of every build), users and roles,
+# audit logs, login records. Workspaces and artifacts have a TTL and are
+# cleaned up automatically; rerun a build and they come back. These do not.
 #
 # Usage:
 #   bash scripts/backup_db.sh                    # back up to the default dir

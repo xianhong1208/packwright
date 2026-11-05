@@ -62,8 +62,8 @@ class TestSpaAndCaching:
     def test_tc_ngx_004_worker_processes_bounded(self):
         """TC-NGX-004: nginx — worker_processes is pinned, not 'auto'.
 
-        'auto' spawns one worker per core; on the 128-core build host that is
-        128 nginx workers for a static site.
+        'auto' spawns one worker per core; on a many-core build host that is
+        over a hundred nginx workers for a static site.
         """
         assert "worker_processes 2;" in _frontend_dockerfile()
 

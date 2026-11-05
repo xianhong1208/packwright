@@ -1815,7 +1815,7 @@ export default function CreateTask() {
                           label={<span style={{ color: 'var(--ink-muted)' }}>API proxy URL</span>}
                           tooltip="Nginx reverse-proxies /api to this URL."
                         >
-                          <Input placeholder="http://192.168.1.10:5011" className="input-field" />
+                          <Input placeholder="http://backend:8000" className="input-field" />
                         </Form.Item>
                       </Col>
                     </Row>
@@ -1873,7 +1873,7 @@ export default function CreateTask() {
                                 </tbody>
                               </table>
                               <div className="mt-2 text-signal-400">
-                                ⚠ If there's another company Nginx in front of the container, that layer has its own timeout.
+                                ⚠ If another reverse proxy sits in front of the container (an outer Nginx, a load balancer), that layer has its own timeout.
                                 Changing only this one does nothing — every layer in the chain applies, and the smallest wins.
                                 If it still drops at around 60 seconds after a rebuild, it's the outer layer.
                               </div>

@@ -5,12 +5,12 @@ Source: app/schemas/task.BuildConfig.validate_frontend_paths
 
 A frontend that builds into the backend's static directory is configured as
 frontend_output_dir="../static/web", and build_dispatcher resolves it with
-normpath on purpose. It is a supported layout and a common one here — 73 of
-698 stored build records use it.
+normpath on purpose. It is a supported layout and a common one — about a
+tenth of stored build records in a real install used it.
 
 An earlier version of the field validator rejected ".." outright to keep the
 generated Dockerfile safe. BuildConfig is also what every *stored* config is
-read back through, so those 73 records stopped deserialising and the history
+read back through, so those records stopped deserialising and the history
 list failed for everyone who owned one — reported as a Dockerfile-injection
 error naming a directory the user had configured years of builds around.
 

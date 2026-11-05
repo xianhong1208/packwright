@@ -529,7 +529,7 @@ def diagnose_build_failure(log_text: str) -> list[dict]:
                 "\n處理方式:(1) 把 Docker 設定的「後端最久可以不出聲多久」調到最壞情況的"
                 "兩倍;(2) 更可靠的是讓後端在等待期間定期送出資料(SSE 每 10 秒送一行"
                 "「: keepalive」),這樣計時器會被重置,而且鏈上每一層代理都同時滿足 —— "
-                "如果容器外還有一層公司 nginx,只改容器內的設定是沒有用的。",
+                "如果容器外還有一層反向代理(外層 nginx、負載平衡器),只改容器內的設定是沒有用的。",
                 gw_match.group(0),
             )
     except Exception:
@@ -617,11 +617,10 @@ def extract_error_lines(log_text: str, limit: int = 6) -> list[str]:
 def build_failure_report(log_text: str, *, stage: str | None = None) -> dict:
     """Explain a failed build — always, even when no pattern matches.
 
-    Coverage of the pattern rules was 13% of real failures, and the caller only
-    persisted a result when something matched. So 87% of the time a user was
-    shown a red "failed" and nothing else, which is how one project accumulated
-    55 retries in five weeks: there was nothing to act on, so people just ran
-    it again.
+    The pattern rules match only a minority of real failures, and the caller
+    used to persist a result only when something matched. So most of the time a
+    user was shown a red "failed" and nothing else: there was nothing to act on,
+    so people just ran it again, sometimes dozens of times.
 
     This never returns an empty diagnosis. When no rule fires it still names
     the stage that failed and surfaces the error lines from the log, which is

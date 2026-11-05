@@ -572,7 +572,7 @@ async def revoke_session_endpoint(
 
 
 # ---------------------------------------------------------------------------
-# MCP Center single sign-on (optional; local email/password stays available)
+# MCP Gate single sign-on (optional; local email/password stays available)
 # ---------------------------------------------------------------------------
 
 _SSO_STATE_COOKIE = "mcp_sso_state"
@@ -581,15 +581,15 @@ _SSO_HANDOFF_COOKIE = "mcp_sso_handoff"
 
 @router.get("/oauth/mcp/status")
 async def mcp_oauth_status() -> dict:
-    """Whether "Sign in with MCP Center" should be offered on the login page."""
+    """Whether "Sign in with MCP Gate" should be offered on the login page."""
     return {"enabled": mcp_oauth.is_enabled()}
 
 
 @router.get("/oauth/mcp/login")
 async def mcp_oauth_login() -> RedirectResponse:
-    """Start the SSO flow: redirect the browser to MCP Center's consent screen."""
+    """Start the SSO flow: redirect the browser to MCP Gate's consent screen."""
     if not mcp_oauth.is_enabled():
-        raise HTTPException(status_code=404, detail="MCP Center sign-in is not enabled")
+        raise HTTPException(status_code=404, detail="MCP Gate sign-in is not enabled")
     state = secrets.token_urlsafe(24)
     verifier, challenge = mcp_oauth.generate_pkce()
     redirect = RedirectResponse(mcp_oauth.build_authorize_url(state, challenge), status_code=302)
@@ -649,7 +649,7 @@ async def mcp_oauth_callback(
     # Calling the former bare raised TypeError, so every approved SSO sign-in 500ed.
     ip = get_client_ip(request)
     access_token, refresh_token = await create_tokens(
-        db, user, remember_me=False, device_info="MCP Center SSO", ip_address=ip
+        db, user, remember_me=False, device_info="MCP Gate SSO", ip_address=ip
     )
     await update_last_login(db, user)
 
@@ -692,7 +692,7 @@ async def mcp_oauth_exchange(
 
 
 async def _find_or_create_sso_user(db: AsyncSession, identity: dict) -> User:
-    """Find the local account linked to this MCP Center identity, or create one.
+    """Find the local account linked to this MCP Gate identity, or create one.
 
     New SSO accounts are created inactive with the 'user' role, exactly like a
     self-registration — an administrator approves them before first sign-in.
@@ -713,7 +713,7 @@ async def _find_or_create_sso_user(db: AsyncSession, identity: dict) -> User:
     role = (await db.execute(select(Role).where(Role.name == role_name))).scalar_one_or_none()
 
     # The identity is keyed only by (oauth_provider, oauth_subject). We deliberately
-    # DO NOT link to an existing local account by matching email: MCP Center emails
+    # DO NOT link to an existing local account by matching email: MCP Gate emails
     # are not proven here, so silently binding a foreign OAuth subject to a local
     # account would be an account-takeover path. If the email is already taken, the
     # SSO account is created without one (linking must be an explicit, authenticated

@@ -32,10 +32,10 @@ class TestLockIdentity:
 
         Two locks for one path would serialise nothing.
         """
-        a = get_project_lock("/media/disk0/proj")
-        b = get_project_lock("/media/disk0/proj")
+        a = get_project_lock("/srv/projects/proj")
+        b = get_project_lock("/srv/projects/proj")
         assert a is b
-        release_project_lock("/media/disk0/proj")
+        release_project_lock("/srv/projects/proj")
 
     @pytest.mark.unit
     def test_tc_lck_002_path_is_normalised(self):
@@ -44,20 +44,20 @@ class TestLockIdentity:
         Two tasks submitted as ".../proj" and ".../proj/" address one directory
         and must not each get their own lock.
         """
-        a = get_project_lock("/media/disk0/proj")
-        b = get_project_lock("/media/disk0/proj/")
-        c = get_project_lock("/media/disk0/proj/./")
+        a = get_project_lock("/srv/projects/proj")
+        b = get_project_lock("/srv/projects/proj/")
+        c = get_project_lock("/srv/projects/proj/./")
         assert a is b is c
-        release_project_lock("/media/disk0/proj")
+        release_project_lock("/srv/projects/proj")
 
     @pytest.mark.unit
     def test_tc_lck_003_different_paths_get_different_locks(self):
         """TC-LCK-003: get_project_lock — unrelated projects must not block each other."""
-        a = get_project_lock("/media/disk0/one")
-        b = get_project_lock("/media/disk0/two")
+        a = get_project_lock("/srv/projects/one")
+        b = get_project_lock("/srv/projects/two")
         assert a is not b
-        release_project_lock("/media/disk0/one")
-        release_project_lock("/media/disk0/two")
+        release_project_lock("/srv/projects/one")
+        release_project_lock("/srv/projects/two")
 
 
 class TestSerialisation:
@@ -73,13 +73,13 @@ class TestSerialisation:
         order: list[str] = []
 
         async def build(name: str) -> None:
-            async with get_project_lock("/media/disk0/shared"):
+            async with get_project_lock("/srv/projects/shared"):
                 order.append(f"{name}-start")
                 await asyncio.sleep(0.02)
                 order.append(f"{name}-end")
 
         await asyncio.gather(build("A"), build("B"))
-        release_project_lock("/media/disk0/shared")
+        release_project_lock("/srv/projects/shared")
 
         assert order in (
             ["A-start", "A-end", "B-start", "B-end"],
@@ -103,10 +103,10 @@ class TestSerialisation:
                 order.append(f"{name}-end")
 
         await asyncio.gather(
-            build("X", "/media/disk0/p1"), build("Y", "/media/disk0/p2")
+            build("X", "/srv/projects/p1"), build("Y", "/srv/projects/p2")
         )
-        release_project_lock("/media/disk0/p1")
-        release_project_lock("/media/disk0/p2")
+        release_project_lock("/srv/projects/p1")
+        release_project_lock("/srv/projects/p2")
 
         assert order[0].endswith("-start")
         assert order[1].endswith("-start")
@@ -124,10 +124,10 @@ class TestLockTableGrowth:
         per build forever, for directories that no longer exist.
         """
         before = tracked_path_count()
-        get_project_lock("/media/disk0/ephemeral-task-id")
+        get_project_lock("/srv/projects/ephemeral-task-id")
         assert tracked_path_count() == before + 1
 
-        release_project_lock("/media/disk0/ephemeral-task-id")
+        release_project_lock("/srv/projects/ephemeral-task-id")
         assert tracked_path_count() == before
 
     @pytest.mark.unit
@@ -138,7 +138,7 @@ class TestLockTableGrowth:
         Dropping a held lock lets the next caller create a second one for the
         same path, which silently removes the serialisation this exists for.
         """
-        path = "/media/disk0/still-building"
+        path = "/srv/projects/still-building"
         lock = get_project_lock(path)
 
         async with lock:
@@ -163,7 +163,7 @@ class TestDispatchReleasesItsLock:
         mocker.patch.object(build_dispatcher.task_manager, "update_task", mocker.AsyncMock())
         mocker.patch.object(build_dispatcher, "_dispatch_locked", mocker.AsyncMock())
         config = mocker.Mock()
-        config.model_copy.return_value = mocker.Mock(project_path="/media/disk0/released")
+        config.model_copy.return_value = mocker.Mock(project_path="/srv/projects/released")
         before = tracked_path_count()
 
         await build_dispatcher.dispatch_build("t", config, db=object())

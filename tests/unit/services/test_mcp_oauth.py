@@ -1,4 +1,4 @@
-"""Unit tests for MCP Center SSO helpers (PKCE, authorize URL, signed flow state)."""
+"""Unit tests for MCP Gate SSO helpers (PKCE, authorize URL, signed flow state)."""
 
 from urllib.parse import parse_qs, urlparse
 
@@ -12,7 +12,7 @@ def _enable_sso(monkeypatch):
     from app.config import get_settings
 
     monkeypatch.setenv("MCP_OAUTH_ENABLED", "true")
-    monkeypatch.setenv("MCP_CENTER_URL", "http://center.test:4568")
+    monkeypatch.setenv("MCP_GATE_URL", "http://center.test:4568")
     monkeypatch.setenv("MCP_OAUTH_CLIENT_ID", "mcpc_build")
     monkeypatch.setenv("MCP_OAUTH_REDIRECT_URI", "http://localhost:5018/auth/oauth/mcp/callback")
     get_settings.cache_clear()
@@ -68,3 +68,25 @@ class TestFlowState:
         cookie = mcp_oauth.sign_flow_state("state-1", "verifier-1")
         with pytest.raises(mcp_oauth.McpOAuthError):
             mcp_oauth.read_flow_state(cookie + "x", "state-1")
+
+
+class TestIssuerSetting:
+    """MCP Gate was called MCP Center; deployments that set the old variable keep working."""
+
+    @pytest.mark.unit
+    def test_legacy_mcp_center_url_is_still_read(self, monkeypatch):
+        from app.config import get_settings
+
+        monkeypatch.delenv("MCP_GATE_URL")
+        monkeypatch.setenv("MCP_CENTER_URL", "http://legacy.test:4568")
+        get_settings.cache_clear()
+        assert get_settings().mcp_gate_url == "http://legacy.test:4568"
+
+    @pytest.mark.unit
+    def test_new_name_wins_over_the_legacy_one(self, monkeypatch):
+        from app.config import get_settings
+
+        monkeypatch.setenv("MCP_GATE_URL", "http://gate.test:4568")
+        monkeypatch.setenv("MCP_CENTER_URL", "http://legacy.test:4568")
+        get_settings.cache_clear()
+        assert get_settings().mcp_gate_url == "http://gate.test:4568"
