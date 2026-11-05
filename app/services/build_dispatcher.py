@@ -8,6 +8,7 @@ from pathlib import Path
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.schemas.task import BuildConfig, TaskStatus, ProjectType, SourceType
+from app.services.paths import safe_join
 from app.services.project_lock import get_project_lock, release_project_lock
 from app.services.task_manager import task_manager
 
@@ -72,11 +73,14 @@ async def dispatch_build(task_id: str, config: BuildConfig, db: AsyncSession) ->
             task_id,
             "Another build is running for this project — waiting for it to finish...",
         )
-    async with lock:
-        try:
+    try:
+        async with lock:
             await _dispatch_locked(task_id, config, db)
-        finally:
-            release_project_lock(config.project_path)
+    finally:
+        # Outside the `async with`: release_project_lock() drops the entry only
+        # when nobody holds or waits for it, and inside the block this task
+        # still held it, so entries were never removed.
+        release_project_lock(config.project_path)
 
 
 async def _dispatch_locked(task_id: str, config: BuildConfig, db: AsyncSession) -> None:
@@ -242,8 +246,9 @@ async def _build_frontend_only(task_id: str, config: BuildConfig, db: AsyncSessi
     if success:
         # Source: where frontend tool outputs (e.g., dist/)
         build_output = frontend_path / config.frontend_output_dir
-        # Target: user's desired output directory
-        final_output = project_path / config.output_dir
+        # Target: user's desired output directory. safe_join: this path is
+        # rmtree'd below, so an absolute or ../ output_dir must never get here.
+        final_output = safe_join(project_path, config.output_dir)
 
         # Copy to user's desired directory if different
         if build_output != final_output and build_output.exists():
