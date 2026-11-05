@@ -1,9 +1,13 @@
 """Git operations for the Git-URL source mode.
 
 SECURITY INVARIANTS (do not violate):
-    1. GitLab tokens are SERVER-ONLY. They come from settings.gitlab_token,
-       are injected into the URL only at subprocess call time, and are
-       never persisted to DB, returned via API, or logged unmasked.
+    1. Git tokens are SERVER-ONLY. They are never persisted to DB, returned
+       via API, or logged unmasked, and never put in a URL: they reach git as
+       an http.<url>.extraHeader through GIT_CONFIG_* environment variables
+       (see _git_env), scoped to the repository's host. A token in the clone
+       URL used to be written into each workspace's .git/config (kept for
+       days, readable by the build's own npm scripts, copied into Docker
+       contexts) and was visible in `ps` while git ran.
     2. All subprocess calls use argv-list form with shell=False. No string
        interpolation into a shell.
     3. All external URLs are validated via validate_git_url() before ANY
@@ -16,15 +20,17 @@ SECURITY INVARIANTS (do not violate):
 from __future__ import annotations
 
 import asyncio
+import base64
 import ipaddress
 import os
 import re
 import shutil
+import socket
 import tempfile
 import tomllib
 from pathlib import Path
 from typing import Literal
-from urllib.parse import urlparse, urlunparse
+from urllib.parse import urlparse
 
 # Alias the argv-list subprocess spawner used by the rest of the codebase
 # (see app/services/nuitka_worker.py). Using an alias keeps call sites short
@@ -40,6 +46,20 @@ _BLOCKED_HOSTNAMES = {"localhost", "ip6-localhost", "ip6-loopback"}
 
 class GitUrlError(ValueError):
     """Raised when a provided Git URL fails validation."""
+
+
+def _scratch_root() -> Path:
+    """Where scan/preview clones go: under git_workspace_dir, not the system /tmp.
+
+    /tmp is often a small tmpfs, and a big repository cloned there for a preview
+    could fill it for the whole machine. A clone left behind by a crash is
+    swept as an orphan by workspace_cleanup.
+    """
+    from app.config import get_settings
+
+    root = Path(get_settings().git_workspace_dir) / ".scratch"
+    root.mkdir(parents=True, exist_ok=True)
+    return root
 
 
 def _current_allowed_hosts() -> list[str]:
@@ -99,15 +119,17 @@ def validate_git_url(url: str, allowed_hosts: list[str] | None = None) -> None:
             "The server injects its own token automatically."
         )
 
-    host = (parsed.hostname or "").lower()
+    # A trailing dot is the same name to the resolver ("localhost." is localhost).
+    host = (parsed.hostname or "").lower().rstrip(".")
     if not host:
         raise GitUrlError("Git URL is missing a host component")
 
     if ".." in (parsed.path or ""):
         raise GitUrlError("Git URL path must not contain '..'")
 
-    # Always-blocked hostnames — no allowlist override.
-    if host in _BLOCKED_HOSTNAMES:
+    # Always-blocked hostnames — no allowlist override. Every *.localhost name
+    # resolves to loopback (RFC 6761), so the whole zone is blocked.
+    if host in _BLOCKED_HOSTNAMES or host.endswith(".localhost"):
         raise GitUrlError(f"Git URL host '{host}' is not allowed")
 
     # Allowlist semantics: explicit membership grants trust and short-circuits
@@ -124,10 +146,7 @@ def validate_git_url(url: str, allowed_hosts: list[str] | None = None) -> None:
     # No allowlist configured — apply strict SSRF defence for IP literals.
     # Hostnames are NOT resolved here (DNS-based SSRF isn't handled);
     # operators who need stricter control should populate GIT_ALLOWED_HOSTS.
-    try:
-        ip = ipaddress.ip_address(host)
-    except ValueError:
-        ip = None
+    ip = _numeric_host_ip(host)
     if ip is not None and (
         ip.is_loopback
         or ip.is_link_local
@@ -140,6 +159,27 @@ def validate_git_url(url: str, allowed_hosts: list[str] | None = None) -> None:
             f"Git URL host '{host}' is not a routable public address. "
             "If this is an intentional internal target, add it to GIT_ALLOWED_HOSTS."
         )
+
+
+def _numeric_host_ip(host: str) -> ipaddress.IPv4Address | ipaddress.IPv6Address | None:
+    """The address a numeric host denotes, in any spelling git/libcurl accept.
+
+    ipaddress.ip_address() only knows dotted-quad, so 127.1, 2130706433 and
+    0x7f000001 (all loopback to the resolver) passed as "not an IP literal".
+    IPv4-mapped IPv6 (::ffff:127.0.0.1) is unwrapped to its IPv4 address.
+    """
+    try:
+        ip = ipaddress.ip_address(host)
+    except ValueError:
+        ip = None
+        if re.fullmatch(r"[0-9a-fx.]+", host) and not host.endswith("."):
+            try:
+                ip = ipaddress.IPv4Address(socket.inet_aton(host))
+            except OSError:
+                ip = None
+    if isinstance(ip, ipaddress.IPv6Address) and ip.ipv4_mapped is not None:
+        return ip.ipv4_mapped
+    return ip
 
 
 # ---------- Ref name validation ----------
@@ -180,23 +220,26 @@ def validate_git_ref(ref: str) -> None:
 _PROVIDER_USERINFO_USER = {"github": "x-access-token", "gitlab": "oauth2", "generic": "oauth2"}
 
 
-def inject_token(url: str, token: str | None, provider: str = "gitlab") -> str:
-    """Return `url` with `<user>:{token}@` injected into the authority.
+def _auth_env(url: str, token: str | None, provider: str = "gitlab") -> dict[str, str]:
+    """Environment that makes git send the token to this repository's host only.
 
-    The username depends on the provider (GitHub -> x-access-token, GitLab -> oauth2).
-    If token is None/empty, return `url` unchanged. The returned string contains a
-    secret and must never be logged or persisted; use it only as an argv to a single
-    subprocess call.
+    Equivalent to ``git -c http.<origin>/.extraHeader="Authorization: Basic ..."``
+    but through GIT_CONFIG_COUNT/KEY/VALUE (git >= 2.31), so the secret is in
+    neither argv nor any config file. The URL-scoped key means a redirect to
+    another host does not receive it. The username depends on the provider
+    (GitHub -> x-access-token, GitLab -> oauth2).
     """
     if not token:
-        return url
-    user = _PROVIDER_USERINFO_USER.get(provider, "oauth2")
+        return {}
     parsed = urlparse(url)
-    host = parsed.hostname or ""
-    netloc = f"{user}:{token}@{host}"
-    if parsed.port:
-        netloc = f"{netloc}:{parsed.port}"
-    return urlunparse(parsed._replace(netloc=netloc))
+    origin = f"{parsed.scheme}://{parsed.hostname}" + (f":{parsed.port}" if parsed.port else "")
+    user = _PROVIDER_USERINFO_USER.get(provider, "oauth2")
+    basic = base64.b64encode(f"{user}:{token}".encode()).decode()
+    return {
+        "GIT_CONFIG_COUNT": "1",
+        "GIT_CONFIG_KEY_0": f"http.{origin}/.extraHeader",
+        "GIT_CONFIG_VALUE_0": f"Authorization: Basic {basic}",
+    }
 
 
 _OAUTH_PATTERN = re.compile(r"((?:oauth2|x-access-token):)[^@\s/]+(@)")
@@ -218,14 +261,16 @@ def mask_token_in_log(text: str, token: str | None = None) -> str:
 
 # ---------- Subprocess environment ----------
 
-def _git_env() -> dict[str, str]:
-    """Minimal environment for git subprocesses.
+def _git_env(url: str | None = None, token: str | None = None, provider: str = "gitlab") -> dict[str, str]:
+    """Minimal environment for git subprocesses, plus the credential if any.
 
     GIT_TERMINAL_PROMPT=0 and GIT_ASKPASS=/bin/true ensure that git NEVER
     blocks on an interactive credential prompt — bad tokens fail fast
-    instead of hanging the request.
+    instead of hanging the request. Every git call of one operation must get
+    the credential: a --filter=blob:none clone fetches blobs lazily on a later
+    `git show`.
     """
-    return {
+    return _auth_env(url or "", token, provider) | {
         "PATH": os.environ.get("PATH", "/usr/bin:/bin"),
         "HOME": os.environ.get("HOME", "/tmp"),
         "LANG": "C.UTF-8",
@@ -251,7 +296,7 @@ async def list_refs(
     collapsed to the tag name. All errors are masked before re-raising.
     """
     validate_git_url(url, _current_allowed_hosts())
-    injected = inject_token(url, token, provider)
+    injected = url  # credentials travel in the environment, see _git_env
 
     cmd = ["git", "ls-remote", "--heads", "--tags", injected]
     try:
@@ -259,7 +304,7 @@ async def list_refs(
             *cmd,
             stdout=asyncio.subprocess.PIPE,
             stderr=asyncio.subprocess.PIPE,
-            env=_git_env(),
+            env=_git_env(url, token, provider),
         )
         try:
             stdout_bytes, stderr_bytes = await asyncio.wait_for(
@@ -329,7 +374,7 @@ async def clone_repo(
 
     target_dir.parent.mkdir(parents=True, exist_ok=True)
 
-    injected = inject_token(url, token, provider)
+    injected = url  # credentials travel in the environment, see _git_env
     cmd = [
         "git",
         "clone",
@@ -347,7 +392,7 @@ async def clone_repo(
             *cmd,
             stdout=asyncio.subprocess.PIPE,
             stderr=asyncio.subprocess.PIPE,
-            env=_git_env(),
+            env=_git_env(url, token, provider),
         )
         try:
             _, stderr_bytes = await asyncio.wait_for(
@@ -442,10 +487,10 @@ async def scan_tree(
         raise GitUrlError(f"Invalid ref_type '{ref_type}'")
 
     # Dedicated per-call temp dir — never collides with concurrent scans.
-    tmp_root = Path(tempfile.mkdtemp(prefix="bc_scan_"))
+    tmp_root = Path(tempfile.mkdtemp(prefix="pw_scan_", dir=_scratch_root()))
     target = tmp_root / "repo"
     try:
-        injected = inject_token(url, token, provider)
+        injected = url  # credentials travel in the environment, see _git_env
         clone_cmd = [
             "git",
             "clone",
@@ -462,7 +507,7 @@ async def scan_tree(
                 *clone_cmd,
                 stdout=asyncio.subprocess.PIPE,
                 stderr=asyncio.subprocess.PIPE,
-                env=_git_env(),
+                env=_git_env(url, token, provider),
             )
             try:
                 _, stderr_bytes = await asyncio.wait_for(
@@ -488,7 +533,7 @@ async def scan_tree(
             *ls_cmd,
             stdout=asyncio.subprocess.PIPE,
             stderr=asyncio.subprocess.PIPE,
-            env=_git_env(),
+            env=_git_env(url, token, provider),
             cwd=str(target),
         )
         try:
@@ -528,7 +573,7 @@ async def scan_tree(
                 *show_cmd,
                 stdout=asyncio.subprocess.PIPE,
                 stderr=asyncio.subprocess.PIPE,
-                env=_git_env(),
+                env=_git_env(url, token, provider),
                 cwd=str(target),
             )
             pyproject_bytes, _ = await asyncio.wait_for(
@@ -557,7 +602,7 @@ async def scan_tree(
                 *lsr_cmd,
                 stdout=asyncio.subprocess.PIPE,
                 stderr=asyncio.subprocess.PIPE,
-                env=_git_env(),
+                env=_git_env(url, token, provider),
                 cwd=str(target),
             )
             lsr_bytes, _ = await asyncio.wait_for(proc4.communicate(), timeout=timeout)
@@ -584,7 +629,20 @@ async def scan_tree(
 _ENV_FILENAME_RE = re.compile(r"^\.env(\.\w+)*$")
 
 
-def _detect_frontend_config(fe_path: Path) -> dict:
+def _repo_file(path: Path, root: Path | None) -> bool:
+    """True for a regular file that really lives inside the cloned repo.
+
+    A repository can commit a symlink (``.env -> /opt/packwright/.env``) and the
+    preview would read and return whatever it points at: the service's own .env
+    holds JWT_SECRET_KEY, i.e. admin tokens on demand. Symlinks are refused
+    outright, and the resolved path must stay under ``root``.
+    """
+    if path.is_symlink() or not path.is_file():
+        return False
+    return root is None or path.resolve().is_relative_to(root.resolve())
+
+
+def _detect_frontend_config(fe_path: Path, root: Path | None = None) -> dict:
     """Read package.json + vite.config to infer build tool, build command,
     and outDir. Ported from /api/detect-frontend-config in routes/tasks.py
     so that git-mode preview gives the same shape of result as local mode.
@@ -603,7 +661,7 @@ def _detect_frontend_config(fe_path: Path) -> dict:
     # 1. vite.config.*
     for cfg_name in ("vite.config.ts", "vite.config.js", "vite.config.mts", "vite.config.mjs"):
         cfg_file = fe_path / cfg_name
-        if cfg_file.exists():
+        if _repo_file(cfg_file, root):
             result["has_vite_config"] = True
             try:
                 content = cfg_file.read_text(encoding="utf-8")
@@ -616,7 +674,7 @@ def _detect_frontend_config(fe_path: Path) -> dict:
 
     # 2. package.json
     pkg_json = fe_path / "package.json"
-    if pkg_json.exists():
+    if _repo_file(pkg_json, root):
         try:
             pkg = _json.loads(pkg_json.read_text(encoding="utf-8"))
             scripts = pkg.get("scripts", {})
@@ -653,7 +711,7 @@ def _detect_frontend_config(fe_path: Path) -> dict:
     return result
 
 
-def _read_env_files(fe_path: Path, max_size: int = 100_000) -> dict[str, str]:
+def _read_env_files(fe_path: Path, max_size: int = 100_000, root: Path | None = None) -> dict[str, str]:
     """Return a mapping of `.env*` filename -> content (UTF-8).
 
     Files larger than ``max_size`` bytes are skipped silently — env files are
@@ -663,7 +721,7 @@ def _read_env_files(fe_path: Path, max_size: int = 100_000) -> dict[str, str]:
     result: dict[str, str] = {}
     try:
         for item in sorted(fe_path.iterdir()):
-            if not item.is_file():
+            if not _repo_file(item, root):
                 continue
             if not _ENV_FILENAME_RE.match(item.name):
                 continue
@@ -712,10 +770,10 @@ async def preview_frontend(
     if ".." in frontend_dir or frontend_dir.startswith("/"):
         raise GitUrlError("frontend_dir must be a relative path without '..'")
 
-    tmp_root = Path(tempfile.mkdtemp(prefix="bc_preview_fe_"))
+    tmp_root = Path(tempfile.mkdtemp(prefix="pw_preview_fe_", dir=_scratch_root()))
     target = tmp_root / "repo"
     try:
-        injected = inject_token(url, token, provider)
+        injected = url  # credentials travel in the environment, see _git_env
         clone_cmd = [
             "git",
             "clone",
@@ -730,7 +788,7 @@ async def preview_frontend(
                 *clone_cmd,
                 stdout=asyncio.subprocess.PIPE,
                 stderr=asyncio.subprocess.PIPE,
-                env=_git_env(),
+                env=_git_env(url, token, provider),
             )
             try:
                 _, stderr_bytes = await asyncio.wait_for(
@@ -776,8 +834,8 @@ async def preview_frontend(
             }
 
         return {
-            "frontend_config": _detect_frontend_config(fe_path),
-            "env_files": _read_env_files(fe_path, max_size=max_env_file_size),
+            "frontend_config": _detect_frontend_config(fe_path, root=target_resolved),
+            "env_files": _read_env_files(fe_path, max_size=max_env_file_size, root=target_resolved),
             "frontend_dir_exists": True,
         }
     finally:

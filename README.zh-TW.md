@@ -118,7 +118,7 @@ DATABASE_URL=sqlite+aiosqlite:////srv/packwright/build_center.db
 - 每個主機一組,支援 **GitHub**、**GitLab** 或自架實例(任意主機)。
 - 以 `SETTINGS_ENCRYPTION_KEY` 加密儲存,API 不回傳——介面只顯示末四碼。
 - 建置 clone URL 時,自動選用主機相符的 token,並以該服務期望的格式注入。
-- `.env` 的 `GITLAB_TOKEN` 仍作為 GitLab 類主機在沒有相符憑證時的後備。
+- `.env` 的 `GITLAB_TOKEN` 仍作為沒有相符憑證時的後備,但只會送給 `GITLAB_TOKEN_HOST` 指定的那一台主機(預設 `gitlab.com`;自架 GitLab 請設成該主機名稱)。
 
 ## 測試
 
