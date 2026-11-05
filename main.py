@@ -23,14 +23,15 @@ def run_migrations() -> None:
     command.upgrade(cfg, "head")
 
 LOGO = r"""
-[36m
-  ____        _ _     _    ____           _
- | __ ) _   _(_) | __| |  / ___|___ _ __ | |_ ___ _ __
- |  _ \| | | | | |/ _` | | |   / _ \ '_ \| __/ _ \ '__|
- | |_) | |_| | | | (_| | | |__|  __/ | | | ||  __/ |
- |____/ \__,_|_|_|\__,_|  \____\___|_| |_|\__\___|_|
-[0m
-[90m  Packwright Service v1.0.0[0m
+[36m
+  ____            _                   _       _     _
+ |  _ \ __ _  ___| | ____      ___ __(_) __ _| |__ | |_
+ | |_) / _` |/ __| |/ /\ \ /\ / / '__| |/ _` | '_ \| __|
+ |  __/ (_| | (__|   <  \ V  V /| |  | | (_| | | | | |_
+ |_|   \__,_|\___|_|\_\  \_/\_/ |_|  |_|\__, |_| |_|\__|
+                                       |___/
+[0m
+[90m  Packwright {version}[0m
 """
 
 # Uvicorn's own ProxyHeadersMiddleware is ON by default and trusts 127.0.0.1,
@@ -51,7 +52,12 @@ UVICORN_KWARGS: dict = {
 
 
 if __name__ == "__main__":
-    print(LOGO.replace("[36m", "\033[36m").replace("[0m", "\033[0m").replace("[90m", "\033[90m"))
+    from app.version import __version__
+
+    print(
+        LOGO.replace("[36m", "\033[36m").replace("[0m", "\033[0m").replace("[90m", "\033[90m")
+        .replace("{version}", f"v{__version__}")
+    )
 
     try:
         print("\033[90m  Applying database migrations...\033[0m")

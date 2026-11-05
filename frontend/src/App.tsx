@@ -2,7 +2,7 @@ import { lazy, Suspense, useState } from 'react'
 import { ConfigProvider, Spin, Modal, Drawer, App as AntApp } from 'antd'
 import enUS from 'antd/locale/en_US'
 import { BrowserRouter, Routes, Route, Navigate, Outlet, useNavigate, useLocation } from 'react-router-dom'
-import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
+import { QueryClient, QueryClientProvider, useQuery } from '@tanstack/react-query'
 import {
   HomeOutlined,
   PlusOutlined,
@@ -152,6 +152,18 @@ function AppLayout() {
     setMobileNavOpen(false)
   }
 
+  // The version the *server* reports (pyproject.toml via /health). Read at
+  // runtime rather than baked into the bundle, so a stale frontend build next to
+  // an upgraded backend is visible instead of silently showing the old number.
+  const { data: serverVersion } = useQuery({
+    queryKey: ['serverVersion'],
+    queryFn: async () => {
+      const res = await fetch('/health')
+      return res.ok ? ((await res.json()).version as string | undefined) ?? null : null
+    },
+    staleTime: Infinity,
+  })
+
   // Shared sidebar content, reused by the desktop sidebar and the mobile drawer.
   const sidebarContent = (
     <div className="h-full flex flex-col bg-void-900">
@@ -160,9 +172,16 @@ function AppLayout() {
         <div className="w-9 h-9 rounded-md bg-cyber-500 flex items-center justify-center">
           <BuildOutlined className="text-lg text-void-950" />
         </div>
-        <span className="text-lg font-semibold text-white" style={{ fontFamily: 'var(--font-display)' }}>
-          Packwright
-        </span>
+        <div className="flex flex-col leading-tight">
+          <span className="text-lg font-semibold text-white" style={{ fontFamily: 'var(--font-display)' }}>
+            Packwright
+          </span>
+          {serverVersion && (
+            <span className="text-[11px] text-gray-500" title="Version reported by the server">
+              v{serverVersion}
+            </span>
+          )}
+        </div>
       </div>
 
       {/* Navigation */}

@@ -11,6 +11,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 
+from app.version import __version__
 from app.api.routes.auth import router as auth_router
 from app.api.routes.tasks import router as tasks_router
 from app.api.routes.users import router as users_router
@@ -100,9 +101,9 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
 
 
 app = FastAPI(
-    title="Nuitka Docker API",
-    description="REST API for Nuitka compilation tasks with real-time WebSocket updates",
-    version="1.0.0",
+    title="Packwright API",
+    description="Build and packaging API: Nuitka compilation, frontend builds and Docker images, with live logs over WebSocket",
+    version=__version__,
     lifespan=lifespan,
 )
 
@@ -157,8 +158,8 @@ app.include_router(websocket_router)
 
 @app.get("/health")
 async def health_check() -> dict:
-    """Health check endpoint."""
-    return {"status": "healthy"}
+    """Liveness probe; also the version the console shows (see app/version.py)."""
+    return {"status": "healthy", "version": __version__}
 
 
 # Serve frontend static files if built
@@ -200,8 +201,8 @@ else:
     async def root() -> dict:
         """Root endpoint when frontend is not built."""
         return {
-            "name": "Nuitka Docker API",
-            "version": "1.0.0",
+            "name": "Packwright API",
+            "version": __version__,
             "docs": "/docs",
             "message": "Frontend not built. Run 'cd frontend && npm run build' first.",
             "endpoints": {
