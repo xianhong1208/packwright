@@ -178,6 +178,24 @@ class TestBehaviourIsUnchanged:
 
     @pytest.mark.unit
     @pytest.mark.asyncio
+    async def test_tc_tml_015_cancelled_message_is_not_replaced(
+        self, manager: TaskManager, mocker: MockerFixture
+    ):
+        """TC-TML-015: after Cancel, the dying worker's "Frontend build failed" does not
+        replace "Cancelled by user" on screen."""
+        mocker.patch.object(manager, "_broadcast_update", autospec=True)
+        mocker.patch.object(manager, "_update_db_status", autospec=True)
+        _seed(manager, "t1")
+        manager._tasks["t1"]["status"] = TaskStatus.RUNNING
+
+        assert await manager.cancel_task("t1", db=object()) is True
+        await manager.update_task("t1", "status_msg", "Frontend build failed")
+
+        assert manager._tasks["t1"]["status_msg"] == "Cancelled by user"
+        assert manager._tasks["t1"]["status"] == TaskStatus.CANCELLED
+
+    @pytest.mark.unit
+    @pytest.mark.asyncio
     @pytest.mark.parametrize("key", ["progress", "status_msg", "stage"])
     async def test_tc_tml_013_broadcast_keys_still_broadcast(
         self, manager: TaskManager, mocker: MockerFixture, key: str

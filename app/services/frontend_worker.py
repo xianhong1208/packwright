@@ -11,7 +11,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.schemas.task import BuildConfig, FrontendBuildTool
 from app.services.source_guard import SourceGuard
 from app.services.task_manager import task_manager
-from app.services.process_runner import run_step
+from app.services.process_runner import is_cancelled, run_step
 
 # Hard ceiling per install/build step so a hung npm/yarn (network stall, an
 # interactive prompt) never holds the build slot — and the whole queue — forever.
@@ -240,7 +240,7 @@ async def _run_frontend_build(
 
         success = await _run_command(task_id, install_cmd, fe_path)
         if not success:
-            await task_manager.append_log(task_id, "Error: Failed to install dependencies")
+            await _log_step_failure(task_id, "Error: Failed to install dependencies")
             return False
 
         # Record the lockfile hash so the next build can skip this step.
@@ -260,7 +260,7 @@ async def _run_frontend_build(
 
     success = await _run_command(task_id, build_cmd, fe_path)
     if not success:
-        await task_manager.append_log(task_id, "Error: Frontend build failed")
+        await _log_step_failure(task_id, "Error: Frontend build failed")
         return False
 
     await task_manager.update_task(task_id, "progress", 90)
@@ -275,6 +275,13 @@ async def _run_frontend_build(
         await task_manager.append_log(task_id, f"Build output: {output_path} ({file_count} files)")
 
     return True
+
+
+async def _log_step_failure(task_id: str, message: str) -> None:
+    """A step stopped by Cancel is not a broken build; say which it was."""
+    await task_manager.append_log(
+        task_id, "Stopped: the build was cancelled" if await is_cancelled(task_id) else message
+    )
 
 
 async def _run_command(
