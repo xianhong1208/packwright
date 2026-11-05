@@ -122,6 +122,21 @@ def decode_token(token: str) -> dict | None:
         return None
 
 
+def decode_access_token(token: str) -> dict | None:
+    """Decode a JWT and accept it only if it is an access token.
+
+    Every JWT this service mints is signed with the same key, so a valid
+    signature alone says nothing about what the token is for. A download ticket
+    (typ="download") carries a ``sub`` too, and decode_token() alone would let
+    it act as a full bearer token for its whole lifetime — and tickets travel in
+    URLs, so they end up in access logs, proxy logs and browser history.
+    """
+    payload = decode_token(token)
+    if not payload or payload.get("type") != "access":
+        return None
+    return payload
+
+
 # === Download tickets ===
 # A build artifact can be several GB. Fetching it through XHR means buffering
 # the whole thing in browser memory — no resume, no progress, and a dead tab on
@@ -209,11 +224,15 @@ async def get_user_with_role(db: AsyncSession, user_id: int) -> User | None:
 
 
 async def get_user_permissions(db: AsyncSession, user_id: int) -> list[str]:
-    """Get all permission codes for a user."""
-    user = await get_user_with_role(db, user_id)
-    if not user or not user.role:
-        return []
-    return [p.code for p in user.role.permissions]
+    """Permission codes for the token's ``permissions`` claim.
+
+    Resolved exactly like request authorisation does it (inherited roles, an
+    inactive role grants nothing), so the menus the console derives from the
+    claim match what the API will actually allow.
+    """
+    from app.services.permission import get_user_permissions as resolve
+
+    return sorted(await resolve(db, user_id))
 
 
 async def create_user(
@@ -328,7 +347,7 @@ async def refresh_access_token(
     refresh_token.revoked_at = datetime.now(timezone.utc)
 
     # Create new tokens
-    permissions = [p.code for p in user.role.permissions] if user.role else []
+    permissions = await get_user_permissions(db, user.id)
     role_name = user.role.name if user.role else None
     new_access_token = create_access_token(user.id, user.username, permissions, role_name)
 

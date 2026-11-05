@@ -13,7 +13,7 @@ from app.database import get_db
 from app.models.user import User
 from app.models.role import Role
 from app.models.permission import Permission
-from app.services.auth import decode_token
+from app.services.auth import decode_access_token
 
 
 class PermissionCode(str, Enum):
@@ -277,7 +277,7 @@ async def get_current_user(
 ) -> CurrentUser:
     """Get the current authenticated user from JWT token."""
     token = credentials.credentials
-    payload = decode_token(token)
+    payload = decode_access_token(token)
 
     if not payload:
         raise HTTPException(
@@ -286,10 +286,14 @@ async def get_current_user(
             headers={"WWW-Authenticate": "Bearer"},
         )
 
-    user_id = int(payload.get("sub", 0))
-    username = payload.get("username", "")
-    permissions = payload.get("permissions", [])
-    role = payload.get("role")
+    try:
+        user_id = int(payload.get("sub", ""))
+    except (TypeError, ValueError):
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid token subject",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
 
     # Verify user still exists and is active, and re-fetch permissions from DB
     # to ensure revoked permissions take effect immediately
@@ -317,7 +321,7 @@ async def get_current_user(
 
     return CurrentUser(
         id=user_id,
-        username=username,
+        username=user.username,
         permissions=db_permissions,
         role=db_role,
     )
