@@ -29,22 +29,10 @@ def _load_or_create_jwt_secret() -> str:
     if key:
         return key
 
-    import os
-    from pathlib import Path
-    env_path = Path(__file__).resolve().parent.parent.parent / ".env"
+    from app.config import append_generated_setting
+
     new_key = secrets.token_hex(32)
-
-    # Append to .env so the secret persists across restarts. This file holds a
-    # signing key, so it must be owner-only (0600): create it with restrictive
-    # perms via os.open, and tighten an already-existing .env with chmod.
-    try:
-        fd = os.open(env_path, os.O_WRONLY | os.O_CREAT | os.O_APPEND, 0o600)
-        with os.fdopen(fd, "a") as f:
-            f.write(f"\n# Auto-generated JWT secret key (do not remove)\nJWT_SECRET_KEY={new_key}\n")
-        os.chmod(env_path, 0o600)
-    except OSError:
-        pass  # Fallback: key lives only in memory this session
-
+    append_generated_setting("JWT_SECRET_KEY", new_key, "Auto-generated JWT secret key (do not remove)")
     return new_key
 
 SECRET_KEY = _load_or_create_jwt_secret()

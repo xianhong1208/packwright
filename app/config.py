@@ -1,5 +1,6 @@
 """Application configuration using Pydantic Settings."""
 
+import logging
 import os
 import shutil
 from functools import lru_cache
@@ -8,12 +9,43 @@ from pathlib import Path
 from pydantic import AliasChoices, Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
+logger = logging.getLogger(__name__)
+
+# The .env next to main.py. Secrets generated on first start are written here, so
+# it has to be read no matter which directory the service is launched from: with
+# only a relative ".env", a service started elsewhere never read its generated
+# JWT / encryption keys back and minted new ones on every start (everyone logged
+# out, stored Git credentials undecryptable).
+APP_ENV_FILE = Path(__file__).resolve().parent.parent / ".env"
+
+
+def append_generated_setting(key: str, value: str, comment: str) -> bool:
+    """Persist a generated secret to APP_ENV_FILE (owner-only). Returns success.
+
+    On failure the value lives only in this process, so the next start generates
+    another one — say so loudly instead of failing silently.
+    """
+    try:
+        fd = os.open(APP_ENV_FILE, os.O_WRONLY | os.O_CREAT | os.O_APPEND, 0o600)
+        with os.fdopen(fd, "a") as f:
+            f.write(f"\n# {comment}\n{key}={value}\n")
+        os.chmod(APP_ENV_FILE, 0o600)
+        return True
+    except OSError as e:
+        logger.warning(
+            "Could not save the generated %s to %s (%s). It will change on every restart; "
+            "set %s yourself.", key, APP_ENV_FILE, e, key,
+        )
+        return False
+
 
 class Settings(BaseSettings):
     """Application settings loaded from environment variables."""
 
     model_config = SettingsConfigDict(
-        env_file=".env",
+        # Later files win: a .env in the launch directory can override the one
+        # next to main.py, which holds the generated secrets.
+        env_file=(APP_ENV_FILE, ".env"),
         env_file_encoding="utf-8",
         case_sensitive=False,
     )
