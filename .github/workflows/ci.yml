@@ -16,8 +16,10 @@ concurrency:
 
 env:
   UV_VERSION: "0.9.24"
-  # The lockfile is the source of truth: uv run must never re-resolve.
-  UV_FROZEN: "1"
+  # The lockfile is the source of truth: uv never re-resolves, and a lockfile that
+  # no longer matches pyproject.toml fails the job. (UV_FROZEN would skip that
+  # check, and uv rejects it next to an explicit --locked.)
+  UV_LOCKED: "1"
 
 jobs:
   backend:
