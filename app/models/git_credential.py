@@ -7,7 +7,7 @@ stored encrypted (see app/services/crypto.py) and never returned by the API.
 
 from datetime import datetime
 
-from sqlalchemy import DateTime, ForeignKey, Integer, String, Text, func
+from sqlalchemy import DateTime, ForeignKey, Index, Integer, String, Text, UniqueConstraint, func
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.database import Base
@@ -22,12 +22,19 @@ class GitCredential(Base):
     """A Git access token for one host, entered and managed in the console."""
 
     __tablename__ = "git_credentials"
+    # Declared exactly as migration c7f1a2b3d4e5 created them (a named unique
+    # constraint plus a plain index). `unique=True, index=True` on the column
+    # means one unique index instead, so models and migrations disagreed.
+    __table_args__ = (
+        UniqueConstraint("host", name="uq_git_credentials_host"),
+        Index("ix_git_credentials_host", "host"),
+    )
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
     # "gitlab" | "github" | "generic" — decides how the token is injected into the URL.
     provider: Mapped[str] = mapped_column(String(16), nullable=False)
     # Host the token authenticates against, lowercased (e.g. "github.com"). One token per host.
-    host: Mapped[str] = mapped_column(String(255), unique=True, nullable=False, index=True)
+    host: Mapped[str] = mapped_column(String(255), nullable=False)
     # Optional human label shown in the console.
     label: Mapped[str | None] = mapped_column(String(128), nullable=True)
     # Fernet ciphertext of the token; never exposed via the API.
