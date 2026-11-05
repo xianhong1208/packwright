@@ -63,6 +63,11 @@ follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this proje
   production 5 → 0 (axios, react-router).
 
 ### Fixed
+- **Cancel did not stop most of a build.** Only the top process was signalled: Nuitka's scons and
+  gcc children and npm's node children kept running (reparented to init) while the build showed as
+  cancelled, Cancel did nothing at all to a frontend install or build, and a cancelled full-stack
+  build started its next step anyway. Each build step now runs in its own process group that Cancel,
+  timeouts and the end of the step stop as a whole, and no step starts once a build is cancelled.
 - `scripts/backup_db.sh` backs up SQLite (the default) as well as PostgreSQL, and finds the database
   the way the service does: it used to read only `DB_*`, so it dumped the wrong database when
   `DATABASE_URL` was set and could not back up a default install at all. A failed backup leaves no
