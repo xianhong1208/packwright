@@ -136,10 +136,10 @@ class TaskManager:
             # A cancelled task is terminal from the user's point of view.
             # The killed worker races us here with its own FAILED/COMPLETED
             # write — don't let it overwrite the CANCELLED verdict.
-            if (
-                key == "status"
-                and self._tasks[task_id].get("status") == TaskStatus.CANCELLED
-                and value in (TaskStatus.FAILED, TaskStatus.COMPLETED, TaskStatus.RUNNING)
+            if self._tasks[task_id].get("status") == TaskStatus.CANCELLED and (
+                (key == "status" and value in (TaskStatus.FAILED, TaskStatus.COMPLETED, TaskStatus.RUNNING))
+                # ... nor its dying words ("Frontend build failed") replace "Cancelled by user".
+                or key == "status_msg"
             ):
                 return
 
@@ -276,6 +276,8 @@ class TaskManager:
                     "Warning: could not stop the build process; it may still be running in the background. Tell an administrator.",
                 )
 
+        # Message first: once the status is CANCELLED, status_msg is frozen.
+        await self.update_task(task_id, "status_msg", "Cancelled by user")
         await self.update_task(task_id, "status", TaskStatus.CANCELLED, db)
         await self.append_log(task_id, "Task cancelled by user")
         return True

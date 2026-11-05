@@ -2,7 +2,6 @@
 
 import asyncio
 import os
-import pty
 import re
 import shutil
 import time
@@ -14,7 +13,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.schemas.task import BuildConfig, ProjectType, PackMode
 from app.services.source_guard import SourceGuard
 from app.services.task_manager import task_manager
-from app.services.terminal_output import TerminalLineBuffer
+from app.services.process_runner import run_step
 
 
 async def run_docker_build(
@@ -682,68 +681,25 @@ async def _run_docker_command(task_id: str, cmd: list[str], cwd: Path) -> bool:
     Note: Commands are constructed programmatically from validated config,
     not from raw user input.
     """
-    master_fd, slave_fd = pty.openpty()
+    current_progress = 20
+
+    async def consume(lines: list[str], _frame: str | None) -> None:
+        nonlocal current_progress
+        for text in lines:
+            await task_manager.append_log(task_id, text)
+            # Classic builder prints "Step 3/9"; BuildKit's plain output does not.
+            match = re.search(r"step\s+(\d+)/(\d+)", text.lower())
+            if match:
+                step, total = int(match.group(1)), int(match.group(2))
+                current_progress = 20 + int((step / total) * 70)
+                await task_manager.update_task(task_id, "progress", current_progress)
 
     try:
-        process = await asyncio.create_subprocess_exec(
-            *cmd,
-            stdout=slave_fd,
-            stderr=slave_fd,
-            stdin=slave_fd,
-            cwd=str(cwd),
+        result = await run_step(
+            task_id, cmd, cwd=cwd, on_output=consume,
             env={**os.environ, "TERM": "xterm-256color", "DOCKER_BUILDKIT": "1"},
         )
-        os.close(slave_fd)
-
-        await task_manager.set_process(task_id, process)
-        # Non-blocking PTY reads on the event loop — no threads to leak. See the
-        # note in nuitka_worker.run_nuitka_build for why the old
-        # run_in_executor(os.read) pattern deadlocked under concurrency.
-        os.set_blocking(master_fd, False)
-        terminal = TerminalLineBuffer()
-        current_progress = 20
-
-        def read_pty() -> bytes:
-            try:
-                return os.read(master_fd, 65536)
-            except OSError:  # incl. BlockingIOError: nothing to read right now
-                return b""
-
-        async def consume(lines: list[str]) -> None:
-            nonlocal current_progress
-            for text in lines:
-                await task_manager.append_log(task_id, text)
-                # Classic builder prints "Step 3/9"; BuildKit's plain output does not.
-                match = re.search(r"step\s+(\d+)/(\d+)", text.lower())
-                if match:
-                    step, total = int(match.group(1)), int(match.group(2))
-                    current_progress = 20 + int((step / total) * 70)
-                    await task_manager.update_task(task_id, "progress", current_progress)
-
-        while True:
-            if process.returncode is not None:
-                while data := read_pty():
-                    await consume(terminal.feed(data)[0])
-                await consume(terminal.flush())
-                break
-
-            data = read_pty()
-            if data:
-                await consume(terminal.feed(data)[0])
-            else:
-                await asyncio.sleep(0.1)
-
-        os.close(master_fd)
-        await task_manager.set_process(task_id, None)
-        ret_code = await process.wait()
-
-        return ret_code == 0
-
-    except Exception as e:
+    except OSError as e:
         await task_manager.append_log(task_id, f"Error running Docker command: {e}")
-        await task_manager.set_process(task_id, None)
-        try:
-            os.close(master_fd)
-        except Exception:
-            pass
         return False
+    return result.ok

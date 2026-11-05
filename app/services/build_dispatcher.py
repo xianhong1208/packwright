@@ -126,6 +126,22 @@ async def _dispatch_locked(task_id: str, config: BuildConfig, db: AsyncSession) 
         await task_manager.update_task(task_id, "status_msg", f"Error: {e!s}")
 
 
+async def _stop_if_cancelled(task_id: str, next_step: str) -> bool:
+    """True (and logged) when the build was cancelled, so the next step is not started.
+
+    Cancelling a multi-step build (frontend → backend → Docker) during one step
+    must not let the following ones run. A step killed by Cancel already returns
+    failure, but a Cancel that lands just as a step completes would otherwise go
+    on to start the next one.
+    """
+    from app.services.process_runner import is_cancelled
+
+    if await is_cancelled(task_id):
+        await task_manager.append_log(task_id, f"Build cancelled — {next_step} not started")
+        return True
+    return False
+
+
 async def _build_docker_standard(task_id: str, config: BuildConfig, db: AsyncSession) -> None:
     """Standard Docker build (no host Nuitka compilation)."""
     from app.services.docker_worker import run_docker_build
@@ -190,6 +206,8 @@ async def _build_docker_nuitka(task_id: str, config: BuildConfig, db: AsyncSessi
         docker_step = "Step 2"
 
     # Nuitka compilation on host
+    if await _stop_if_cancelled(task_id, "the Nuitka compile"):
+        return
     await task_manager.append_log(task_id, f"=== {nuitka_step}: Nuitka Compilation (Host) ===")
     await task_manager.append_log(task_id, "")
 
@@ -201,6 +219,8 @@ async def _build_docker_nuitka(task_id: str, config: BuildConfig, db: AsyncSessi
         return
 
     # Docker image build with precompiled binary
+    if await _stop_if_cancelled(task_id, "the Docker image build"):
+        return
     await task_manager.append_log(task_id, "")
     await task_manager.append_log(task_id, f"=== {docker_step}: Docker Image Build ===")
     await task_manager.append_log(task_id, "")
@@ -313,6 +333,8 @@ async def _build_fullstack(task_id: str, config: BuildConfig, db: AsyncSession) 
     await task_manager.append_log(task_id, "")
     await task_manager.append_log(task_id, "Frontend build completed!")
     await task_manager.append_log(task_id, "")
+    if await _stop_if_cancelled(task_id, "the backend build"):
+        return
 
     # Step 2: Build backend with Nuitka (including frontend as data)
     await task_manager.append_log(task_id, "=== Step 2: Building Backend with Nuitka ===")
