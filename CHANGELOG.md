@@ -60,6 +60,15 @@ follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this proje
 - `git_credentials.host` was declared differently in the model and the migration.
 - An in-process migration silenced every logger that already existed.
 - The per-project build lock entry was never released.
+- External-mode builds failed with a `SyntaxError` when the entry point used
+  `from __future__ import ...`: the libs/ loader was inserted above it. It now goes after the
+  docstring and `__future__` imports, prints nothing (it used to write a Chinese line to the
+  program's stdout) and leaves no names in `__main__`.
+- Build logs were flooded with progress-bar redraws: a hello-world Nuitka build filled the
+  3,000-line log with 2,574 frames and pushed out its first lines. Output is now read the way a
+  terminal shows it (only the final frame of a `\r`-redrawn line), Nuitka no longer runs with the
+  obsolete `--show-progress`, its progress bars still drive the progress indicator, and a
+  multi-byte character split across two reads is no longer mangled.
 
 ## [1.0.0] — 2026-09-10
 
