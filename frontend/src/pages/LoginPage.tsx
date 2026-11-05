@@ -116,7 +116,7 @@ export default function LoginPage() {
             <BuildOutlined className="text-3xl text-void-950" />
           </div>
           <h1 className="text-2xl font-semibold text-[var(--ink)]" style={{ fontFamily: 'var(--font-display)' }}>
-            Build Center
+            Packwright
           </h1>
           <p className="mt-2 text-sm text-[var(--ink-muted)]">
             {isFirstUser
@@ -286,7 +286,7 @@ export default function LoginPage() {
         {/* Footer */}
         <div className="mt-8 pt-6 border-t border-[var(--seam)] text-center">
           <p className="text-xs text-[var(--ink-faint)]">
-            Build Center
+            Packwright
           </p>
         </div>
       </div>

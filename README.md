@@ -1,6 +1,8 @@
-# Build Center
+# Packwright
 
 **A full-stack build & packaging platform.** Point it at a local path or a Git URL and it compiles Python to a standalone executable with [Nuitka](https://nuitka.net/), builds frontends with npm / yarn / pnpm / bun, packages the two together, and can export the result as a Docker image `.tar.gz` — all from a web console with live build logs, user accounts and role-based permissions.
+
+Packwright was called *Build Center* up to v1.0.0. Names that live in existing data keep the old spelling, so nothing needs migrating: the SQLite file `data/build_center.db`, the default PostgreSQL database `build_center`, and the `BUILD_CENTER_SMOKE_TEST` variable that smoke-tested binaries still receive (alongside the new `PACKWRIGHT_SMOKE_TEST`). The systemd unit is now `deploy/packwright.service`.
 
 [繁體中文](README.zh-TW.md) · [Quick start](#quick-start) · [How it works](#how-it-works) · [Configuration](#configuration) · [Git credentials](#git-credentials) · [Detailed manual](docs/manual.zh-TW.md)
 
@@ -18,8 +20,8 @@
 **Prerequisites:** Python 3.13+, [uv](https://docs.astral.sh/uv/), Node.js (for frontend builds), and — for the engines they drive — Nuitka's toolchain (a C compiler) and Docker (for Docker output). The database is a local SQLite file by default (no setup); PostgreSQL is optional (set `DATABASE_URL`). `pigz` is optional and speeds up image compression.
 
 ```bash
-git clone https://github.com/xianhong1208/Fullstack-packager.git build-center
-cd build-center
+git clone https://github.com/xianhong1208/packwright.git
+cd packwright
 uv sync                       # backend deps
 cd frontend && npm install && npm run build && cd ..
 cp .env.example .env          # optional; SQLite works with no config
@@ -75,7 +77,7 @@ Everything is environment-driven. `.env.example` lists the essentials; `app/conf
 
 ## Storage & data
 
-Build Center writes everything under a single `data/` directory. By default these paths are **relative to the working directory you launch from** (where you run `uv run python main.py`), so a default install keeps all state inside the project:
+Packwright writes everything under a single `data/` directory. By default these paths are **relative to the working directory you launch from** (where you run `uv run python main.py`), so a default install keeps all state inside the project:
 
 ```
 data/
@@ -91,10 +93,10 @@ data/
 **Relocating storage** (e.g. onto a larger disk) — set absolute paths in `.env` and restart:
 
 ```bash
-GIT_WORKSPACE_DIR=/srv/build-center/workspace     # clones, builds, downloadable outputs
-DOCKER_IMAGES_DIR=/srv/build-center/docker_images # exported image tarballs
+GIT_WORKSPACE_DIR=/srv/packwright/workspace     # clones, builds, downloadable outputs
+DOCKER_IMAGES_DIR=/srv/packwright/docker_images # exported image tarballs
 # Move the database too (SQLite file, or point at PostgreSQL):
-DATABASE_URL=sqlite+aiosqlite:////srv/build-center/build_center.db
+DATABASE_URL=sqlite+aiosqlite:////srv/packwright/build_center.db
 ```
 
 Put `GIT_WORKSPACE_DIR` on the same filesystem as `BOOTSTRAP_UV_CACHE_DIR` so `uv` can hardlink instead of copying during dependency install.
@@ -127,7 +129,7 @@ cd frontend && npx vitest run        # frontend unit tests
 
 ## Security & trust model
 
-Build Center runs untrusted build commands by design, so account approval is the real security boundary: anyone who can create a task can run code as the service user. Git URL validation, local-path confinement, subprocess argv-only calls, token masking and rate limiting are defence in depth, not a sandbox. Run it on an isolated host, front it with HTTPS, and keep `TRUSTED_PROXY_IPS` empty unless a proxy actually rewrites `X-Forwarded-For`.
+Packwright runs untrusted build commands by design, so account approval is the real security boundary: anyone who can create a task can run code as the service user. Git URL validation, local-path confinement, subprocess argv-only calls, token masking and rate limiting are defence in depth, not a sandbox. Run it on an isolated host, front it with HTTPS, and keep `TRUSTED_PROXY_IPS` empty unless a proxy actually rewrites `X-Forwarded-For`.
 
 ## License
 

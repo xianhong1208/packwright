@@ -1,5 +1,5 @@
 #!/bin/bash
-# PostgreSQL backup for Build Center.
+# PostgreSQL backup for Packwright.
 #
 # Why this exists: the database holds things that cannot be rebuilt from code
 # -- 670 build-history records, users and roles, audit logs, login records.
@@ -12,7 +12,7 @@
 #   BACKUP_DIR=/mnt/nas/bc bash scripts/backup_db.sh
 #
 # Recommended cron (daily at 03:30):
-#   30 3 * * * cd /opt/build-center && bash scripts/backup_db.sh >> /var/log/build_center_backup.log 2>&1
+#   30 3 * * * cd /opt/packwright && bash scripts/backup_db.sh >> /var/log/packwright_backup.log 2>&1
 
 set -euo pipefail
 

@@ -1,5 +1,5 @@
 #!/bin/bash
-# Setup per-Python-version Nuitka venvs for build_center
+# Setup per-Python-version Nuitka venvs for Packwright
 #
 # Why this exists: a Nuitka-compiled binary is bound to the Python version used
 # to compile it. Compiling a 3.12 project with 3.13 makes loading a native
@@ -8,22 +8,22 @@
 # version.
 #
 # Usage:
-#   cd /opt/build-center
+#   cd /opt/packwright
 #   bash scripts/setup_nuitka_venvs.sh
 #
-# After install, build_center auto-detects these venvs on startup, and when the
+# After install, Packwright auto-detects these venvs on startup, and when the
 # user picks Python 3.12 / 3.13 in the frontend it binds to the matching venv.
 
 set -e
 
 cd "$(dirname "$0")/.."
-BUILD_CENTER_ROOT="$(pwd)"
+APP_ROOT="$(pwd)"
 
 # Supported Python versions (the frontend's version menu auto-detects these
 # venvs via /api/system-info)
 SUPPORTED_VERSIONS=("3.12" "3.13" "3.14")
 
-# Nuitka version -- pinned to the same version as build_center's main venv to
+# Nuitka version -- pinned to the same version as Packwright's main venv to
 # avoid behavioral differences.
 # 4.1.2 fixes a 2.8.x bug compiling async generators: when a compiled async
 # generator (e.g. FastAPI SSE's event_generator) is driven by an uncompiled
@@ -41,7 +41,7 @@ if ! command -v uv >/dev/null 2>&1; then
     exit 1
 fi
 
-echo "🎯 Setting up Nuitka venvs in: $BUILD_CENTER_ROOT"
+echo "🎯 Setting up Nuitka venvs in: $APP_ROOT"
 echo
 
 for version in "${SUPPORTED_VERSIONS[@]}"; do
@@ -120,9 +120,9 @@ echo "🎉 All Nuitka venvs ready:"
 for version in "${SUPPORTED_VERSIONS[@]}"; do
     version_compact="${version//./}"
     venv_dir=".venv-py${version_compact}"
-    py_path="$BUILD_CENTER_ROOT/$venv_dir/bin/python${version}"
+    py_path="$APP_ROOT/$venv_dir/bin/python${version}"
     nuitka_ver=$("$py_path" -m nuitka --version 2>/dev/null | head -1 || echo "??")
     echo "  Python $version  →  $py_path  (Nuitka $nuitka_ver)"
 done
 echo
-echo "Next: restart Build Center; the frontend Python 3.12 / 3.13 selector will bind the matching venv."
+echo "Next: restart Packwright; the frontend Python 3.12 / 3.13 selector will bind the matching venv."

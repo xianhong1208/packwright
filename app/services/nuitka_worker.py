@@ -27,7 +27,7 @@ if TYPE_CHECKING:
 settings = get_settings()
 logger = logging.getLogger(__name__)
 
-_BUILD_CENTER_ROOT = Path(__file__).resolve().parents[2]
+_APP_ROOT = Path(__file__).resolve().parents[2]
 
 # The per-project lock lives in app/services/project_lock.py and is taken by
 # build_dispatcher, not here.
@@ -281,7 +281,7 @@ def find_nuitka_python(version: str) -> tuple[str, bool]:
     this service's interpreter only when no matching venv exists.
     """
     compact = version.replace(".", "")
-    candidate = _BUILD_CENTER_ROOT / f".venv-py{compact}" / "bin" / "python"
+    candidate = _APP_ROOT / f".venv-py{compact}" / "bin" / "python"
     # exists() follows symlinks — a venv cloned from another machine has a
     # dangling python symlink and is correctly rejected here.
     if candidate.exists():
@@ -641,6 +641,9 @@ def _build_smoke_env(extra_env: dict[str, str] | None) -> dict[str, str]:
         if name in os.environ
     }
     env.update(extra_env or {})
+    env["PACKWRIGHT_SMOKE_TEST"] = "1"
+    # The former name, kept so binaries built while this was Build Center still
+    # detect the smoke run.
     env["BUILD_CENTER_SMOKE_TEST"] = "1"
     return env
 
@@ -934,7 +937,7 @@ async def run_nuitka_build(task_id: str, config: BuildConfig, db: AsyncSession) 
                 # 3.13-binary-vs-3.14-.so crash. Fail preflight clearly.
                 raise RuntimeError(
                     f"This project needs Python {target_version} (its compiled "
-                    f"extensions are {detect_detail}), but build_center has no usable "
+                    f"extensions are {detect_detail}), but Packwright has no usable "
                     f"{venv_name}. Build it with:  bash scripts/setup_nuitka_venvs.sh  "
                     f"(run as the same user that starts the service, not sudo)."
                 )

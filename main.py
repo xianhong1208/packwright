@@ -30,7 +30,7 @@ LOGO = r"""
  | |_) | |_| | | | (_| | | |__|  __/ | | | ||  __/ |
  |____/ \__,_|_|_|\__,_|  \____\___|_| |_|\__\___|_|
 [0m
-[90m  Build Center Service v1.0.0[0m
+[90m  Packwright Service v1.0.0[0m
 """
 
 # Uvicorn's own ProxyHeadersMiddleware is ON by default and trusts 127.0.0.1,

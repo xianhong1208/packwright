@@ -17,7 +17,7 @@ function axiosErrorWith(data: unknown, message = 'Request failed'): AxiosError {
 
 describe('getErrorDetail', () => {
   it('prefers the backend detail over the generic fallback', () => {
-    const err = axiosErrorWith({ detail: 'The download link expired. Go back to Build Center and click download again.' })
+    const err = axiosErrorWith({ detail: 'The download link expired. Go back to Packwright and click download again.' })
     expect(getErrorDetail(err, 'Download failed')).toContain('expired')
   })
 
