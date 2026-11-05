@@ -21,6 +21,10 @@ follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this proje
 - Docker exports are stored per task (`<DOCKER_IMAGES_DIR>/<task_id>.tar.gz`); exports made before
   are still served from their old image-named file.
 - Console development needs Node.js 22.12+ (Vitest 5).
+- **MCP Center is now MCP Gate** (the SSO provider was renamed): the setting is `MCP_GATE_URL` and the
+  button reads "Sign in with MCP Gate". `MCP_CENTER_URL` is still read when `MCP_GATE_URL` is unset;
+  linked accounts are unaffected.
+- `.env.example` no longer claims a PostgreSQL connection is required (SQLite is the default).
 
 ### Added
 - `/health` reports the version, and the console shows it; `pyproject.toml` is the only place a
