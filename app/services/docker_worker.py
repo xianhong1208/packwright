@@ -13,6 +13,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.schemas.task import BuildConfig, ProjectType, PackMode
 from app.services.task_manager import task_manager
+from app.services.terminal_output import TerminalLineBuffer
 
 
 async def run_docker_build(
@@ -723,46 +724,38 @@ async def _run_docker_command(task_id: str, cmd: list[str], cwd: Path) -> bool:
         # note in nuitka_worker.run_nuitka_build for why the old
         # run_in_executor(os.read) pattern deadlocked under concurrency.
         os.set_blocking(master_fd, False)
-        buffer = ""
+        terminal = TerminalLineBuffer()
         current_progress = 20
 
-        def read_pty():
+        def read_pty() -> bytes:
             try:
-                return os.read(master_fd, 65536).decode("utf-8", errors="replace")
-            except (BlockingIOError, InterruptedError):
-                return ""
-            except OSError:
-                return ""
+                return os.read(master_fd, 65536)
+            except OSError:  # incl. BlockingIOError: nothing to read right now
+                return b""
+
+        async def consume(lines: list[str]) -> None:
+            nonlocal current_progress
+            for text in lines:
+                await task_manager.append_log(task_id, text)
+                # Classic builder prints "Step 3/9"; BuildKit's plain output does not.
+                match = re.search(r"step\s+(\d+)/(\d+)", text.lower())
+                if match:
+                    step, total = int(match.group(1)), int(match.group(2))
+                    current_progress = 20 + int((step / total) * 70)
+                    await task_manager.update_task(task_id, "progress", current_progress)
 
         while True:
             if process.returncode is not None:
-                while True:
-                    data = read_pty()
-                    if not data:
-                        break
-                    buffer += data
+                while data := read_pty():
+                    await consume(terminal.feed(data)[0])
+                await consume(terminal.flush())
                 break
 
             data = read_pty()
             if data:
-                buffer += data
+                await consume(terminal.feed(data)[0])
             else:
                 await asyncio.sleep(0.1)
-
-            while "\n" in buffer:
-                line, buffer = buffer.split("\n", 1)
-                clean_line = re.sub(r"\x1b\[[0-9;]*[a-zA-Z]", "", line).rstrip()
-                if clean_line:
-                    await task_manager.append_log(task_id, clean_line)
-
-                    # Parse progress from Docker output
-                    line_lower = clean_line.lower()
-                    if "step" in line_lower:
-                        match = re.search(r"step\s+(\d+)/(\d+)", line_lower)
-                        if match:
-                            step, total = int(match.group(1)), int(match.group(2))
-                            current_progress = 20 + int((step / total) * 70)
-                            await task_manager.update_task(task_id, "progress", current_progress)
 
         os.close(master_fd)
         await task_manager.set_process(task_id, None)
