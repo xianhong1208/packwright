@@ -30,9 +30,31 @@ from app.services.permission import (
     PermissionCode,
     get_all_roles,
     get_all_permissions,
+    get_user_permissions,
+    has_permission,
 )
 
 router = APIRouter(prefix="/api/users", tags=["users"])
+
+
+async def _ensure_not_outranked(db: AsyncSession, actor: CurrentUser, target_id: int) -> None:
+    """Refuse to act on an account that holds permissions the actor lacks.
+
+    user:reset_password or user:manage alone must not reach above the actor: a
+    role granted only "reset passwords" could otherwise reset the admin's
+    password and sign in as the admin, and user:manage could lock every admin
+    out. Same rule update_user_role already applies to the role being handed
+    out; role:manage holders, who can rewrite roles anyway, are exempt.
+    """
+    if actor.has_permission(PermissionCode.ROLE_MANAGE):
+        return
+    actor_perms = set(actor.permissions)
+    target_perms = await get_user_permissions(db, target_id)
+    if not all(has_permission(actor_perms, code) for code in target_perms):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Cannot manage an account with permissions beyond your own (requires role:manage)",
+        )
 
 
 # ===== User List & Details =====
@@ -162,6 +184,8 @@ async def update_user_role(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="User not found",
         )
+    # Demoting an account that outranks you is the mirror image of promoting one.
+    await _ensure_not_outranked(db, current_user, user_id)
 
     # Verify role exists (permissions eager-loaded for the escalation check)
     result = await db.execute(
@@ -258,6 +282,7 @@ async def update_user_status(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="User not found",
         )
+    await _ensure_not_outranked(db, current_user, user_id)
 
     previous_active = user.is_active
     user.is_active = data.is_active
@@ -294,6 +319,7 @@ async def reset_user_password(
     _: None = Depends(require_permission(PermissionCode.USER_RESET_PASSWORD)),
 ):
     """Admin reset user's password (requires user:reset_password permission)."""
+    await _ensure_not_outranked(db, current_user, user_id)
     success = await admin_reset_password(db, user_id, data.new_password)
     if not success:
         raise HTTPException(

@@ -24,19 +24,30 @@ export default function LoginPage() {
     }
   }, [isAuthenticated, navigate])
 
-  // MCP Center SSO: consume tokens handed back in the URL fragment, surface errors,
-  // and decide whether to show the "Sign in with MCP Center" button.
+  // MCP Center SSO: redeem the one-time code handed back in the URL fragment,
+  // surface errors, and decide whether to show the "Sign in with MCP Center" button.
+  // Tokens are never read from the URL: the code is only redeemable by the browser
+  // that completed the flow (it holds an HttpOnly binding cookie), so a link with
+  // someone else's code cannot sign this browser into their account.
   useEffect(() => {
     const hash = new URLSearchParams(window.location.hash.slice(1))
-    const accessToken = hash.get('access_token')
-    if (accessToken) {
-      tokenManager.setTokens(
-        accessToken,
-        hash.get('refresh_token'),
-        Number(hash.get('expires_in') || 900),
-        false,
-      )
-      window.location.replace('/')
+    const ssoCode = hash.get('sso_code')
+    if (ssoCode) {
+      window.history.replaceState(null, '', window.location.pathname)
+      fetch('/auth/oauth/mcp/exchange', {
+        method: 'POST',
+        credentials: 'same-origin',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ code: ssoCode }),
+      })
+        .then(async (r) => {
+          const data = await r.json().catch(() => ({}))
+          if (!r.ok) throw new Error(typeof data.detail === 'string' ? data.detail : 'MCP Center sign-in failed.')
+          tokenManager.clearTokens()
+          tokenManager.setTokens(data.access_token, data.refresh_token, Number(data.expires_in || 900), false)
+          window.location.replace('/')
+        })
+        .catch((e: unknown) => setLocalError(e instanceof Error ? e.message : 'MCP Center sign-in failed.'))
       return
     }
     const params = new URLSearchParams(window.location.search)

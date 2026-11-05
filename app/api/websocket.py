@@ -4,7 +4,7 @@ from fastapi import APIRouter, WebSocket, WebSocketDisconnect
 
 from app.database import async_session
 from app.models.user import User
-from app.services.auth import decode_token
+from app.services.auth import decode_access_token
 from app.services.permission import PermissionCode, get_user_permissions, has_permission
 from app.services.task_manager import task_manager
 
@@ -43,7 +43,7 @@ async def _authenticate_websocket(
         await websocket.close(code=4401, reason="Missing token")
         return None
 
-    payload = decode_token(token)
+    payload = decode_access_token(token)
     if not payload:
         await websocket.close(code=4401, reason="Invalid or expired token")
         return None

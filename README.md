@@ -33,7 +33,7 @@ cp .env.example .env          # optional; SQLite works with no config
 uv run python main.py         # applies migrations, then serves on http://0.0.0.0:5018
 ```
 
-- Open `http://localhost:5018` and sign in with the default account **`admin` / `password123`** (created on first start — change the password after logging in, or set `BOOTSTRAP_ADMIN_*` before first start).
+- Open `http://localhost:5018` and sign in as **`admin`** with the password printed in the startup log (`Created bootstrap admin 'admin' with generated password: …`). It is generated on first start and shown only once — change it after logging in, or set `BOOTSTRAP_ADMIN_USERNAME` / `BOOTSTRAP_ADMIN_PASSWORD` before first start.
 - **Add a Git credential** (optional, for private repos): Settings → Git 憑證 → choose GitHub / GitLab, paste a Personal Access Token.
 - **Create a build**: pick Local path or Git URL, choose the mode, and submit. Logs stream live; the finished artifact is downloadable (or exported as a Docker image `.tar.gz`).
 
