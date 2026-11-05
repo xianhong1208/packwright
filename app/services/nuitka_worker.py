@@ -17,6 +17,7 @@ from typing import TYPE_CHECKING, Any
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.services.paths import safe_join
 from app.config import get_settings
 from app.schemas.task import BuildConfig, PackMode, TaskStatus
 from app.services.task_manager import task_manager
@@ -1471,8 +1472,10 @@ async def run_nuitka_build(task_id: str, config: BuildConfig, db: AsyncSession) 
                 for data_dir in config.data_dirs.split(","):
                     data_dir = data_dir.strip()
                     if data_dir:
-                        src_path = project_path / data_dir
-                        dst_path = output_dir / data_dir
+                        # Both joins feed rmtree/copytree: refuse names that
+                        # are absolute or climb out of the project.
+                        src_path = safe_join(project_path, data_dir)
+                        dst_path = safe_join(output_dir, data_dir)
                         if src_path.exists():
                             try:
                                 if dst_path.exists():
