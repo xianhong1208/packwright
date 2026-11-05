@@ -63,6 +63,8 @@ follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this proje
   production 5 → 0 (axios, react-router).
 
 ### Fixed
+- The same project produced a differently ordered Nuitka command on every build: the installed
+  packages it excludes were listed in set order, which changes with each process. They are sorted.
 - The Builds page showed an empty "Build result" card for builds whose result held only a duration,
   never showed which stage a failed build stopped in, and listed Nuitka settings (pack mode,
   one-file) for frontend-only builds. The task and history pages now share one failure report and

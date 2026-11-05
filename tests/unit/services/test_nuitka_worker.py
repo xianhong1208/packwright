@@ -8,6 +8,7 @@ produces an executable that fails at the customer's runtime (ModuleNotFound,
 ABI mismatch), which is why they are worth locking down.
 """
 
+import os
 import sys
 from pathlib import Path
 
@@ -694,3 +695,120 @@ class TestInjectLibsLoader:
         from app.services.nuitka_worker import INJECT_CODE, inject_libs_loader
 
         assert inject_libs_loader("def (:\n") == INJECT_CODE + "def (:\n"
+
+
+class TestBuildNuitkaCommand:
+    """build_nuitka_command — the Nuitka command line, assembled without running anything.
+
+    Captured against the live service before it was extracted from run_nuitka_build:
+    the command and the log lines it produces were identical for full and external
+    builds with every option; these tests pin the same behaviour directly.
+    """
+
+    @staticmethod
+    def _plan(tmp_path, stdlib=None, installed=(), lazy=(), debug=False, jobs=8, **overrides):
+        from app.schemas.task import BuildConfig
+        from app.services.nuitka_worker import build_nuitka_command
+
+        config = BuildConfig(project_path=str(tmp_path), **overrides)
+        return build_nuitka_command(
+            config, nuitka_python="/py", project_path=tmp_path, output_dir=tmp_path / "dist",
+            entry_point=tmp_path / "main.py", output_name="app", jobs=jobs, debug=debug,
+            lazy_packages=list(lazy), stdlib=stdlib, installed_packages=list(installed),
+        )
+
+    @staticmethod
+    def _stdlib(used=frozenset({"json", "re"}), valid=("json", "re", "sqlite3", "encodings", "email"), force=("email", "encodings")):
+        from app.services.nuitka_worker import StdlibSelection
+
+        return StdlibSelection(list(valid), set(force), set(used) if used is not None else None)
+
+    @pytest.mark.unit
+    def test_tc_nui_110_external_compiles_needed_stdlib_and_leaves_packages_to_libs(self, tmp_path):
+        """TC-NUI-110: External — the stdlib libs/ needs is compiled in (packages as
+        --include-package, modules as --include-module, encodings always), every
+        installed package is nofollow'd with its submodules, entry point last."""
+        plan = self._plan(tmp_path, stdlib=self._stdlib(), installed=["rich", "pygments"])
+        cmd = plan.cmd
+        assert cmd[:4] == ["/py", "-u", "-m", "nuitka"] and "--standalone" in cmd
+        assert {"--include-module=json", "--include-module=re", "--include-package=encodings"} <= set(cmd)
+        assert not any("sqlite3" in a or "email" in a for a in cmd)  # unused stdlib stays out
+        assert cmd.index("--nofollow-import-to=rich") + 1 == cmd.index("--nofollow-import-to=rich.*")
+        assert "--nofollow-import-to=pygments.*" in cmd
+        assert cmd[-1] == str(tmp_path / "main.py")
+        assert "Found 2 packages in .venv to blacklist" in plan.log
+
+    @pytest.mark.unit
+    def test_tc_nui_111_external_without_scan_includes_all_stdlib(self, tmp_path):
+        """TC-NUI-111: when site-packages could not be scanned, every valid stdlib
+        module is included rather than too few."""
+        plan = self._plan(tmp_path, stdlib=self._stdlib(used=None))
+        assert {"--include-module=sqlite3", "--include-package=email", "--include-module=json"} <= set(plan.cmd)
+        assert any("including all 5" in line for line in plan.log)
+
+    @pytest.mark.unit
+    def test_tc_nui_112_full_merges_detected_and_manual_includes(self, tmp_path):
+        """TC-NUI-112: Full — lazy-import packages and manual includes, de-duplicated and
+        sorted, and nothing is nofollow'd."""
+        plan = self._plan(tmp_path, pack_mode="full", lazy=["pydantic", "litellm"], include_packages="openai, litellm")
+        includes = [a for a in plan.cmd if a.startswith("--include-package=")]
+        assert includes == ["--include-package=litellm", "--include-package=openai", "--include-package=pydantic"]
+        assert not any(a.startswith("--nofollow") for a in plan.cmd)
+
+    @pytest.mark.unit
+    def test_tc_nui_113_extra_dirs(self, tmp_path):
+        """TC-NUI-113: a directory is followed and included as a package (and no longer
+        nofollow'd); a file goes in as data; a missing entry is ignored."""
+        (tmp_path / "pkg").mkdir()
+        (tmp_path / "notes.txt").write_text("x")
+        plan = self._plan(tmp_path, stdlib=self._stdlib(), installed=["pkg", "rich"], extra_dirs="pkg, notes.txt, missing")
+        assert ["--follow-import-to=pkg", "--include-package=pkg"] == plan.cmd[plan.cmd.index("--follow-import-to=pkg"):][:2]
+        assert f"--include-data-dir={tmp_path / 'notes.txt'}=notes.txt" in plan.cmd
+        assert "--nofollow-import-to=pkg" not in plan.cmd and "--nofollow-import-to=rich" in plan.cmd
+        assert not any("missing" in a for a in plan.cmd)
+
+    @pytest.mark.unit
+    def test_tc_nui_114_invalid_module_names_are_not_passed(self, tmp_path):
+        """TC-NUI-114: a path-like name (which makes Nuitka exit 1 before compiling) is
+        skipped and reported."""
+        plan = self._plan(tmp_path, stdlib=self._stdlib(), installed=["nvidia/cusparselt", "rich"])
+        assert not any("nvidia" in a for a in plan.cmd)
+        assert any("Skipped 1 invalid module names" in line for line in plan.log)
+
+    @pytest.mark.unit
+    def test_tc_nui_115_options(self, tmp_path):
+        """TC-NUI-115: jobs, one-file, debug scons output, anti-bloat opt-out, report,
+        package data — each maps to its flag."""
+        plan = self._plan(tmp_path, stdlib=self._stdlib(), debug=True, jobs=4, onefile=True,
+                          enable_anti_bloat=False, generate_report=True, include_package_data="certifi, rich")
+        for flag in ("--jobs=4", "--onefile", "--show-scons", "--disable-plugins=anti-bloat",
+                     f"--report={tmp_path / 'dist' / 'nuitka-report.xml'}",
+                     "--include-package-data=certifi", "--include-package-data=rich",
+                     f"--output-dir={tmp_path / 'dist'}", "--output-filename=app", "--assume-yes-for-downloads"):
+            assert flag in plan.cmd, flag
+        assert plan.report_file == tmp_path / "dist" / "nuitka-report.xml"
+
+        quiet = self._plan(tmp_path, stdlib=self._stdlib(), onefile=False)
+        assert not {"--onefile", "--show-scons", "--disable-plugins=anti-bloat"} & set(quiet.cmd)
+        assert quiet.report_file is None
+
+    @pytest.mark.unit
+    def test_tc_nui_116_installed_packages_come_back_in_a_stable_order(self, tmp_path):
+        """TC-NUI-116: the same .venv yields the same order on every process — it used to
+        follow set iteration, which changes with hash randomization."""
+        import subprocess
+
+        site = tmp_path / ".venv" / "lib" / "python3.13" / "site-packages"
+        for name in ("zeta", "alpha", "mid", "beta"):
+            (site / f"{name}-1.0.dist-info").mkdir(parents=True)
+            (site / f"{name}-1.0.dist-info" / "top_level.txt").write_text(name + "\n")
+        probe = (
+            "import sys; from pathlib import Path; from app.services.nuitka_worker import get_installed_packages; "
+            "print(get_installed_packages(Path(sys.argv[1])))"
+        )
+        outputs = {
+            subprocess.run([sys.executable, "-c", probe, str(tmp_path / ".venv")], capture_output=True, text=True,
+                           env={**os.environ, "PYTHONHASHSEED": seed}).stdout
+            for seed in ("1", "2", "3", "4")
+        }
+        assert len(outputs) == 1 and "alpha" in outputs.pop()

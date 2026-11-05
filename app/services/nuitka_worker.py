@@ -12,6 +12,7 @@ import shutil
 import site
 import sys
 import time
+from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
@@ -295,7 +296,9 @@ def get_installed_packages(venv_path: Path | None = None) -> list[str]:
             elif item.is_dir():
                 if name not in ["pip", "setuptools", "wheel", "nuitka", "_distutils_hack"]:
                     packages.add(name)
-    return list(packages)
+    # Sorted: a set's order changes with every process (hash randomization), so the
+    # same project produced a differently ordered Nuitka command on each build.
+    return sorted(packages)
 
 
 def get_valid_std_libs() -> tuple[list[str], set[str]]:
@@ -924,6 +927,199 @@ async def _smoke_test(
         }
 
 
+@dataclass
+class StdlibSelection:
+    """What External mode has to compile in from the standard library."""
+
+    valid_libs: list[str]
+    force_packages: set[str]
+    # Stdlib modules the packages in libs/ import; None when the scan could not
+    # run, in which case every valid module is included rather than too few.
+    used: set[str] | None
+
+
+async def select_stdlib(nuitka_python: str, project_path: Path) -> StdlibSelection:
+    """Probe the target Python's stdlib and scan which of it the project's packages use.
+
+    The binary is standalone, so Nuitka already follows and bundles the stdlib the
+    MAIN program uses. What it cannot see is the stdlib imported by the third-party
+    packages in libs/ (they are --nofollow'd), so scan site-packages and include
+    only what those import — a faster compile and a smaller output. If the scan
+    cannot run, fall back to the full stdlib so nothing is silently left out.
+    """
+    # Probed through the TARGET python so the list matches the version being
+    # compiled, not the service's.
+    valid_libs, force_packages = await get_valid_std_libs_for(nuitka_python)
+    site_packages = _find_project_site_packages(project_path)
+    used: set[str] | None = None
+    if site_packages is not None:
+        try:
+            used = await asyncio.to_thread(collect_used_stdlib, site_packages, set(valid_libs))
+        except Exception:
+            logger.warning("stdlib import scan failed; falling back to full stdlib", exc_info=True)
+            used = None
+    return StdlibSelection(valid_libs, force_packages, used)
+
+
+@dataclass
+class NuitkaPlan:
+    cmd: list[str]
+    report_file: Path | None
+    log: list[str] = field(default_factory=list)
+
+
+def build_nuitka_command(
+    config: BuildConfig,
+    *,
+    nuitka_python: str,
+    project_path: Path,
+    output_dir: Path,
+    entry_point: Path,
+    output_name: str,
+    jobs: int,
+    debug: bool,
+    lazy_packages: list[str],
+    stdlib: StdlibSelection | None,
+    installed_packages: list[str],
+) -> NuitkaPlan:
+    """The Nuitka command line for a build, and the log lines explaining it.
+
+    Pure apart from checking which extra_dirs exist. A mistake here does not
+    raise — it produces a binary that compiles and then breaks where it runs —
+    which is why it is kept out of run_nuitka_build and tested on its own.
+    """
+    log: list[str] = []
+    cmd = [
+        nuitka_python,
+        "-u",  # Unbuffered output
+        "-m", "nuitka",
+        "--standalone",
+        f"--output-filename={output_name}",
+        f"--output-dir={output_dir}",
+        "--remove-output",
+        # Never block on an interactive y/n prompt: Nuitka may want to
+        # download ccache/gcc/dependency-walker, and we run it on a PTY,
+        # so without this the build would hang waiting for stdin.
+        "--assume-yes-for-downloads",
+    ]
+    # --show-scons prints every gcc invocation, flooding the log pipeline
+    # on large projects. Only enable it in debug mode.
+    if debug:
+        cmd.append("--show-scons")
+
+    # Parallel compilation jobs (0 = auto is resolved by the caller to all cores,
+    # so the C compile — the slowest phase — actually parallelizes).
+    cmd.append(f"--jobs={jobs}")
+    log.append(f"Parallel jobs: {jobs}")
+
+    if config.onefile:
+        cmd.append("--onefile")
+
+    log.append(f"Pack mode: {config.pack_mode.value}")
+    blacklist: list[str] = []
+
+    if config.pack_mode == PackMode.FULL:
+        # FULL mode: Let Nuitka bundle everything, no exclusions
+        log.append("Full mode: all dependencies will be bundled")
+        if lazy_packages:
+            log.append(f"Auto-detected lazy-import packages: {', '.join(lazy_packages)}")
+        manual_includes = [
+            p.strip() for p in config.include_packages.split(",") if p.strip()
+        ] if config.include_packages else []
+        if manual_includes:
+            log.append(f"Manual include packages: {', '.join(manual_includes)}")
+        all_includes = sorted(set(lazy_packages + manual_includes))
+        for pkg in all_includes:
+            cmd.append(f"--include-package={pkg}")
+        if all_includes:
+            log.append(f"Total force-included packages: {', '.join(all_includes)}")
+
+    elif config.pack_mode == PackMode.EXTERNAL:
+        # EXTERNAL mode: the stdlib the packages in libs/ need is compiled in,
+        # and every installed third-party package is left to libs/.
+        log.append("External mode: third-party from libs/")
+        assert stdlib is not None, "External mode needs the stdlib selection"
+        stdlib_names = set(stdlib.valid_libs)
+        if stdlib.used is not None:
+            include_libs = stdlib.used | (_ALWAYS_STDLIB & stdlib_names)
+            for lib in sorted(include_libs):
+                cmd.append(f"--include-package={lib}" if lib in stdlib.force_packages else f"--include-module={lib}")
+            log.append(
+                f"Stdlib auto-detect: including {len(include_libs)} standard-library modules "
+                f"needed by libs/ (Nuitka handles the ones the program imports itself; "
+                f"{len(stdlib.valid_libs)} available)"
+            )
+        else:
+            for lib in stdlib.valid_libs:
+                cmd.append(f"--include-package={lib}" if lib in stdlib.force_packages else f"--include-module={lib}")
+            log.append(
+                f"Could not scan site-packages; including all {len(stdlib.valid_libs)} "
+                "standard-library modules to be safe"
+            )
+        # Read from the PROJECT's .venv, not the service's.
+        blacklist = list(installed_packages)
+        log.append(f"Found {len(blacklist)} packages in .venv to blacklist")
+
+    # Extra source directories (local packages to include)
+    if config.extra_dirs:
+        for extra_dir in config.extra_dirs.split(","):
+            extra_dir = extra_dir.strip()
+            if extra_dir:
+                extra_path = project_path / extra_dir
+                if extra_path.exists():
+                    cmd.append(f"--follow-import-to={extra_dir}")
+                    if extra_path.is_dir():
+                        cmd.append(f"--include-package={extra_dir}")
+                        log.append(f"Including package: {extra_dir}")
+                    else:
+                        cmd.append(f"--include-data-dir={extra_path}={extra_dir}")
+                        log.append(f"Including data dir: {extra_dir}")
+                    if extra_dir in blacklist:
+                        blacklist.remove(extra_dir)
+
+    # Data directories are copied after compilation (like libs/), not embedded.
+    if config.data_dirs:
+        log.append(f"Data dirs to copy after build: {config.data_dirs}")
+
+    # nofollow for blacklisted packages, with a .* entry so submodules are
+    # excluded too. Only VALID dotted module names: a stray "/" (a file path
+    # leaking in from package metadata) makes Nuitka reject the option and exit
+    # 1 before compiling.
+    skipped = [p for p in blacklist if not _MODULE_NAME_RE.fullmatch(p)]
+    if skipped:
+        log.append(
+            f"Skipped {len(skipped)} invalid module names (not dotted identifiers; left out of nofollow): "
+            + ", ".join(sorted(skipped)[:10])
+        )
+    for pkg in blacklist:
+        if not _MODULE_NAME_RE.fullmatch(pkg):
+            continue
+        cmd.append(f"--nofollow-import-to={pkg}")
+        cmd.append(f"--nofollow-import-to={pkg}.*")
+
+    # Optimization / diagnostics options
+    if not config.enable_anti_bloat:
+        # anti-bloat is auto-enabled in Nuitka — only the opt-out needs a flag
+        cmd.append("--disable-plugins=anti-bloat")
+        log.append("anti-bloat plugin disabled by config")
+
+    report_file: Path | None = None
+    if config.generate_report:
+        report_file = output_dir / "nuitka-report.xml"
+        cmd.append(f"--report={report_file}")
+        log.append(f"Compilation report: {report_file}")
+
+    if config.include_package_data:
+        for pkg in config.include_package_data.split(","):
+            pkg = pkg.strip()
+            if pkg:
+                cmd.append(f"--include-package-data={pkg}")
+                log.append(f"Including package data: {pkg}")
+
+    cmd.append(str(entry_point))
+    return NuitkaPlan(cmd, report_file, log)
+
+
 async def run_nuitka_build(task_id: str, config: BuildConfig, db: AsyncSession) -> bool:
     """Run a local Nuitka build asynchronously.
 
@@ -1127,201 +1323,24 @@ async def run_nuitka_build(task_id: str, config: BuildConfig, db: AsyncSession) 
         output_name = config.output_name or Path(config.entry_point).stem
         await task_manager.append_log(task_id, f"Output name: {output_name}")
 
-        # Build base Nuitka command using this service's Python/Nuitka
-        nuitka_cmd = [
-            nuitka_python,
-            "-u",  # Unbuffered output
-            "-m", "nuitka",
-            "--standalone",
-            f"--output-filename={output_name}",
-            f"--output-dir={output_dir}",
-            "--remove-output",
-            # Never block on an interactive y/n prompt: Nuitka may want to
-            # download ccache/gcc/dependency-walker, and we run it on a PTY,
-            # so without this the build would hang waiting for stdin.
-            "--assume-yes-for-downloads",
-        ]
-        # --show-scons prints every gcc invocation, flooding the log pipeline
-        # on large projects. Only enable it in debug mode.
-        if settings.debug:
-            nuitka_cmd.append("--show-scons")
-
-        # Parallel compilation jobs. nuitka_jobs == 0 means "auto": default to
-        # all cores so the C compile (the slowest phase) actually parallelizes.
-        if config.nuitka_jobs > 0:
-            jobs = config.nuitka_jobs
-        else:
-            jobs = os.cpu_count() or 1
-        nuitka_cmd.append(f"--jobs={jobs}")
-        await task_manager.append_log(task_id, f"Parallel jobs: {jobs}")
-
-        # Add onefile option
-        if config.onefile:
-            nuitka_cmd.append("--onefile")
-
-        # Handle packaging mode
-        await task_manager.append_log(task_id, f"Pack mode: {config.pack_mode.value}")
-        blacklist: list[str] = []
-
-        if config.pack_mode == PackMode.FULL:
-            # FULL mode: Let Nuitka bundle everything, no exclusions
-            await task_manager.append_log(task_id, "Full mode: all dependencies will be bundled")
-
-            # Auto-detect packages with known lazy imports
-            auto_includes = detect_lazy_packages(project_path)
-            if auto_includes:
-                await task_manager.append_log(
-                    task_id,
-                    f"Auto-detected lazy-import packages: {', '.join(auto_includes)}",
-                )
-
-            # Merge with manually specified include_packages
-            manual_includes = [
-                p.strip() for p in config.include_packages.split(",") if p.strip()
-            ] if config.include_packages else []
-            if manual_includes:
-                await task_manager.append_log(
-                    task_id,
-                    f"Manual include packages: {', '.join(manual_includes)}",
-                )
-
-            all_includes = sorted(set(auto_includes + manual_includes))
-            for pkg in all_includes:
-                nuitka_cmd.append(f"--include-package={pkg}")
-
-            if all_includes:
-                await task_manager.append_log(
-                    task_id,
-                    f"Total force-included packages: {', '.join(all_includes)}",
-                )
-
-        elif config.pack_mode == PackMode.EXTERNAL:
-            # EXTERNAL mode: Match user's working script exactly
-            # Include ALL valid stdlib modules, blacklist ALL installed packages
-            await task_manager.append_log(task_id, "External mode: third-party from libs/")
-
-            # Get valid stdlib modules — probed through the TARGET python so
-            # the list matches the version being compiled, not the service's.
-            valid_libs, force_packages = await get_valid_std_libs_for(nuitka_python)
-
-            stdlib_names = set(valid_libs)
-
-            # Auto-decide which stdlib to include instead of blindly bundling
-            # ALL of it. The binary is standalone, so Nuitka already follows and
-            # bundles the stdlib the MAIN program uses. What Nuitka can't see is
-            # the stdlib imported by the third-party packages in libs/ (they're
-            # --nofollow'd). So scan site-packages and include only the stdlib
-            # those packages actually import — much faster compile + smaller
-            # output. If the scan can't run, fall back to the full stdlib so we
-            # never silently under-include.
-            site_packages = _find_project_site_packages(project_path)
-            used_stdlib: set[str] | None = None
-            if site_packages is not None:
-                try:
-                    used_stdlib = await asyncio.to_thread(
-                        collect_used_stdlib, site_packages, stdlib_names
-                    )
-                except Exception:
-                    logger.warning(
-                        "stdlib import scan failed; falling back to full stdlib",
-                        exc_info=True,
-                    )
-                    used_stdlib = None
-
-            if used_stdlib is not None:
-                include_libs = used_stdlib | (_ALWAYS_STDLIB & stdlib_names)
-                for lib in sorted(include_libs):
-                    if lib in force_packages:
-                        nuitka_cmd.append(f"--include-package={lib}")
-                    else:
-                        nuitka_cmd.append(f"--include-module={lib}")
-                await task_manager.append_log(
-                    task_id,
-                    f"Stdlib auto-detect: including {len(include_libs)} standard-library modules "
-                    f"needed by libs/ (Nuitka handles the ones the program imports itself; "
-                    f"{len(valid_libs)} available)",
-                )
-            else:
-                for lib in valid_libs:
-                    if lib in force_packages:
-                        nuitka_cmd.append(f"--include-package={lib}")
-                    else:
-                        nuitka_cmd.append(f"--include-module={lib}")
-                await task_manager.append_log(
-                    task_id,
-                    f"Could not scan site-packages; including all {len(valid_libs)} standard-library modules to be safe",
-                )
-
-            # Blacklist ALL installed third-party packages from PROJECT's .venv
-            # This is critical - we need to read from project's venv, not system!
-            venv_path = project_path / ".venv"
-            blacklist = get_installed_packages(venv_path)
-            await task_manager.append_log(task_id, f"Found {len(blacklist)} packages in .venv to blacklist")
-
-        # Add extra source directories (local packages to include)
-        if config.extra_dirs:
-            for extra_dir in config.extra_dirs.split(","):
-                extra_dir = extra_dir.strip()
-                if extra_dir:
-                    extra_path = project_path / extra_dir
-                    if extra_path.exists():
-                        # Follow imports to local packages
-                        nuitka_cmd.append(f"--follow-import-to={extra_dir}")
-                        # Include as package if it has .py files
-                        if extra_path.is_dir():
-                            nuitka_cmd.append(f"--include-package={extra_dir}")
-                            await task_manager.append_log(task_id, f"Including package: {extra_dir}")
-                        else:
-                            nuitka_cmd.append(f"--include-data-dir={extra_path}={extra_dir}")
-                            await task_manager.append_log(task_id, f"Including data dir: {extra_dir}")
-                        # Remove from blacklist if present
-                        if extra_dir in blacklist:
-                            blacklist.remove(extra_dir)
-
-        # Note: Data directories will be copied after compilation (like libs/)
-        # instead of being embedded by Nuitka
-        if config.data_dirs:
-            await task_manager.append_log(task_id, f"Data dirs to copy after build: {config.data_dirs}")
-
-        # Add nofollow for blacklisted packages
-        # Use .* suffix to ensure submodules are also excluded.
-        # Safety net: only emit VALID dotted module names — a stray "/" (e.g. a
-        # file path leaking in from package metadata) makes Nuitka reject the
-        # option and exit 1 before compiling. Skip anything malformed.
-        skipped = [p for p in blacklist if not _MODULE_NAME_RE.fullmatch(p)]
-        if skipped:
-            await task_manager.append_log(
-                task_id,
-                f"Skipped {len(skipped)} invalid module names (not dotted identifiers; left out of nofollow): "
-                + ", ".join(sorted(skipped)[:10]),
-            )
-        for pkg in blacklist:
-            if not _MODULE_NAME_RE.fullmatch(pkg):
-                continue
-            nuitka_cmd.append(f"--nofollow-import-to={pkg}")
-            nuitka_cmd.append(f"--nofollow-import-to={pkg}.*")
-
-        # Optimization / diagnostics options
-        if not config.enable_anti_bloat:
-            # anti-bloat is auto-enabled in Nuitka — only the opt-out needs a flag
-            nuitka_cmd.append("--disable-plugins=anti-bloat")
-            await task_manager.append_log(task_id, "anti-bloat plugin disabled by config")
-
-        report_file: Path | None = None
-        if config.generate_report:
-            report_file = output_dir / "nuitka-report.xml"
-            nuitka_cmd.append(f"--report={report_file}")
-            await task_manager.append_log(task_id, f"Compilation report: {report_file}")
-
-        if config.include_package_data:
-            for pkg in config.include_package_data.split(","):
-                pkg = pkg.strip()
-                if pkg:
-                    nuitka_cmd.append(f"--include-package-data={pkg}")
-                    await task_manager.append_log(task_id, f"Including package data: {pkg}")
-
-        # Add entry point
-        nuitka_cmd.append(str(entry_point))
+        jobs = config.nuitka_jobs if config.nuitka_jobs > 0 else (os.cpu_count() or 1)
+        external = config.pack_mode == PackMode.EXTERNAL
+        plan = build_nuitka_command(
+            config,
+            nuitka_python=nuitka_python,
+            project_path=project_path,
+            output_dir=output_dir,
+            entry_point=entry_point,
+            output_name=output_name,
+            jobs=jobs,
+            debug=settings.debug,
+            lazy_packages=detect_lazy_packages(project_path) if config.pack_mode == PackMode.FULL else [],
+            stdlib=await select_stdlib(nuitka_python, project_path) if external else None,
+            installed_packages=get_installed_packages(project_path / ".venv") if external else [],
+        )
+        for line in plan.log:
+            await task_manager.append_log(task_id, line)
+        nuitka_cmd, report_file = plan.cmd, plan.report_file
 
         # Publish preflight results before the long compile starts
         await task_manager.set_result(task_id, dict(build_result), db)
