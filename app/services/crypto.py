@@ -9,13 +9,11 @@ once and appended to .env, mirroring how the JWT secret is handled.
 
 from __future__ import annotations
 
-import os
 from functools import lru_cache
-from pathlib import Path
 
 from cryptography.fernet import Fernet, InvalidToken
 
-from app.config import get_settings
+from app.config import append_generated_setting, get_settings
 
 
 class DecryptionError(RuntimeError):
@@ -31,18 +29,10 @@ def _load_or_create_key() -> str:
     if key:
         return key
 
-    env_path = Path(__file__).resolve().parent.parent.parent / ".env"
     new_key = Fernet.generate_key().decode()
-    try:
-        fd = os.open(env_path, os.O_WRONLY | os.O_CREAT | os.O_APPEND, 0o600)
-        with os.fdopen(fd, "a") as f:
-            f.write(
-                "\n# Auto-generated key for encrypting stored secrets (do not remove)\n"
-                f"SETTINGS_ENCRYPTION_KEY={new_key}\n"
-            )
-        os.chmod(env_path, 0o600)
-    except OSError:
-        pass  # Fallback: key lives only in memory for this process
+    append_generated_setting(
+        "SETTINGS_ENCRYPTION_KEY", new_key, "Auto-generated key for encrypting stored secrets (do not remove)"
+    )
     return new_key
 
 
