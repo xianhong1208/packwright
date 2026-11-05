@@ -139,11 +139,24 @@ def _validate_build_config_paths(config: BuildConfig) -> None:
     bounded by the directories a user can already reach; this reached the whole
     filesystem, and contradicted a control the same file implements.
 
-    Git mode is exempt: its project_path is assigned by _prepare_git_workspace
-    into a per-task directory under git_workspace_dir, never supplied by the
-    caller.
+    Git mode's project_path is assigned by _prepare_git_workspace (a per-task
+    directory under git_workspace_dir), so only the directory names are checked
+    there — lexically, because the clone does not exist yet. They are just as
+    caller-supplied as in local mode and feed the same rmtree. The workers join
+    them with paths.safe_join() as well.
     """
     if config.source_type == SourceType.GIT:
+        from app.services.paths import is_safe_relative
+
+        for raw, field in ((config.output_dir, "output_dir"), (config.data_dirs, "data_dirs"),
+                           (config.extra_dirs, "extra_dirs"), (config.frontend_dir, "frontend_dir")):
+            for name in (raw or "").split(","):
+                if not is_safe_relative(name):
+                    raise HTTPException(
+                        status_code=400,
+                        detail=(f"{field} '{name.strip()}' must be a directory inside the project: "
+                                "no absolute paths and no '..'."),
+                    )
         return
 
     project_root = _validate_allowed_path(config.project_path)
@@ -1046,12 +1059,19 @@ def _serve_task_output(task) -> Response:
     if not task.config:
         raise HTTPException(status_code=400, detail="Task has no config")
 
-    project_path = Path(task.config.get("project_path", ""))
-    output_dir_name = task.config.get("output_dir", "dist")
-    output_path = (project_path / output_dir_name).resolve()
+    from app.services.paths import (
+        UnsafePathError,
+        docker_export_path,
+        legacy_docker_export_path,
+        safe_join,
+        task_source_root,
+    )
 
-    # Path traversal check
-    if not output_path.is_relative_to(project_path.resolve()):
+    project_path = task_source_root(task.task_id, task.config)
+    output_dir_name = task.config.get("output_dir", "dist")
+    try:
+        output_path = safe_join(project_path, output_dir_name)
+    except UnsafePathError:
         raise HTTPException(status_code=403, detail="Invalid output path")
 
     # Docker builds: the exported image .tar.gz already exists on disk, so serve
@@ -1064,11 +1084,11 @@ def _serve_task_output(task) -> Response:
     # interrupted download can RESUME instead of restarting), and uses sendfile
     # for speed.
     if task.config.get("docker_enabled"):
-        docker_export_dir = Path(get_settings().docker_images_dir)
-        # Reconstruct the exported filename from image name
-        image_name = task.config.get("docker_image_name", "") or f"{project_path.name}:latest"
-        safe_name = re.sub(r"[^a-zA-Z0-9_.-]", "_", image_name)
-        image_file = docker_export_dir / f"{safe_name}.tar.gz"
+        image_file = docker_export_path(task.task_id)
+        if not image_file.exists() and task.config.get("docker_image_name"):
+            # Exports made before files were keyed by task were named after the
+            # image. Only an explicit image name is trusted for the fallback.
+            image_file = legacy_docker_export_path(task.config["docker_image_name"])
 
         if not image_file.exists():
             raise HTTPException(status_code=404, detail="Docker image export not found")

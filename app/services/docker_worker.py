@@ -182,8 +182,9 @@ async def run_docker_build(
         docker_export_dir = Path(get_settings().docker_images_dir)
         docker_export_dir.mkdir(parents=True, exist_ok=True)
 
-        safe_name = re.sub(r"[^a-zA-Z0-9_.-]", "_", image_name)
-        tar_path = docker_export_dir / f"{safe_name}.tar.gz"
+        from app.services.paths import docker_export_path
+
+        tar_path = docker_export_path(task_id)
 
         compress_argv, compressor_name = _compressor_argv(
             get_settings().docker_export_compress_threads
