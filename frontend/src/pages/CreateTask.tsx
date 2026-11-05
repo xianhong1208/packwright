@@ -1327,7 +1327,7 @@ export default function CreateTask() {
                     >
                       <Select>
                         <Option value="external">External (recommended, libs/)</Option>
-                        <Option value="full">Full (very long build, 8h+)</Option>
+                        <Option value="full">Full (very slow build)</Option>
                       </Select>
                     </Form.Item>
                   </Col>
