@@ -74,6 +74,9 @@ follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this proje
   binary name shows the name derived from the entry point instead of an empty row.
 - A build's link (`/task/<id>`) opened onto a spinner once the build had left memory (after a
   restart or eviction); it now redirects to the stored record under Builds.
+- When the service ran as a non-root user, a project whose venv links its python into a directory
+  that user cannot enter (root's uv store) crashed the build's preflight: Python 3.13's
+  `Path.exists()` raises `PermissionError` there instead of returning False.
 
 ## [1.0.0] — 2026-09-10
 
