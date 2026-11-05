@@ -8,7 +8,9 @@ import pytest
 
 from app.services.crypto import decrypt_secret, encrypt_secret
 from app.services.git_credentials import infer_provider, resolve_for_url
-from app.services.git_service import inject_token, mask_token_in_log
+import base64
+
+from app.services.git_service import _auth_env, mask_token_in_log
 
 
 class TestEncryption:
@@ -40,26 +42,27 @@ class TestProviderInference:
         assert infer_provider(host) == expected
 
 
-class TestInjection:
+def _basic(env: dict) -> str:
+    return base64.b64decode(env["GIT_CONFIG_VALUE_0"].split("Basic ", 1)[1]).decode()
+
+
+class TestCredentialEnv:
     @pytest.mark.unit
     def test_github_uses_x_access_token(self):
-        out = inject_token("https://github.com/o/r.git", "TOK", "github")
-        assert out == "https://x-access-token:TOK@github.com/o/r.git"
+        assert _basic(_auth_env("https://github.com/o/r.git", "TOK", "github")) == "x-access-token:TOK"
 
     @pytest.mark.unit
     def test_gitlab_uses_oauth2(self):
-        out = inject_token("https://gitlab.com/o/r.git", "TOK", "gitlab")
-        assert out == "https://oauth2:TOK@gitlab.com/o/r.git"
+        assert _basic(_auth_env("https://gitlab.com/o/r.git", "TOK", "gitlab")) == "oauth2:TOK"
 
     @pytest.mark.unit
-    def test_none_token_is_passthrough(self):
-        assert inject_token("https://github.com/o/r.git", None, "github") == "https://github.com/o/r.git"
+    def test_none_token_adds_nothing(self):
+        assert _auth_env("https://github.com/o/r.git", None, "github") == {}
 
     @pytest.mark.unit
     def test_masking_hides_both_userinfo_forms(self):
-        for prov in ("github", "gitlab"):
-            url = inject_token("https://h/o/r.git", "SECRETTOKEN", prov)
-            masked = mask_token_in_log(url, "SECRETTOKEN")
+        for user in ("x-access-token", "oauth2"):
+            masked = mask_token_in_log(f"https://{user}:SECRETTOKEN@h/o/r.git", "SECRETTOKEN")
             assert "SECRETTOKEN" not in masked
 
 
@@ -143,5 +146,41 @@ class TestResolve:
             token, provider = await resolve_for_url(db, "https://evil.example/repo.git")
             assert token is None
             assert provider == "generic"
+        finally:
+            get_settings.cache_clear()
+
+
+class TestFallbackHost:
+    """GITLAB_TOKEN goes to GITLAB_TOKEN_HOST only."""
+
+    @pytest.mark.unit
+    @pytest.mark.asyncio
+    async def test_gitlab_named_lookalike_never_gets_the_fallback(self, monkeypatch):
+        """A host whose name merely contains "gitlab" used to receive the token."""
+        from app.config import get_settings
+
+        monkeypatch.setenv("GITLAB_TOKEN", "glpat-fallback")
+        get_settings.cache_clear()
+        try:
+            token, provider = await resolve_for_url(_FakeSession(None), "https://gitlab.attacker.example/o/r.git")
+            assert token is None
+            assert provider == "gitlab"
+        finally:
+            get_settings.cache_clear()
+
+    @pytest.mark.unit
+    @pytest.mark.asyncio
+    async def test_configured_self_hosted_gitlab_gets_the_fallback(self, monkeypatch):
+        """GITLAB_TOKEN_HOST names a self-hosted server, matched case-insensitively."""
+        from app.config import get_settings
+
+        monkeypatch.setenv("GITLAB_TOKEN", "glpat-fallback")
+        monkeypatch.setenv("GITLAB_TOKEN_HOST", "Git.Internal.Example")
+        get_settings.cache_clear()
+        try:
+            token, _ = await resolve_for_url(_FakeSession(None), "https://git.internal.example/o/r.git")
+            assert token == "glpat-fallback"
+            token, _ = await resolve_for_url(_FakeSession(None), "https://gitlab.com/o/r.git")
+            assert token is None
         finally:
             get_settings.cache_clear()

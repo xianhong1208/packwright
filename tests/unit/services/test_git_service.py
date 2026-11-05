@@ -11,7 +11,8 @@ import pytest
 
 from app.services.git_service import (
     GitUrlError,
-    inject_token,
+    _auth_env,
+    _git_env,
     mask_token_in_log,
     parse_dependency_groups,
     validate_git_ref,
@@ -195,26 +196,35 @@ class TestValidateGitRef:
             validate_git_ref(ref)
 
 
-class TestInjectToken:
-    """Tests for inject_token — builds the credentialed URL handed to git."""
+class TestCredentialEnvironment:
+    """The token reaches git as a host-scoped extraHeader in the environment.
+
+    In the clone URL it used to be written into every workspace's .git/config
+    and was visible in `ps`.
+    """
 
     @pytest.mark.unit
-    def test_tc_git_030_injects_oauth2_userinfo(self):
-        """TC-GIT-030: inject_token — token injected as oauth2 userinfo."""
-        result = inject_token(PUBLIC_REPO_URL, GITLAB_TOKEN)
-        assert result == f"https://oauth2:{GITLAB_TOKEN}@gitlab.example.com/group/project.git"
+    def test_tc_git_030_header_is_scoped_to_the_repository_host(self):
+        """TC-GIT-030: the config key names this origin, so redirects elsewhere get nothing."""
+        env = _auth_env(PUBLIC_REPO_URL, GITLAB_TOKEN)
+        assert env["GIT_CONFIG_COUNT"] == "1"
+        assert env["GIT_CONFIG_KEY_0"] == "http.https://gitlab.example.com/.extraHeader"
+        assert env["GIT_CONFIG_VALUE_0"].startswith("Authorization: Basic ")
+        assert GITLAB_TOKEN not in PUBLIC_REPO_URL
 
     @pytest.mark.unit
     def test_tc_git_031_preserves_port(self):
-        """TC-GIT-031: inject_token — non-default port preserved."""
-        result = inject_token("https://gitlab.example.com:8443/g/p.git", GITLAB_TOKEN)
-        assert result == f"https://oauth2:{GITLAB_TOKEN}@gitlab.example.com:8443/g/p.git"
+        """TC-GIT-031: a non-default port is part of the scoped origin."""
+        env = _auth_env("https://gitlab.example.com:8443/g/p.git", GITLAB_TOKEN)
+        assert env["GIT_CONFIG_KEY_0"] == "http.https://gitlab.example.com:8443/.extraHeader"
 
     @pytest.mark.unit
     @pytest.mark.parametrize("token", [None, ""])
-    def test_tc_git_032_no_token_returns_url_unchanged(self, token):
-        """TC-GIT-032: inject_token — falsy token returns the URL untouched."""
-        assert inject_token(PUBLIC_REPO_URL, token) == PUBLIC_REPO_URL
+    def test_tc_git_032_no_token_adds_no_credential(self, token):
+        """TC-GIT-032: falsy token -> no GIT_CONFIG_* at all, prompts still disabled."""
+        env = _git_env(PUBLIC_REPO_URL, token)
+        assert not any(k.startswith("GIT_CONFIG") for k in env)
+        assert env["GIT_TERMINAL_PROMPT"] == "0"
 
 
 class TestMaskTokenInLog:
@@ -301,3 +311,64 @@ dev = ["ruff"]
     def test_tc_git_055_empty_text_returns_empty(self):
         """TC-GIT-055: parse_dependency_groups — empty input yields []."""
         assert parse_dependency_groups("") == []
+
+
+class TestPreviewReadsStayInTheClone:
+    """A cloned repo may commit symlinks; the preview must not follow them out."""
+
+    @pytest.mark.unit
+    def test_tc_git_090_symlinked_env_file_is_not_read(self, tmp_path):
+        """TC-GIT-090: .env -> (file outside the clone) is skipped, regular .env read."""
+        from app.services.git_service import _read_env_files
+
+        secret = tmp_path / "service.env"
+        secret.write_text("JWT_SECRET_KEY=do-not-leak")
+        repo = tmp_path / "repo"
+        repo.mkdir()
+        (repo / ".env").symlink_to(secret)
+        (repo / ".env.production").write_text("API_URL=https://api.example.com")
+
+        files = _read_env_files(repo, root=repo)
+
+        assert ".env" not in files
+        assert files == {".env.production": "API_URL=https://api.example.com"}
+
+    @pytest.mark.unit
+    def test_tc_git_091_symlinked_package_json_is_ignored(self, tmp_path):
+        """TC-GIT-091: detection does not read a package.json that points outside."""
+        from app.services.git_service import _detect_frontend_config
+
+        outside = tmp_path / "pkg.json"
+        outside.write_text('{"scripts": {"build": "x"}, "packageManager": "pnpm@9"}')
+        repo = tmp_path / "repo"
+        repo.mkdir()
+        (repo / "package.json").symlink_to(outside)
+
+        assert _detect_frontend_config(repo, root=repo)["build_command"] is None
+
+
+class TestSsrfSpellings:
+    """Loopback/private targets in spellings the old check did not recognise."""
+
+    @pytest.mark.unit
+    @pytest.mark.parametrize("url", [
+        "http://127.1/g/p.git",
+        "http://2130706433/g/p.git",
+        "http://0x7f000001/g/p.git",
+        "http://0177.0.0.1/g/p.git",
+        "http://localhost./g/p.git",
+        "http://foo.localhost/g/p.git",
+        "http://[::ffff:127.0.0.1]/g/p.git",
+        "http://[::ffff:169.254.169.254]/latest",
+    ])
+    def test_tc_git_095_alternate_loopback_spellings_are_rejected(self, url):
+        """TC-GIT-095: numeric/hex/octal/trailing-dot/*.localhost/mapped forms are refused."""
+        with pytest.raises(GitUrlError):
+            validate_git_url(url)
+
+    @pytest.mark.unit
+    @pytest.mark.parametrize("url", ["https://1e100.net/g/p.git", "https://gitlab.com/g/p.git",
+                                     "https://8.8.8.8/g/p.git"])
+    def test_tc_git_096_public_names_and_addresses_still_pass(self, url):
+        """TC-GIT-096: hostnames that merely look numeric-ish, and public IPs, are allowed."""
+        validate_git_url(url)

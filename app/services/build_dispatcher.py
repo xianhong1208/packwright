@@ -534,10 +534,7 @@ async def _prepare_git_workspace(task_id: str, config: BuildConfig) -> BuildConf
         )
 
     # Masked log line — token, if any, is never visible here.
-    masked_url = git_service.mask_token_in_log(
-        git_service.inject_token(config.git_url, token, provider),
-        token,
-    )
+    masked_url = git_service.mask_token_in_log(config.git_url, token)
     await task_manager.append_log(
         task_id,
         f"Cloning {masked_url} @ {config.git_ref_type}:{config.git_ref}",
