@@ -7,7 +7,6 @@ import importlib.util
 import json
 import logging
 import os
-import pty
 import re
 import shutil
 import site
@@ -23,7 +22,7 @@ from app.config import get_settings
 from app.schemas.task import BuildConfig, PackMode
 from app.services.source_guard import SourceGuard
 from app.services.task_manager import task_manager
-from app.services.terminal_output import TerminalLineBuffer
+from app.services.process_runner import run_step
 
 settings = get_settings()
 logger = logging.getLogger(__name__)
@@ -941,10 +940,8 @@ async def run_nuitka_build(task_id: str, config: BuildConfig, db: AsyncSession) 
         f"Nuitka Build | Output: {config.output_name or Path(config.entry_point).stem} | Python: {config.python_version}",
     )
 
-    process = None
     guard = SourceGuard(task_id)  # puts the entry point back however the build ends
     entry_point = None
-    master_fd = None
     start_ts = time.monotonic()
     build_result: dict[str, Any] = {"preflight": []}
     preflight = build_result["preflight"]
@@ -1350,35 +1347,7 @@ async def run_nuitka_build(task_id: str, config: BuildConfig, db: AsyncSession) 
                     nuitka_env["PYTHONPATH"] = f"{extra_path}:{existing}" if existing else extra_path
                     await task_manager.append_log(task_id, f"Added to PYTHONPATH: {extra_path}")
 
-        # Create PTY for terminal emulation (Nuitka needs TTY for progress)
-        master_fd, slave_fd = pty.openpty()
-
-        # Start Nuitka process with PTY
-        process = await asyncio.create_subprocess_exec(
-            *nuitka_cmd,
-            stdout=slave_fd,
-            stderr=slave_fd,
-            stdin=slave_fd,
-            cwd=str(project_path),
-            env=nuitka_env,
-        )
-        os.close(slave_fd)  # Close slave in parent process
-
-        await task_manager.set_process(task_id, process)
         current_progress = 0.0
-
-        # Non-blocking PTY reads on the event loop — no executor threads to
-        # leak or exhaust (the old run_in_executor(os.read) pattern left a
-        # blocked thread behind on every 0.5s timeout during quiet compile
-        # phases, eventually starving the process-wide default executor).
-        os.set_blocking(master_fd, False)
-        terminal = TerminalLineBuffer()
-
-        def read_pty() -> bytes:
-            try:
-                return os.read(master_fd, 65536)
-            except OSError:  # incl. BlockingIOError: nothing to read right now
-                return b""
 
         async def consume(lines: list[str], frame: str | None) -> None:
             nonlocal current_progress
@@ -1399,28 +1368,11 @@ async def run_nuitka_build(task_id: str, config: BuildConfig, db: AsyncSession) 
                 min(int(current_progress), 99 if current_progress < 100 else 100),
             )
 
-        while True:
-            if process.returncode is not None:
-                while data := read_pty():
-                    await consume(*terminal.feed(data))
-                await consume(terminal.flush(), None)
-                break
-
-            data = read_pty()
-            if data:
-                await consume(*terminal.feed(data))
-            else:
-                await asyncio.sleep(0.1)
-
-        # Close PTY master
-        try:
-            os.close(master_fd)
-        except OSError:
-            pass
-        master_fd = None
-
-        ret_code = await process.wait()
-        await task_manager.set_process(task_id, None)
+        # On a PTY (Nuitka draws progress only for a TTY), in its own process
+        # group: Cancel has to stop scons and every gcc it started, not just
+        # the Nuitka process at the top.
+        step = await run_step(task_id, nuitka_cmd, cwd=project_path, env=nuitka_env, on_output=consume)
+        ret_code = -1 if step.returncode is None else step.returncode
 
         # Restore original entry point file
         if guard.active:
@@ -1636,12 +1588,6 @@ async def run_nuitka_build(task_id: str, config: BuildConfig, db: AsyncSession) 
         if guard.active:
             for line in guard.restore():
                 logger.info("Task %s: %s", task_id, line)
-        # Close PTY if still open (normal path already closed and None'd it)
-        if master_fd is not None:
-            try:
-                os.close(master_fd)
-            except OSError:
-                pass
         # No lock release here — build_dispatcher owns the project lock now.
 
 
