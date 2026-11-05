@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeEach, vi, afterEach } from 'vitest'
 import { renderHook, act } from '@testing-library/react'
-import { useFormDraft, __testing } from './useFormDraft'
+import { useFormDraft, clearFormDraft, __testing } from './useFormDraft'
 
 const { DRAFT_STORAGE_KEY, SAVE_DEBOUNCE_MS } = __testing
 
@@ -130,6 +130,34 @@ describe('useFormDraft', () => {
     unmount()
     act(() => vi.advanceTimersByTime(SAVE_DEBOUNCE_MS * 2))
 
+    expect(storedDraft()).toBeNull()
+  })
+
+  it('never stores the Docker runtime environment either', () => {
+    const form = fakeForm({ project_name: 'svc', docker_env_vars: 'GOOGLE_API_KEY=real-key' })
+    const { result } = renderHook(() => useFormDraft(form, false))
+
+    act(() => result.current.scheduleSave())
+    act(() => vi.advanceTimersByTime(SAVE_DEBOUNCE_MS + 1))
+
+    expect(storedDraft()).not.toHaveProperty('docker_env_vars')
+  })
+
+  it('strips secrets from a draft saved by an older version, on restore', () => {
+    localStorage.setItem(DRAFT_STORAGE_KEY, JSON.stringify({
+      project_name: 'old', docker_env_vars: 'DB_PASSWORD=hunter2', frontend_env_content: 'K=V',
+    }))
+    const form = fakeForm()
+    renderHook(() => useFormDraft(form, false))
+
+    expect(form.__state).not.toHaveProperty('docker_env_vars')
+    expect(form.__state).not.toHaveProperty('frontend_env_content')
+    expect(storedDraft()).toEqual({ project_name: 'old' })
+  })
+
+  it('clearFormDraft removes the draft (called on sign-out)', () => {
+    localStorage.setItem(DRAFT_STORAGE_KEY, JSON.stringify({ project_name: 'x' }))
+    clearFormDraft()
     expect(storedDraft()).toBeNull()
   })
 })
