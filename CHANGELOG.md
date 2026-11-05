@@ -63,6 +63,10 @@ follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this proje
   production 5 → 0 (axios, react-router).
 
 ### Fixed
+- The Builds page showed an empty "Build result" card for builds whose result held only a duration,
+  never showed which stage a failed build stopped in, and listed Nuitka settings (pack mode,
+  one-file) for frontend-only builds. The task and history pages now share one failure report and
+  one result panel instead of two drifting copies.
 - **Cancel did not stop most of a build.** Only the top process was signalled: Nuitka's scons and
   gcc children and npm's node children kept running (reparented to init) while the build showed as
   cancelled, Cancel did nothing at all to a frontend install or build, and a cancelled full-stack
