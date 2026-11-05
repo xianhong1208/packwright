@@ -29,6 +29,9 @@ follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this proje
   validation errors, build-log lines and the project-scan labels.
 
 ### Added
+- `docs/configuration.md` documents every setting with its default. The manual
+  (`docs/manual.zh-TW.md`) is rewritten for the current release: it described one particular machine
+  (paths, a LAN host, a PostgreSQL-only install, a removed path allow-list) and older flows.
 - `/health` reports the version, and the console shows it; `pyproject.toml` is the only place a
   version is written (`app/version.py`, `npm run sync-version`).
 - CI (`.github/workflows/ci.yml`): backend (ruff, unit + integration tests, schema-drift check),
