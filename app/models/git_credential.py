@@ -12,6 +12,11 @@ from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.database import Base
 
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:  # annotation only; importing it at runtime would be circular
+    from app.models.user import User
+
 
 class GitCredential(Base):
     """A Git access token for one host, entered and managed in the console."""

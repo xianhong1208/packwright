@@ -66,7 +66,7 @@ export default function UserManagementPage() {
       ])
       setUsers(usersData)
       setTotal(countData.count)
-    } catch (err) {
+    } catch {
       message.error('Failed to load users')
     } finally {
       setIsLoading(false)

@@ -13,7 +13,6 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.config import get_settings
 from app.models.task import Task
 from app.schemas.task import (
-    BuildConfig,
     TaskCreate,
     TaskResponse,
     TaskStatus,
