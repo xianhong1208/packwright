@@ -174,15 +174,16 @@ def _validate_build_config_paths(config: BuildConfig) -> None:
                 raise HTTPException(
                     status_code=400,
                     detail=(
-                        f"{field} 的 '{name}' 會指向專案目錄之外。"
-                        "這些名稱是相對於專案路徑的子目錄,不能使用 '..' 或絕對路徑。"
+                        f"{field} '{name}' points outside the project directory. "
+                        "These are subdirectories relative to the project path: '..' and "
+                        "absolute paths are not allowed."
                     ),
                 )
 
-    _require_inside(config.output_dir, "輸出目錄")
-    _require_inside(config.data_dirs, "資料目錄")
-    _require_inside(config.extra_dirs, "額外程式碼目錄")
-    _require_inside(config.frontend_dir, "前端目錄")
+    _require_inside(config.output_dir, "Output directory")
+    _require_inside(config.data_dirs, "Data directory")
+    _require_inside(config.extra_dirs, "Extra code directory")
+    _require_inside(config.frontend_dir, "Frontend directory")
 
 
 def _validate_allowed_path(path: str) -> Path:
@@ -991,8 +992,8 @@ async def download_output_with_ticket(ticket: str, db: DB) -> Response:
         raise HTTPException(
             status_code=401,
             detail=(
-                "下載連結已失效。請回到 Packwright 重新點一次下載 —— "
-                "連結有時效,不能重複使用或分享給別人。"
+                "This download link has expired. Go back to Packwright and click Download "
+                "again — links are short-lived and cannot be reused or shared."
             ),
         )
     user_id, task_id = decoded

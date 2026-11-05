@@ -257,7 +257,7 @@ def _compressor_argv(threads: int) -> tuple[list[str], str]:
         # is otherwise finished. Most of the speedup is in the first few
         # threads anyway — beyond that disk throughput becomes the limit.
         return ([pigz, "-p", str(max(1, threads))], f"pigz -p {threads}")
-    return (["gzip"], "gzip (單執行緒 — 安裝 pigz 可大幅加速)")
+    return (["gzip"], "gzip (single-threaded — install pigz for a much faster export)")
 
 
 def _generate_dockerignore(precompiled: bool = False) -> str:
@@ -359,8 +359,9 @@ def _validate_nginx_value(value: str, field: str) -> str:
     value = (value or "").strip()
     if _NGINX_VALUE_FORBIDDEN.search(value):
         raise ValueError(
-            f"{field} 含有不允許的字元(引號、分號、大括號、# 或換行):{value!r}。"
-            "這個值會直接寫進 nginx 設定檔,請只填單純的值,例如 '120s' 或 "
+            f"{field} contains a character that is not allowed (quote, semicolon, brace, # or "
+            f"newline): {value!r}. The value is written straight into the nginx config, so use a "
+            "plain value such as '120s' or "
             "'http://backend:8000'。"
         )
     return value

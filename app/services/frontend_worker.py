@@ -144,8 +144,8 @@ async def run_frontend_build(
             if detected_tool != tool:
                 await task_manager.append_log(
                     task_id,
-                    f"偵測到 {lock_file},改用 {detected_tool.value}"
-                    f"(原選 {tool.value})以符合 lockfile",
+                    f"Found {lock_file}: using {detected_tool.value} instead of "
+                    f"{tool.value} to match the lockfile",
                 )
                 tool = detected_tool
             else:
@@ -218,7 +218,7 @@ async def run_frontend_build(
         and _read_stored_lock_hash(fe_path) == current_lock_hash
     ):
         await task_manager.append_log(
-            task_id, "相依套件無變更(lockfile 未異動),跳過安裝步驟"
+            task_id, "Dependencies unchanged (lockfile not modified); skipping install"
         )
     else:
         await task_manager.append_log(task_id, f"Command: {' '.join(install_cmd)}")
@@ -231,7 +231,7 @@ async def run_frontend_build(
         # Record the lockfile hash so the next build can skip this step.
         if current_lock_hash is not None:
             _write_stored_lock_hash(fe_path, current_lock_hash)
-            await task_manager.append_log(task_id, "已記錄 lockfile 雜湊值,供下次建置比對")
+            await task_manager.append_log(task_id, "Recorded the lockfile hash for the next build to compare")
 
     await task_manager.update_task(task_id, "progress", 40)
 
@@ -338,7 +338,7 @@ async def _run_command(
             if loop.time() > deadline:
                 await task_manager.append_log(
                     task_id,
-                    f"Error: 指令逾時({timeout:.0f}s),已強制中止:{' '.join(cmd)}",
+                    f"Error: command timed out after {timeout:.0f}s and was killed: {' '.join(cmd)}",
                 )
                 try:
                     process.kill()

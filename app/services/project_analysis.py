@@ -232,7 +232,7 @@ def analyze_project_layout(project_path, entry_point: str = "main.py") -> dict:
                     {
                         "name": name,
                         "role": "data",
-                        "reason": f"設定/資料目錄({name}),建議一起打包",
+                        "reason": f"Config/data directory ({name}); include it in the build",
                         "imported_by_entry": imported_by_entry,
                         "py_files": py_files,
                         "data_files": data_files,
@@ -245,15 +245,15 @@ def analyze_project_layout(project_path, entry_point: str = "main.py") -> dict:
             if py_files > 0:
                 role = "source"
                 if has_root_init:
-                    reason = f"含 {py_files} 個 .py(含 __init__.py,Python 套件)"
+                    reason = f"{py_files} .py files with __init__.py (a Python package)"
                 else:
-                    reason = f"含 {py_files} 個 .py(Python 程式碼)"
+                    reason = f"{py_files} .py files (Python code)"
             elif data_files > 0:
                 role = "data"
-                reason = f"以資料檔為主({data_files} 個),建議一起打包"
+                reason = f"Mostly data files ({data_files}); include it in the build"
             else:
                 role = "skip"
-                reason = "無法判斷,預設略過"
+                reason = "Could not tell; skipped by default"
 
             result["directories"].append(
                 {
@@ -324,16 +324,16 @@ def classify_from_paths(file_paths, entry_point: str = "main.py") -> dict:
             if s["py"] > 0:
                 role = "source"
                 reason = (
-                    f"含 {s['py']} 個 .py(含 __init__.py,Python 套件)"
+                    f"{s['py']} .py files with __init__.py (a Python package)"
                     if s["init"]
-                    else f"含 {s['py']} 個 .py(Python 程式碼)"
+                    else f"{s['py']} .py files (Python code)"
                 )
             elif s["data"] > 0:
                 role = "data"
-                reason = f"以資料檔為主({s['data']} 個),建議一起打包"
+                reason = f"Mostly data files ({s['data']}); include it in the build"
             else:
                 role = "skip"
-                reason = "無法判斷,預設略過"
+                reason = "Could not tell; skipped by default"
             result["directories"].append(
                 {
                     "name": name,
