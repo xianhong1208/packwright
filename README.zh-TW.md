@@ -17,7 +17,7 @@ Packwright 在 v1.0.0 以前名為 *Build Center*。存在於既有資料中的�
 
 ## 安裝
 
-**環境需求:** Python 3.13+、[uv](https://docs.astral.sh/uv/)、Node.js(前端建置用),以及各引擎所需的 Nuitka 工具鏈(C 編譯器)與 Docker(Docker 輸出用)。資料庫預設用本機 SQLite 檔(免設定);PostgreSQL 為選用(設 `DATABASE_URL`)。`pigz` 選用,可加速 image 壓縮。
+**環境需求:** Python 3.13+、[uv](https://docs.astral.sh/uv/)、Node.js 22.12+(建置管理台與前端建置用),以及各引擎所需的 Nuitka 工具鏈(C 編譯器)與 Docker(Docker 輸出用)。資料庫預設用本機 SQLite 檔(免設定);PostgreSQL 為選用(設 `DATABASE_URL`)。`pigz` 選用,可加速 image 壓縮。
 
 ```bash
 git clone https://github.com/xianhong1208/packwright.git
