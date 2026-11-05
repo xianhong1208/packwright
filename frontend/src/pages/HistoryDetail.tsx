@@ -372,10 +372,13 @@ export default function HistoryDetail() {
                     Docker
                   </Tag>
                 )}
-                <Tag color={config.pack_mode === 'full' ? 'orange' : 'cyan'} style={{ fontSize: 14, padding: '2px 10px' }}>
-                  Pack: {config.pack_mode === 'full' ? 'Full' : 'External'}
-                </Tag>
-                {config.onefile && (
+                {/* Nuitka settings mean nothing for a frontend-only build. */}
+                {config.project_type !== 'frontend_only' && (
+                  <Tag color={config.pack_mode === 'full' ? 'orange' : 'cyan'} style={{ fontSize: 14, padding: '2px 10px' }}>
+                    Pack: {config.pack_mode === 'full' ? 'Full' : 'External'}
+                  </Tag>
+                )}
+                {config.project_type !== 'frontend_only' && config.onefile && (
                   <Tag color="default" style={{ fontSize: 14, padding: '2px 10px' }}>
                     One-file
                   </Tag>

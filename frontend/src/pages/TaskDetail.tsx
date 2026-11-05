@@ -344,14 +344,14 @@ export default function TaskDetail() {
               <DetailRow label="Project type">
                 {PROJECT_TYPE_LABELS[task.config.project_type]}
               </DetailRow>
-              <DetailRow label="Pack mode">
-                {{ full: 'Full', external: 'External' }[task.config.pack_mode]}
-              </DetailRow>
               {task.config.docker_enabled && <DetailRow label="Docker">Enabled</DetailRow>}
 
               {/* Backend settings */}
               {hasBackend && (
                 <>
+                  <DetailRow label="Pack mode">
+                    {{ full: 'Full', external: 'External' }[task.config.pack_mode]}
+                  </DetailRow>
                   <DetailRow label="Python">{task.python_version}</DetailRow>
                   <DetailRow label="Entry point" mono>
                     {task.config.entry_point}
