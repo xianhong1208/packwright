@@ -417,7 +417,7 @@ export default function HistoryDetail() {
               {record.result.artifact.sha256 && (
                 <div className="rounded-lg p-3 col-span-2 bg-void-950">
                   <div className="text-xs mb-1" style={{ color: 'var(--ink-faint)' }}>
-                    SHA-256 (main binary)
+                    SHA-256
                   </div>
                   <Tooltip title="Click to copy the full hash">
                     <code
