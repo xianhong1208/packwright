@@ -3,6 +3,8 @@ import react from '@vitejs/plugin-react'
 import tailwindcss from '@tailwindcss/vite'
 
 // https://vite.dev/config/
+const BACKEND = process.env.PACKWRIGHT_BACKEND || 'http://localhost:5018'
+
 export default defineConfig({
   plugins: [react(), tailwindcss()],
   build: {
@@ -29,19 +31,14 @@ export default defineConfig({
   },
   server: {
     port: 5173,
+    // The backend the dev server forwards to. Set PACKWRIGHT_BACKEND when the
+    // backend you are developing against is not on :5018 (e.g. another
+    // service already holds that port on this machine).
     proxy: {
-      '/api': {
-        target: 'http://localhost:5018',
-        changeOrigin: true,
-      },
-      '/auth': {
-        target: 'http://localhost:5018',
-        changeOrigin: true,
-      },
-      '/ws': {
-        target: 'ws://localhost:5018',
-        ws: true,
-      },
+      '/api': { target: BACKEND, changeOrigin: true },
+      '/auth': { target: BACKEND, changeOrigin: true },
+      '/health': { target: BACKEND, changeOrigin: true },
+      '/ws': { target: BACKEND.replace(/^http/, 'ws'), ws: true },
     },
   },
 })
