@@ -68,6 +68,8 @@ follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this proje
   cancelled, Cancel did nothing at all to a frontend install or build, and a cancelled full-stack
   build started its next step anyway. Each build step now runs in its own process group that Cancel,
   timeouts and the end of the step stop as a whole, and no step starts once a build is cancelled.
+  Cancelling a full-stack build during its frontend step stops the backend (and Docker) steps too,
+  and the build reads "Cancelled by user" instead of the step's "failed" message.
 - `scripts/backup_db.sh` backs up SQLite (the default) as well as PostgreSQL, and finds the database
   the way the service does: it used to read only `DB_*`, so it dumped the wrong database when
   `DATABASE_URL` was set and could not back up a default install at all. A failed backup leaves no
