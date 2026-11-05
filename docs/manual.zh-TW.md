@@ -93,9 +93,9 @@ PORT=5019 uv run python main.py           # 換 port
 或用 `./start.sh`:它會先建置管理台(`SKIP_FRONTEND=1` 跳過)、`uv sync`,再啟動;
 `--host` / `--port` 可覆寫綁定位址。
 
-> **從 Packwright 目錄啟動。** `.env` 是從啟動時的工作目錄讀取的,而首次啟動自動產生的
-> `JWT_SECRET_KEY` / `SETTINGS_ENCRYPTION_KEY` 寫在 Packwright 目錄下的 `.env`。從別的目錄啟動,
-> 寫入的金鑰讀不回來:每次重啟都會換新金鑰,所有人被登出,已存的 Git 憑證也解不開。
+> **建議從 Packwright 目錄啟動。** `data/`(資料庫、工作區、image 匯出)預設是相對於啟動目錄的,
+> 從別的目錄啟動會變成一個全新的空資料庫;要從別處啟動,請把這幾個路徑設成絕對路徑。
+> 自動產生的金鑰不受影響:它們寫在 `main.py` 旁邊的 `.env`,不論從哪裡啟動都會讀到。
 > `start.sh` 與 systemd unit 都會先切到正確目錄。
 
 ### 常駐(systemd)
@@ -589,7 +589,9 @@ data/
 新帳號需要管理員在 **Users** 頁啟用。
 
 **每次重啟所有人都被登出、Git 憑證失效**
-服務不是從 Packwright 目錄啟動的,自動產生的金鑰讀不回來。見[直接啟動](#直接啟動)。
+自動產生的金鑰沒能存下來:啟動 log 會有 `Could not save the generated …` 的警告,通常是
+`main.py` 旁邊的 `.env` 不可寫入。修正權限,或自己在 `.env` 設定 `JWT_SECRET_KEY` 與
+`SETTINGS_ENCRYPTION_KEY`。
 
 **本機路徑被拒絕(403)或選不到目錄**
 路徑必須在 `LOCAL_SOURCE_ROOTS` 底下;未設定時本機模式停用。
