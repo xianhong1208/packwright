@@ -1,7 +1,7 @@
 """Audit logging service for security tracking."""
 
 import json
-from datetime import datetime, timezone
+from datetime import datetime
 from enum import Enum
 from typing import Any
 

@@ -16,22 +16,22 @@ The script is idempotent - it can be run multiple times safely.
 
 import asyncio
 import sys
-from datetime import datetime, timezone
 from pathlib import Path
 
 # Add parent directory to path for imports
 sys.path.insert(0, str(Path(__file__).parent.parent.parent))
 
-from sqlalchemy import text, inspect, select
+from sqlalchemy import text, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.database import engine, async_session, Base
 from app.models.role import Role
-from app.models.permission import Permission, role_permissions
+from app.models.permission import Permission
 from app.models.user import User
-from app.models.login_history import LoginHistory
-from app.models.refresh_token import RefreshToken
-from app.models.password_reset import PasswordResetToken
+# Imported so create_all() below registers and creates their tables.
+from app.models.login_history import LoginHistory  # noqa: F401
+from app.models.refresh_token import RefreshToken  # noqa: F401
+from app.models.password_reset import PasswordResetToken  # noqa: F401
 
 
 # ===== Permission Definitions =====

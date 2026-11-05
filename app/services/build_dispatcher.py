@@ -232,7 +232,6 @@ async def _build_backend_only(task_id: str, config: BuildConfig, db: AsyncSessio
 
 async def _build_frontend_only(task_id: str, config: BuildConfig, db: AsyncSession) -> None:
     """Build frontend-only project."""
-    import shutil
     from app.services.frontend_worker import run_frontend_build
 
     await task_manager.append_log(task_id, "=== Frontend Only Build ===")

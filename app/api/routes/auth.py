@@ -57,7 +57,6 @@ from app.services.auth import (
     get_user_count,
     get_user_permissions,
     hash_password,
-    hash_token,
 )
 from app.services import mcp_oauth
 from app.services.permission import get_current_user, CurrentUser

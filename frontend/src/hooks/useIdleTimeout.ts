@@ -42,7 +42,6 @@ export function useIdleTimeout({ onLogout, enabled = true }: UseIdleTimeoutOptio
     onLogoutRef.current = onLogout
   }, [onLogout])
 
-  const lastActivityRef = useRef(Date.now())
   const logoutTimerRef = useRef<number | null>(null)
   const warningTimerRef = useRef<number | null>(null)
   const countdownRef = useRef<number | null>(null)
@@ -92,7 +91,6 @@ export function useIdleTimeout({ onLogout, enabled = true }: UseIdleTimeoutOptio
   }, [clearAllTimers])
 
   const resetTimer = useCallback(() => {
-    lastActivityRef.current = Date.now()
     setShowWarning(false)
     setRemainingSeconds(0)
     startTimers()

@@ -2,7 +2,6 @@
 
 import hashlib
 import secrets
-import uuid
 from datetime import datetime, timedelta, timezone
 
 import bcrypt

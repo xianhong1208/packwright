@@ -43,12 +43,25 @@ export interface FormDraft {
  * existing task, and restoring a stale draft over it would silently rebuild
  * something other than what the user asked to rebuild.
  */
+function hasStoredDraft(): boolean {
+  try {
+    const draft = JSON.parse(localStorage.getItem(DRAFT_STORAGE_KEY) ?? 'null')
+    return !!draft && typeof draft === 'object'
+  } catch {
+    return false
+  }
+}
+
 export function useFormDraft(
   form: FormInstance,
   isRebuild: boolean,
   onCleared?: () => void,
 ): FormDraft {
-  const [savedAt, setSavedAt] = useState<number | null>(null)
+  // A draft that will be restored on mount counts as saved from the start; set
+  // here rather than from the restore effect (setState inside an effect cascades).
+  const [savedAt, setSavedAt] = useState<number | null>(() =>
+    !isRebuild && hasStoredDraft() ? Date.now() : null,
+  )
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const restoredRef = useRef(false)
 
@@ -94,7 +107,6 @@ export function useFormDraft(
         for (const field of NEVER_PERSIST) delete draft[field]
         localStorage.setItem(DRAFT_STORAGE_KEY, JSON.stringify(draft))
         form.setFieldsValue(draft)
-        setSavedAt(Date.now())
       }
     } catch {
       // A malformed draft must not block the form from loading.

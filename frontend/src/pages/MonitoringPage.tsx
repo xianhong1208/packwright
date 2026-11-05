@@ -1,11 +1,11 @@
 import { useQuery } from '@tanstack/react-query'
-import { useRef, useMemo } from 'react'
+import { useState } from 'react'
 import { Spin, Button } from 'antd'
 import { ReloadOutlined, ExclamationCircleOutlined } from '@ant-design/icons'
 import api from '../api/client'
 import { getErrorDetail } from '../utils/errors'
+import { advanceSamples, EMPTY_SAMPLES, type Samples } from './monitoringSamples'
 
-const MAX_HISTORY = 60
 
 interface SystemStats {
   cpu: {
@@ -126,12 +126,7 @@ function Sparkline({ data, color, height = 32, label }: { data: number[]; color:
 }
 
 export default function MonitoringPage() {
-  const cpuHistoryRef = useRef<number[][]>([]) // per-core history
-  const overallHistoryRef = useRef<number[]>([])
-  const prevNetRef = useRef<{ sent: number; recv: number } | null>(null)
-  const netRateRef = useRef<{ sent: number; recv: number }>({ sent: 0, recv: 0 })
-
-  const { data: stats, isLoading, isError, error, refetch } = useQuery<SystemStats>({
+  const { data: stats, dataUpdatedAt, isLoading, isError, error, refetch } = useQuery<SystemStats>({
     queryKey: ['systemStats'],
     queryFn: async () => {
       const response = await api.get('/monitoring/stats')
@@ -140,37 +135,19 @@ export default function MonitoringPage() {
     refetchInterval: 2000,
   })
 
-  // Build history
-  const { overallHistory } = useMemo(() => {
-    if (!stats) return { cpuHistory: [] as number[][], overallHistory: [] as number[] }
-
-    // Overall
-    overallHistoryRef.current.push(stats.cpu.percent)
-    if (overallHistoryRef.current.length > MAX_HISTORY) overallHistoryRef.current.shift()
-
-    // Per-core
-    while (cpuHistoryRef.current.length < stats.cpu.percent_per_core.length) {
-      cpuHistoryRef.current.push([])
-    }
-    stats.cpu.percent_per_core.forEach((p, i) => {
-      cpuHistoryRef.current[i].push(p)
-      if (cpuHistoryRef.current[i].length > MAX_HISTORY) cpuHistoryRef.current[i].shift()
-    })
-
-    // Network rate
-    if (prevNetRef.current) {
-      netRateRef.current = {
-        sent: Math.max(0, (stats.network.bytes_sent - prevNetRef.current.sent) / 2),
-        recv: Math.max(0, (stats.network.bytes_recv - prevNetRef.current.recv) / 2),
-      }
-    }
-    prevNetRef.current = { sent: stats.network.bytes_sent, recv: stats.network.bytes_recv }
-
-    return {
-      cpuHistory: cpuHistoryRef.current.map(h => [...h]),
-      overallHistory: [...overallHistoryRef.current],
-    }
-  }, [stats])
+  // Advance the rolling samples once per fetched snapshot. Updating state while
+  // rendering (keyed on dataUpdatedAt) is React's pattern for deriving state from
+  // a changing input; the old ref pushes inside useMemo double-counted samples.
+  const [samples, setSamples] = useState<Samples>(EMPTY_SAMPLES)
+  if (stats && dataUpdatedAt > samples.at) {
+    setSamples(advanceSamples(samples, {
+      cpuPercent: stats.cpu.percent,
+      bytesSent: stats.network.bytes_sent,
+      bytesRecv: stats.network.bytes_recv,
+    }, dataUpdatedAt))
+  }
+  const overallHistory = samples.cpu
+  const netRate = samples.rate
 
   // Error state: without this the page would spin forever if /monitoring/stats fails.
   if (isError && !stats) {
@@ -236,7 +213,7 @@ export default function MonitoringPage() {
           <StatTile label="GPU" pct={stats.gpus[0].load} sub={stats.gpus[0].name} />
         ) : (
           <StatTile label="Network" pct={0} showBar={false}
-            sub={`↑ ${formatBytes(netRateRef.current.sent)}/s   ↓ ${formatBytes(netRateRef.current.recv)}/s`} />
+            sub={`↑ ${formatBytes(netRate.sent)}/s   ↓ ${formatBytes(netRate.recv)}/s`} />
         )}
       </div>
 
@@ -304,8 +281,8 @@ export default function MonitoringPage() {
         style={{ padding: '12px 18px', fontFamily: 'var(--font-mono)', fontSize: 13, color: 'var(--ink-muted)' }}>
         <span>
           Network{' '}
-          <span style={{ color: '#33c489' }}>↑ {formatBytes(netRateRef.current.sent)}/s</span>{'  '}
-          <span style={{ color: '#4c8df0' }}>↓ {formatBytes(netRateRef.current.recv)}/s</span>
+          <span style={{ color: '#33c489' }}>↑ {formatBytes(netRate.sent)}/s</span>{'  '}
+          <span style={{ color: '#4c8df0' }}>↓ {formatBytes(netRate.recv)}/s</span>
         </span>
         <span>{uptimeLabel}</span>
       </div>

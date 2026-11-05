@@ -84,7 +84,7 @@ export default function SecuritySettingsPage() {
       setLoginHistory(data.items)
       setHistoryTotal(data.total)
       setHistoryPage(page)
-    } catch (err) {
+    } catch {
       message.error('Could not load your login history.')
     } finally {
       setIsLoadingHistory(false)
@@ -96,7 +96,7 @@ export default function SecuritySettingsPage() {
     try {
       const data = await authApi.getActiveSessions()
       setSessions(data.sessions)
-    } catch (err) {
+    } catch {
       message.error('Could not load your active sessions.')
     } finally {
       setIsLoadingSessions(false)
@@ -164,7 +164,7 @@ export default function SecuritySettingsPage() {
       await authApi.revokeSession(sessionId)
       message.success('Session revoked.')
       loadSessions()
-    } catch (err) {
+    } catch {
       message.error('Could not revoke the session.')
     }
   }
