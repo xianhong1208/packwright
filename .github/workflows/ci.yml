@@ -1,0 +1,88 @@
+name: CI
+
+on:
+  push:
+    branches: [dev, main]
+  pull_request:
+    branches: [dev, main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+env:
+  UV_VERSION: "0.9.24"
+  # The lockfile is the source of truth: uv run must never re-resolve.
+  UV_FROZEN: "1"
+
+jobs:
+  backend:
+    name: Backend (ruff, unit + integration, schema drift)
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: astral-sh/setup-uv@v6
+        with:
+          version: ${{ env.UV_VERSION }}
+          enable-cache: true
+          cache-dependency-glob: uv.lock
+      # Python comes from .python-version; uv installs it if the runner lacks it.
+      - name: Install dependencies
+        run: uv sync --locked --group dev
+      - name: Ruff
+        run: uv run ruff check app tests main.py alembic scripts
+      # tests/conftest.py points everything at a throwaway SQLite DB and test
+      # secrets; tests/integration runs the real app and the migrations.
+      - name: Tests
+        run: uv run pytest -q
+
+  frontend:
+    name: Frontend (lint, typecheck, test, build)
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    defaults:
+      run:
+        working-directory: frontend
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: frontend/.nvmrc
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+      - run: npm ci
+      - run: npm run lint
+      - run: npm run typecheck
+      - run: npm test
+      - run: npm run build
+
+  audit:
+    name: Dependency audit
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: astral-sh/setup-uv@v6
+        with:
+          version: ${{ env.UV_VERSION }}
+      - name: Python (pip-audit on the locked runtime dependencies)
+        run: |
+          uv export --locked --no-dev --no-hashes --no-emit-project --format requirements-txt > requirements-audit.txt
+          uvx pip-audit -r requirements-audit.txt --no-deps --disable-pip --strict
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: frontend/.nvmrc
+      - name: npm (production dependencies, high and above)
+        working-directory: frontend
+        run: npm audit --omit=dev --audit-level=high
