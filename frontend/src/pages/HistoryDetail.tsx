@@ -5,8 +5,6 @@ import {
   ArrowLeftOutlined,
   RedoOutlined,
   DownloadOutlined,
-  CheckCircleOutlined,
-  CloseCircleOutlined,
   CloudServerOutlined,
   DesktopOutlined,
   AppstoreOutlined,
@@ -14,17 +12,16 @@ import {
   CopyOutlined,
   DeleteOutlined,
   ExclamationCircleOutlined,
-  WarningOutlined,
-  FileZipOutlined,
 } from '@ant-design/icons'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { taskApi } from '../api/client'
+import BuildResultPanel from '../components/build/BuildResultPanel'
+import FailureReport from '../components/build/FailureReport'
 import type { ProjectType } from '../api/types'
 import { triggerUrlDownload } from '../utils/download'
 import { binaryName } from '../utils/buildConfig'
 import LogViewer from '../components/LogViewer'
-import { STATUS_META, VERIFY_META } from '../utils/statusMeta'
-import { extractErrorLines } from '../utils/diagnose'
+import { STATUS_META } from '../utils/statusMeta'
 import { getErrorDetail } from '../utils/errors'
 
 const projectTypeLabels: Record<ProjectType, { label: string; color: string; icon: React.ReactNode }> = {
@@ -280,208 +277,25 @@ export default function HistoryDetail() {
         </div>
       </div>
 
-      {/* Failure diagnosis — diagnosis is persisted in result so it shows
-          even for old records whose logs were already evicted. */}
+      {/* Failure diagnosis — persisted in the result, so it shows even for old
+          records whose logs were already evicted. */}
       {record.status === 'failed' && (
-        <div className="glass-card p-5 mb-6 border-l-2 border-alert-500 bg-alert-500/5">
-          <div className="flex items-center gap-2 mb-3">
-            <CloseCircleOutlined className="text-alert-400" />
-            <h3 className="text-base font-medium text-alert-400">Build failed</h3>
-          </div>
-          {record.result?.diagnosis && record.result.diagnosis.length > 0 ? (
-            <div className="space-y-3 mb-3">
-              {record.result.diagnosis.map((d, i) => (
-                <div key={i} className="rounded-lg p-3 bg-void-950">
-                  <div className="text-sm text-alert-400 font-medium mb-1">⚠ {d.problem}</div>
-                  <div className="text-sm text-cyber-200">Suggested fix: {d.suggestion}</div>
-                  {d.evidence && (
-                    <code
-                      className="block text-xs mt-1.5 font-mono break-all"
-                      style={{ color: 'var(--ink-faint)' }}
-                    >
-                      {d.evidence}
-                    </code>
-                  )}
-                  {/* Knowing the cause is only half of it. When the fix is a
-                      config change the platform can make, offer it here —
-                      otherwise the user has to re-enter the whole form, which
-                      is how the same wrong value gets submitted repeatedly. */}
-                  {d.action && config && (
-                    <Button
-                      size="small"
-                      type="primary"
-                      className="mt-2"
-                      onClick={() =>
-                        navigate('/create', {
-                          state: {
-                            rebuild: true,
-                            projectName: record.project_name,
-                            config: { ...config, ...d.action!.overrides },
-                          },
-                        })
-                      }
-                    >
-                      {d.action.label}
-                    </Button>
-                  )}
-                </div>
-              ))}
-            </div>
-          ) : (
-            <p className="text-xs" style={{ color: 'var(--ink-faint)' }}>
-              This run left no automatic diagnosis. Check the log below for details.
-            </p>
-          )}
-          {(() => {
-            // Prefer the server-persisted lines: build logs are evicted from
-            // memory about an hour after a task finishes, so deriving them from
-            // `logs` here returned nothing for exactly the case this panel
-            // exists for — coming back later to understand an old failure.
-            const errLines = record.result?.error_lines?.length
-              ? record.result.error_lines
-              : extractErrorLines(logs)
-            return errLines.length > 0 ? (
-              <div>
-                <div
-                  className="text-xs mb-1.5 uppercase tracking-wider"
-                  style={{ color: 'var(--ink-faint)' }}
-                >
-                  Key error lines
-                </div>
-                <div className="rounded-lg p-3 font-mono text-xs space-y-1 bg-void-950">
-                  {errLines.map((l, i) => (
-                    <div key={i} className="text-alert-400 break-all">
-                      {l}
-                    </div>
-                  ))}
-                </div>
-              </div>
-            ) : null
-          })()}
-        </div>
+        <FailureReport
+          result={record.result}
+          logs={logs}
+          logHint="the full log below"
+          onApplyFix={
+            config
+              ? (overrides) =>
+                  navigate('/create', {
+                    state: { rebuild: true, projectName: record.project_name, config: { ...config, ...overrides } },
+                  })
+              : undefined
+          }
+        />
       )}
 
-      {/* Build result summary (preflight / artifact / verify) */}
-      {record.result && (
-        <div className="glass-card p-5 mb-6">
-          <div className="flex items-center justify-between mb-4">
-            <h3 className="text-base font-medium" style={{ color: 'var(--ink)' }}>
-              Build result
-            </h3>
-            {record.result.verify && (
-              <span
-                className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium"
-                style={{
-                  backgroundColor: VERIFY_META[record.result.verify.status].bg,
-                  color: VERIFY_META[record.result.verify.status].color,
-                }}
-              >
-                {VERIFY_META[record.result.verify.status].icon}
-                {VERIFY_META[record.result.verify.status].label}
-              </span>
-            )}
-          </div>
-
-          {record.result.verify?.detail && (
-            <div
-              className="text-sm mb-4 px-3 py-2 rounded-lg"
-              style={{
-                background: VERIFY_META[record.result.verify.status].bg,
-                color: VERIFY_META[record.result.verify.status].color,
-                lineHeight: 1.6,
-              }}
-            >
-              {record.result.verify.detail}
-            </div>
-          )}
-
-          {record.result.artifact && (
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-4">
-              <div className="rounded-lg p-3 bg-void-950">
-                <div className="text-xs mb-1" style={{ color: 'var(--ink-faint)' }}>
-                  <FileZipOutlined className="mr-1" />
-                  Artifact size
-                </div>
-                <div className="text-lg font-semibold text-cyber-300">
-                  {record.result.artifact.size_human}
-                </div>
-              </div>
-              <div className="rounded-lg p-3 bg-void-950">
-                <div className="text-xs mb-1" style={{ color: 'var(--ink-faint)' }}>
-                  File count
-                </div>
-                <div className="text-lg font-semibold" style={{ color: 'var(--ink)' }}>
-                  {record.result.artifact.file_count}
-                </div>
-              </div>
-              {record.result.artifact.sha256 && (
-                <div className="rounded-lg p-3 col-span-2 bg-void-950">
-                  <div className="text-xs mb-1" style={{ color: 'var(--ink-faint)' }}>
-                    SHA-256
-                  </div>
-                  <Tooltip title="Click to copy the full hash">
-                    <code
-                      className="text-xs font-mono break-all cursor-pointer hover:text-cyber-300"
-                      style={{ color: 'var(--ink-muted)' }}
-                      onClick={() => copyToClipboard(record.result?.artifact?.sha256 || '')}
-                    >
-                      {record.result.artifact.sha256.slice(0, 32)}…
-                    </code>
-                  </Tooltip>
-                </div>
-              )}
-            </div>
-          )}
-
-          {record.result.preflight && record.result.preflight.length > 0 && (
-            <div>
-              <div
-                className="text-xs mb-2 uppercase tracking-wider"
-                style={{ color: 'var(--ink-faint)' }}
-              >
-                Preflight checks
-              </div>
-              <div className="space-y-1.5">
-                {record.result.preflight.map((c) => (
-                  <div key={c.label} className="flex items-start gap-2 text-sm">
-                    <span
-                      className={
-                        c.passed ? 'text-matrix-400' : c.critical ? 'text-alert-400' : 'text-signal-400'
-                      }
-                      style={{ marginTop: 2 }}
-                    >
-                      {c.passed ? (
-                        <CheckCircleOutlined />
-                      ) : c.critical ? (
-                        <CloseCircleOutlined />
-                      ) : (
-                        <WarningOutlined />
-                      )}
-                    </span>
-                    <span className="w-28 flex-shrink-0" style={{ color: 'var(--ink)' }}>
-                      {c.label}
-                    </span>
-                    <span
-                      className="text-xs flex-1"
-                      style={{ color: 'var(--ink-faint)', lineHeight: 1.6 }}
-                    >
-                      {c.detail}
-                    </span>
-                  </div>
-                ))}
-              </div>
-            </div>
-          )}
-
-          {record.result.report_file && (
-            <div className="text-xs mt-4" style={{ color: 'var(--ink-faint)' }}>
-              A build report was generated:{' '}
-              <code style={{ color: 'var(--ink-muted)' }}>{record.result.report_file}</code> (included
-              in the download).
-            </div>
-          )}
-        </div>
-      )}
+      <BuildResultPanel result={record.result} />
 
       {/* Full build log (when still available in memory) — the focus. */}
       {logs.length > 0 && (
@@ -558,10 +372,13 @@ export default function HistoryDetail() {
                     Docker
                   </Tag>
                 )}
-                <Tag color={config.pack_mode === 'full' ? 'orange' : 'cyan'} style={{ fontSize: 14, padding: '2px 10px' }}>
-                  Pack: {config.pack_mode === 'full' ? 'Full' : 'External'}
-                </Tag>
-                {config.onefile && (
+                {/* Nuitka settings mean nothing for a frontend-only build. */}
+                {config.project_type !== 'frontend_only' && (
+                  <Tag color={config.pack_mode === 'full' ? 'orange' : 'cyan'} style={{ fontSize: 14, padding: '2px 10px' }}>
+                    Pack: {config.pack_mode === 'full' ? 'Full' : 'External'}
+                  </Tag>
+                )}
+                {config.project_type !== 'frontend_only' && config.onefile && (
                   <Tag color="default" style={{ fontSize: 14, padding: '2px 10px' }}>
                     One-file
                   </Tag>
