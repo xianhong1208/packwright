@@ -129,7 +129,11 @@ cd frontend && npx vitest run        # 前端單元測試
 
 ## 安全與信任模型
 
-Packwright 本質上會執行不受信任的建置指令,所以**帳號核准才是真正的安全邊界**:任何能建立任務的人都能以服務使用者的身分執行程式碼。Git URL 驗證、本機路徑限制、subprocess argv-only、token 遮罩與速率限制是縱深防禦,不是沙箱。請跑在隔離主機、前面掛 HTTPS,除非真的有代理改寫 `X-Forwarded-For`,否則 `TRUSTED_PROXY_IPS` 保持空白。
+Packwright 本質上會執行不受信任的建置指令,所以**帳號核准才是真正的安全邊界**:任何能建立任務的人都能以服務使用者的身分執行程式碼。Git URL 驗證、本機路徑限制、subprocess argv-only、token 遮罩與速率限制是縱深防禦,不是沙箱。請跑在隔離主機、前面掛 HTTPS,除非真的有代理改寫 `X-Forwarded-For`,否則 `TRUSTED_PROXY_IPS` 保持空白。完整的信任模型、已知限制與回報漏洞的方式見 [SECURITY.md](SECURITY.md)。
+
+## 參與開發
+
+環境設定、CI 會跑的檢查、分支與 commit 慣例、發布步驟見 [CONTRIBUTING.md](CONTRIBUTING.md)。變更紀錄見 [CHANGELOG.md](CHANGELOG.md)。
 
 ## 授權
 
