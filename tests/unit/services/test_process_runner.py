@@ -19,12 +19,22 @@ from app.services import process_runner
 from app.services.process_runner import run_step
 
 
-def _group_alive(pgid: int) -> bool:
-    try:
-        os.killpg(pgid, 0)
-        return True
-    except ProcessLookupError:
-        return False
+def _group_alive(pgid: int, settle: float = 3.0) -> bool:
+    """Whether any process is still in the group once killed ones have been reaped.
+
+    A killed grandchild is reparented to init, which reaps it asynchronously, so a
+    check right after the kill can still see it as a zombie for a moment (CI runners
+    are slower at this than a workstation). Poll briefly instead of racing init.
+    """
+    end = time.monotonic() + settle
+    while True:
+        try:
+            os.killpg(pgid, 0)
+        except ProcessLookupError:
+            return False
+        if time.monotonic() > end:
+            return True
+        time.sleep(0.05)
 
 
 @pytest.fixture

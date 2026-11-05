@@ -111,3 +111,68 @@ class TestFailureStage:
         tm.update_task.assert_any_await("t1", "stage", "frontend")
         problem = build_failure_report("unrecognized noise", stage="frontend")["diagnosis"][0]["problem"]
         assert "frontend" in problem.lower() and "queued" not in problem
+
+
+class TestCancelStopsLaterSteps:
+    """Cancelling a full-stack build while its frontend builds must stop the backend too."""
+
+    @staticmethod
+    def _fullstack(tmp_path):
+        return BuildConfig(project_name="fs", project_type=ProjectType.FULLSTACK,
+                           project_path=str(tmp_path), frontend_dir=".")
+
+    @pytest.mark.unit
+    @pytest.mark.asyncio
+    @pytest.mark.parametrize("frontend_result", [True, False], ids=["frontend-finished-as-cancelled", "frontend-killed"])
+    async def test_tc_brs_030_backend_never_starts_after_cancel(self, tmp_path, mocker, tm, frontend_result):
+        """TC-BRS-030: whether Cancel killed the frontend or landed just as it finished,
+        the Nuitka step is never started."""
+        mocker.patch("app.services.frontend_worker.run_frontend_build", mocker.AsyncMock(return_value=frontend_result))
+        nuitka = mocker.patch("app.services.nuitka_worker.run_nuitka_build", mocker.AsyncMock(return_value=True))
+        mocker.patch("app.services.process_runner.is_cancelled", mocker.AsyncMock(return_value=True))
+
+        await build_dispatcher._build_fullstack("t1", self._fullstack(tmp_path), mocker.MagicMock())
+
+        nuitka.assert_not_awaited()
+
+    @pytest.mark.unit
+    @pytest.mark.asyncio
+    async def test_tc_brs_031_docker_fullstack_stops_at_every_step(self, tmp_path, mocker, tm):
+        """TC-BRS-031: full stack + Docker: cancelled after the frontend → no Nuitka, no Docker."""
+        mocker.patch("app.services.frontend_worker.run_frontend_build", mocker.AsyncMock(return_value=True))
+        nuitka = mocker.patch("app.services.nuitka_worker.run_nuitka_build", mocker.AsyncMock(return_value=True))
+        docker = mocker.patch("app.services.docker_worker.run_docker_build", mocker.AsyncMock(return_value=True))
+        mocker.patch("app.services.process_runner.is_cancelled", mocker.AsyncMock(return_value=True))
+
+        await build_dispatcher._build_docker_nuitka("t1", self._fullstack(tmp_path), mocker.MagicMock())
+
+        nuitka.assert_not_awaited()
+        docker.assert_not_awaited()
+
+    @pytest.mark.unit
+    @pytest.mark.asyncio
+    async def test_tc_brs_032_uncancelled_build_runs_every_step(self, tmp_path, mocker, tm):
+        """TC-BRS-032: the check does not get in the way of a build nobody cancelled."""
+        mocker.patch("app.services.frontend_worker.run_frontend_build", mocker.AsyncMock(return_value=True))
+        nuitka = mocker.patch("app.services.nuitka_worker.run_nuitka_build", mocker.AsyncMock(return_value=True))
+        docker = mocker.patch("app.services.docker_worker.run_docker_build", mocker.AsyncMock(return_value=True))
+        mocker.patch("app.services.process_runner.is_cancelled", mocker.AsyncMock(return_value=False))
+
+        await build_dispatcher._build_docker_nuitka("t1", self._fullstack(tmp_path), mocker.MagicMock())
+
+        nuitka.assert_awaited_once()
+        docker.assert_awaited_once()
+
+    @pytest.mark.unit
+    @pytest.mark.asyncio
+    async def test_tc_brs_033_cancel_during_compile_skips_the_image(self, tmp_path, mocker, tm):
+        """TC-BRS-033: cancelled while Nuitka compiled (it finished anyway) → no Docker build."""
+        mocker.patch("app.services.frontend_worker.run_frontend_build", mocker.AsyncMock(return_value=True))
+        nuitka = mocker.patch("app.services.nuitka_worker.run_nuitka_build", mocker.AsyncMock(return_value=True))
+        docker = mocker.patch("app.services.docker_worker.run_docker_build", mocker.AsyncMock(return_value=True))
+        mocker.patch("app.services.process_runner.is_cancelled", mocker.AsyncMock(side_effect=[False, True]))
+
+        await build_dispatcher._build_docker_nuitka("t1", TestCancelStopsLaterSteps._fullstack(tmp_path), mocker.MagicMock())
+
+        nuitka.assert_awaited_once()
+        docker.assert_not_awaited()
