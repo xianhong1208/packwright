@@ -61,6 +61,10 @@ follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this proje
   production 5 → 0 (axios, react-router).
 
 ### Fixed
+- Started from a directory other than its own, the service generated a new JWT and encryption key
+  on every start (everyone logged out, stored Git credentials undecryptable): the generated keys
+  were written to the `.env` beside `main.py` but only the launch directory's `.env` was read. Both
+  are read now, and a key that cannot be saved is reported in the log.
 - SSO sign-in returned 500 for every approved user.
 - Two builds with the same image name overwrote each other's export.
 - Reloading while the backend restarted signed the user out (and destroyed remember-me sessions).

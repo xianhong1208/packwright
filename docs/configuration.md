@@ -6,10 +6,11 @@ and [Storage & data](../README.md#storage--data) sections of the README.
 
 ## How settings are loaded
 
-- Settings come from **environment variables** or a **`.env` file** in the directory you
-  launch Packwright from (`start.sh` changes into the Packwright directory first, so that is
-  where it looks when you use the script). A real environment variable wins over the same
-  key in `.env`.
+- Settings come from **environment variables** or **`.env` files**: the `.env` next to
+  `main.py` is always read, then a `.env` in the directory you launch from, which overrides
+  it. A real environment variable wins over both. Relative paths in settings (`./data/...`)
+  are resolved against the launch directory, so launch from the Packwright directory
+  (`start.sh` and the systemd unit do) unless you set absolute paths.
 - The variable name is the setting name in upper case (`MAX_CONCURRENT_BUILDS`); matching is
   case-insensitive. The one exception is `MCP_GATE_URL`, which also accepts the legacy name
   `MCP_CENTER_URL` when `MCP_GATE_URL` is not set.
