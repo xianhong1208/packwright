@@ -17,7 +17,7 @@ Packwright was called *Build Center* up to v1.0.0. Names that live in existing d
 
 ## Install
 
-**Prerequisites:** Python 3.13+, [uv](https://docs.astral.sh/uv/), Node.js (for frontend builds), and — for the engines they drive — Nuitka's toolchain (a C compiler) and Docker (for Docker output). The database is a local SQLite file by default (no setup); PostgreSQL is optional (set `DATABASE_URL`). `pigz` is optional and speeds up image compression.
+**Prerequisites:** Python 3.13+, [uv](https://docs.astral.sh/uv/), Node.js 22.12+ (to build the console, and for frontend builds), and — for the engines they drive — Nuitka's toolchain (a C compiler) and Docker (for Docker output). The database is a local SQLite file by default (no setup); PostgreSQL is optional (set `DATABASE_URL`). `pigz` is optional and speeds up image compression.
 
 ```bash
 git clone https://github.com/xianhong1208/packwright.git
