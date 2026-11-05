@@ -12,6 +12,7 @@ from textwrap import dedent
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.schemas.task import BuildConfig, ProjectType, PackMode
+from app.services.source_guard import SourceGuard
 from app.services.task_manager import task_manager
 from app.services.terminal_output import TerminalLineBuffer
 
@@ -21,6 +22,26 @@ async def run_docker_build(
     config: BuildConfig,
     db: AsyncSession,
     precompiled: bool = False,
+) -> bool:
+    """Build and export the image; project files changed for it are put back on every path."""
+    guard = SourceGuard(task_id)
+    try:
+        return await _run_docker_build(task_id, config, db, precompiled, guard)
+    finally:
+        await _restore_and_log(task_id, guard)
+
+
+async def _restore_and_log(task_id: str, guard: SourceGuard) -> None:
+    for line in await asyncio.to_thread(guard.restore):
+        await task_manager.append_log(task_id, line)
+
+
+async def _run_docker_build(
+    task_id: str,
+    config: BuildConfig,
+    db: AsyncSession,
+    precompiled: bool,
+    guard: SourceGuard,
 ) -> bool:
     """Build a Docker image for the project.
 
@@ -49,30 +70,21 @@ async def run_docker_build(
     await task_manager.append_log(task_id, f"Image name: {image_name}")
 
     # Generate .dockerignore
+    # Every file written into the project below goes through the guard, which
+    # restores the original (or removes the file) when the build is done.
     dockerignore_path = project_path / ".dockerignore"
-    dockerignore_backup = None
-    generated_dockerignore = False
 
     if precompiled:
-        # Precompiled mode: always use our .dockerignore to ensure
-        # output directory is not excluded (backup existing if present)
-        if dockerignore_path.exists():
-            dockerignore_backup = dockerignore_path.with_suffix(".dockerignore.bak")
-            shutil.copy2(dockerignore_path, dockerignore_backup)
-        dockerignore_path.write_text(_generate_dockerignore(precompiled=True))
-        generated_dockerignore = True
+        # Precompiled mode: always use our .dockerignore so the output directory
+        # is not excluded.
+        guard.write(dockerignore_path, _generate_dockerignore(precompiled=True))
         await task_manager.append_log(task_id, "Generated .dockerignore (precompiled)")
     elif not dockerignore_path.exists():
-        dockerignore_path.write_text(_generate_dockerignore())
-        generated_dockerignore = True
+        guard.write(dockerignore_path, _generate_dockerignore())
         await task_manager.append_log(task_id, "Generated .dockerignore")
 
     # Write .env file for frontend if configured (backup original, restore after build)
     # Skip for precompiled mode — frontend was already built on host
-    env_file_path = None
-    env_backup_content = None  # None = file didn't exist, str = original content
-    dockerignore_modified = False
-    original_dockerignore_content = None
     if not precompiled and config.frontend_env_content.strip() and config.project_type in (
         ProjectType.FRONTEND_ONLY, ProjectType.FULLSTACK
     ):
@@ -80,26 +92,21 @@ async def run_docker_build(
         fe_dir = project_path / config.frontend_dir
         if fe_dir.exists():
             env_file_path = fe_dir / env_filename
-            if env_file_path.exists():
-                env_backup_content = env_file_path.read_text(encoding="utf-8")
-                await task_manager.append_log(task_id, f"Backed up original {env_filename}")
-            env_file_path.write_text(config.frontend_env_content, encoding="utf-8")
+            guard.write(env_file_path, config.frontend_env_content)
             await task_manager.append_log(task_id, f"Wrote {env_filename} in {fe_dir} for Docker build")
 
             # Add negation to .dockerignore so Docker COPY can pick it up
             if dockerignore_path.exists():
                 relative_env = f"{config.frontend_dir}/{env_filename}"
-                original_dockerignore_content = dockerignore_path.read_text()
-                ignore_content = original_dockerignore_content + f"\n# Allow env file for frontend build\n!{relative_env}\n"
-                dockerignore_path.write_text(ignore_content)
-                dockerignore_modified = True
+                ignore_content = dockerignore_path.read_text() + f"\n# Allow env file for frontend build\n!{relative_env}\n"
+                guard.write(dockerignore_path, ignore_content)
 
     # Generate Dockerfile based on project type
     dockerfile_path = project_path / "Dockerfile.generated"
 
     try:
         dockerfile_content = _generate_dockerfile(config, precompiled=precompiled)
-        dockerfile_path.write_text(dockerfile_content)
+        guard.write(dockerfile_path, dockerfile_content)
         await task_manager.append_log(task_id, "Generated Dockerfile")
         await task_manager.append_log(task_id, "")
         await task_manager.append_log(task_id, "=== Dockerfile ===")
@@ -130,39 +137,8 @@ async def run_docker_build(
 
     success = await _run_docker_command(task_id, build_cmd, project_path)
 
-    # Cleanup generated files
-    try:
-        dockerfile_path.unlink()
-    except Exception:
-        pass
-    if generated_dockerignore:
-        try:
-            dockerignore_path.unlink()
-        except Exception:
-            pass
-    # Restore .dockerignore if we modified an existing one (non-generated)
-    if dockerignore_modified and not generated_dockerignore and original_dockerignore_content is not None:
-        try:
-            dockerignore_path.write_text(original_dockerignore_content)
-        except Exception:
-            pass
-    # Restore original env file after Docker build
-    if env_file_path:
-        try:
-            if env_backup_content is not None:
-                env_file_path.write_text(env_backup_content, encoding="utf-8")
-                await task_manager.append_log(task_id, f"Restored original {env_file_path.name}")
-            else:
-                env_file_path.unlink(missing_ok=True)
-                await task_manager.append_log(task_id, f"Cleaned up {env_file_path.name}")
-        except Exception:
-            pass
-    # Restore original .dockerignore if we backed it up (precompiled mode)
-    if dockerignore_backup and dockerignore_backup.exists():
-        try:
-            shutil.move(str(dockerignore_backup), str(dockerignore_path))
-        except Exception:
-            pass
+    # Put the project's files back now rather than after the (long) export.
+    await _restore_and_log(task_id, guard)
 
     if success:
         await task_manager.append_log(task_id, "")

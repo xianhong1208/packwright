@@ -61,6 +61,12 @@ follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this proje
   production 5 → 0 (axios, react-router).
 
 ### Fixed
+- **A failed frontend build replaced the project's `.env` for good.** The configured env content
+  was written over it, the original was kept only in memory, and a failed install or build returned
+  before the restore. Files a local-source build changes (frontend env file, entry-point loader,
+  `.dockerignore`, `Dockerfile.generated`) are now journaled on disk before the change and put back
+  on every exit; journals left by a crash are replayed at the next startup. An entry point left with
+  the loader by an earlier crash is restored from its `.py.backup` on the next build.
 - Started from a directory other than its own, the service generated a new JWT and encryption key
   on every start (everyone logged out, stored Git credentials undecryptable): the generated keys
   were written to the `.env` beside `main.py` but only the launch directory's `.env` was read. Both

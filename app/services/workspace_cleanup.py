@@ -92,6 +92,10 @@ async def sweep_workspaces() -> dict:
             try:
                 if not entry.is_dir() or entry.is_symlink():
                     continue
+                # Service-owned areas (.scratch for Git previews, .restore for the
+                # source-file journal) are not task workspaces.
+                if entry.name.startswith("."):
+                    continue
                 if not _is_inside(entry, workspace_root):
                     continue
                 candidates.append(entry)
