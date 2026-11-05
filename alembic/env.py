@@ -29,14 +29,18 @@ from app.models import (
 # access to the values within the .ini file in use.
 config = context.config
 
-# Get database URL from app config
+# Database URL: the app settings, unless the caller passed one explicitly
+# (config.attributes["url"]) — the schema-drift test migrates a scratch database.
 settings = get_settings()
-config.set_main_option("sqlalchemy.url", settings.async_database_url)
+config.set_main_option("sqlalchemy.url", config.attributes.get("url") or settings.async_database_url)
 
 # Interpret the config file for Python logging.
 # This line sets up loggers basically.
 if config.config_file_name is not None:
-    fileConfig(config.config_file_name)
+    # disable_existing_loggers=False: the default silences every logger that
+    # already exists, and main.py migrates in-process after app modules (and
+    # their loggers) are imported; their output would vanish.
+    fileConfig(config.config_file_name, disable_existing_loggers=False)
 
 # Set target metadata for autogenerate support
 target_metadata = Base.metadata
