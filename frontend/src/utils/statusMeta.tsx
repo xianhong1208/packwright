@@ -21,11 +21,11 @@ export interface StatusMeta {
 }
 
 export const STATUS_META: Record<TaskStatus, StatusMeta> = {
-  pending: { color: '#93a0b0', bgColor: 'rgba(147,160,176,0.14)', label: 'Queued', icon: <ClockCircleOutlined /> },
-  running: { color: '#6ba6f7', bgColor: 'rgba(76,141,240,0.15)', label: 'Running', icon: <SyncOutlined spin /> },
-  completed: { color: '#56d6a1', bgColor: 'rgba(51,196,137,0.15)', label: 'Passed', icon: <CheckCircleOutlined /> },
-  failed: { color: '#f27d7d', bgColor: 'rgba(236,95,95,0.15)', label: 'Failed', icon: <CloseCircleOutlined /> },
-  cancelled: { color: '#f0bd5e', bgColor: 'rgba(230,165,58,0.15)', label: 'Cancelled', icon: <StopOutlined /> },
+  pending: { color: 'var(--ink-muted)', bgColor: 'color-mix(in srgb, var(--color-steel-500) 14%, transparent)', label: 'Queued', icon: <ClockCircleOutlined /> },
+  running: { color: 'var(--color-teal-400)', bgColor: 'color-mix(in srgb, var(--color-teal-500) 15%, transparent)', label: 'Running', icon: <SyncOutlined spin /> },
+  completed: { color: 'var(--color-matrix-400)', bgColor: 'color-mix(in srgb, var(--color-matrix-500) 15%, transparent)', label: 'Passed', icon: <CheckCircleOutlined /> },
+  failed: { color: 'var(--color-alert-400)', bgColor: 'color-mix(in srgb, var(--color-alert-500) 15%, transparent)', label: 'Failed', icon: <CloseCircleOutlined /> },
+  cancelled: { color: 'var(--color-signal-400)', bgColor: 'color-mix(in srgb, var(--color-signal-500) 15%, transparent)', label: 'Cancelled', icon: <StopOutlined /> },
 }
 
 export interface VerifyMeta {
@@ -36,10 +36,10 @@ export interface VerifyMeta {
 }
 
 export const VERIFY_META: Record<VerifyStatus, VerifyMeta> = {
-  pass: { color: '#56d6a1', bg: 'rgba(51,196,137,0.15)', label: 'Verified', icon: <CheckCircleOutlined /> },
-  warn: { color: '#f0bd5e', bg: 'rgba(230,165,58,0.15)', label: 'Warning', icon: <WarningOutlined /> },
-  fail: { color: '#f27d7d', bg: 'rgba(236,95,95,0.15)', label: 'Verify failed', icon: <CloseCircleOutlined /> },
-  skipped: { color: '#93a0b0', bg: 'rgba(147,160,176,0.14)', label: 'Skipped', icon: <MinusCircleOutlined /> },
+  pass: { color: 'var(--color-matrix-400)', bg: 'color-mix(in srgb, var(--color-matrix-500) 15%, transparent)', label: 'Verified', icon: <CheckCircleOutlined /> },
+  warn: { color: 'var(--color-signal-400)', bg: 'color-mix(in srgb, var(--color-signal-500) 15%, transparent)', label: 'Warning', icon: <WarningOutlined /> },
+  fail: { color: 'var(--color-alert-400)', bg: 'color-mix(in srgb, var(--color-alert-500) 15%, transparent)', label: 'Verify failed', icon: <CloseCircleOutlined /> },
+  skipped: { color: 'var(--ink-muted)', bg: 'color-mix(in srgb, var(--color-steel-500) 14%, transparent)', label: 'Skipped', icon: <MinusCircleOutlined /> },
 }
 
 // True once a task will no longer change — used to stop polling / WS.

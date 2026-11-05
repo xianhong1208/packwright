@@ -34,7 +34,7 @@ uv run python main.py         # applies migrations, then serves on http://0.0.0.
 ```
 
 - Open `http://localhost:5018` and sign in as **`admin`** with the password printed in the startup log (`Created bootstrap admin 'admin' with generated password: …`). It is generated on first start and shown only once — change it after logging in, or set `BOOTSTRAP_ADMIN_USERNAME` / `BOOTSTRAP_ADMIN_PASSWORD` before first start.
-- **Add a Git credential** (optional, for private repos): Administration → Git credentials → choose GitHub, GitLab or a self-hosted server, paste a personal access token.
+- **Add a Git credential** (optional, for private repos): **Git credentials** (left rail) → choose GitHub, GitLab or a self-hosted server, paste a personal access token.
 - **Create a build**: pick Local path or Git URL, choose the mode, and submit. Logs stream live; the finished artifact is downloadable (or exported as a Docker image `.tar.gz`).
 
 For a development frontend with hot reload, run `npm run dev` in `frontend/` (it proxies the API to `:5018`). A step-by-step walkthrough (in Traditional Chinese) is in [docs/quickstart.zh-TW.md](docs/quickstart.zh-TW.md).
@@ -113,7 +113,7 @@ On a successful build the workspace is also trimmed automatically: a non-Docker 
 
 ## Git credentials
 
-Access tokens for private repositories are managed in the console (Administration → Git credentials, `user:manage` permission), not in `.env`:
+Access tokens for private repositories are managed in the console (**Git credentials** in the left rail, `user:manage` permission), not in `.env`:
 
 - One token per host, for **GitHub**, **GitLab**, or a self-hosted instance (any host).
 - Tokens are encrypted at rest with `SETTINGS_ENCRYPTION_KEY` and never returned by the API — the UI shows only the last four characters.

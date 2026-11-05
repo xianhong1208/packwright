@@ -14,6 +14,8 @@ import type { ColumnsType } from 'antd/es/table'
 import { userApi } from '../../api/userApi'
 import type { Role, RoleCreate, RoleUpdate, PermissionCategory } from '../../api/types'
 import { useAuth } from '../../contexts/AuthContext'
+import PageHeader from '../../components/layout/PageHeader'
+import { parseUtc } from '../../utils/time'
 
 export default function RoleManagementPage() {
   const { hasPermission } = useAuth()
@@ -177,13 +179,13 @@ export default function RoleManagementPage() {
       },
     },
     {
-      title: 'Parent role',
+      title: 'Inherits from',
       key: 'parent',
       render: (_, record) => {
-        if (!record.parent_role_id) return <span style={{ color: 'var(--ink-faint)' }}>-</span>
+        if (!record.parent_role_id) return <span style={{ color: 'var(--ink-faint)' }}>Nothing</span>
         const parent = roles.find(r => r.id === record.parent_role_id)
         return parent ? (
-          <Tag color="blue">{parent.display_name}</Tag>
+          <Tag>{parent.display_name}</Tag>
         ) : (
           <span style={{ color: 'var(--ink-faint)' }}>-</span>
         )
@@ -193,30 +195,23 @@ export default function RoleManagementPage() {
       title: 'Created',
       dataIndex: 'created_at',
       key: 'created_at',
-      render: (time: string) => new Date(time).toLocaleDateString(),
+      render: (time: string) => parseUtc(time).toLocaleDateString(),
     },
     {
       title: 'Actions',
       key: 'actions',
+      align: 'right',
       render: (_, record) => (
-        <div className="flex items-center gap-2">
+        <div className="flex justify-end gap-1.5">
           {canManage && (
             <>
-              <Button
-                type="text"
-                aria-label="Edit role"
-                icon={<EditOutlined />}
-                onClick={() => handleEdit(record)}
-                className="text-cyber-400 hover:text-cyber-300"
-              />
+              <Tooltip title="Edit">
+                <Button aria-label={`Edit ${record.display_name}`} icon={<EditOutlined />} onClick={() => handleEdit(record)} />
+              </Tooltip>
               {!record.is_system && (
-                <Button
-                  type="text"
-                  aria-label="Delete role"
-                  icon={<DeleteOutlined />}
-                  onClick={() => handleDelete(record)}
-                  className="text-alert-400 hover:text-alert-400"
-                />
+                <Tooltip title="Delete">
+                  <Button aria-label={`Delete ${record.display_name}`} danger icon={<DeleteOutlined />} onClick={() => handleDelete(record)} />
+                </Tooltip>
               )}
             </>
           )}
@@ -227,37 +222,26 @@ export default function RoleManagementPage() {
 
   return (
     <div>
-      {/* Page header */}
-      <div
-        className="flex flex-wrap items-start justify-between gap-4 pb-4 mb-6"
-        style={{ borderBottom: '1px solid var(--seam)' }}
-      >
-        <div>
-          <h1 className="text-2xl font-semibold" style={{ fontFamily: 'var(--font-display)', color: 'var(--ink)' }}>
-            Role management
-          </h1>
-          <p className="mt-1 text-sm" style={{ color: 'var(--ink-muted)' }}>
-            Manage roles and their permissions
-          </p>
-        </div>
-        <div className="flex gap-2">
-          <Button icon={<ReloadOutlined />} onClick={loadData}>
-            Refresh
-          </Button>
-          {canManage && (
-            <Button
-              type="primary"
-              icon={<PlusOutlined />}
-              onClick={handleCreate}
-            >
-              Add role
-            </Button>
-          )}
-        </div>
-      </div>
+      <PageHeader
+        title="Roles"
+        lead="What each role is allowed to do. A role can inherit another's permissions."
+        actions={
+          <>
+            <Tooltip title="Reload">
+              <Button aria-label="Reload roles" icon={<ReloadOutlined />} onClick={loadData} />
+            </Tooltip>
+            {canManage && (
+              <Button type="primary" icon={<PlusOutlined />} onClick={handleCreate}>
+                Add role
+              </Button>
+            )}
+          </>
+        }
+      />
 
       {/* Roles table */}
       <Table
+        scroll={{ x: 760 }}
         dataSource={roles}
         columns={columns}
         rowKey="id"
@@ -267,7 +251,7 @@ export default function RoleManagementPage() {
         }}
         pagination={false}
         locale={{
-          emptyText: <Empty description="No roles found" />,
+          emptyText: <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="No roles found" />,
         }}
       />
 

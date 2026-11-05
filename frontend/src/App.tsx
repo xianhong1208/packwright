@@ -1,22 +1,8 @@
-import { lazy, Suspense, useState } from 'react'
-import { ConfigProvider, Spin, Modal, Drawer, App as AntApp } from 'antd'
+import { lazy, Suspense } from 'react'
+import { ConfigProvider, Empty, Spin, App as AntApp, theme as antdTheme } from 'antd'
 import enUS from 'antd/locale/en_US'
-import { BrowserRouter, Routes, Route, Navigate, Outlet, useNavigate, useLocation } from 'react-router-dom'
-import { QueryClient, QueryClientProvider, useQuery } from '@tanstack/react-query'
-import {
-  HomeOutlined,
-  PlusOutlined,
-  HistoryOutlined,
-  BuildOutlined,
-  LogoutOutlined,
-  SettingOutlined,
-  TeamOutlined,
-  SafetyOutlined,
-  KeyOutlined,
-  DashboardOutlined,
-  ClockCircleOutlined,
-  MenuOutlined,
-} from '@ant-design/icons'
+import { BrowserRouter, Routes, Route, Navigate, Outlet } from 'react-router-dom'
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 
 // Route-level code-splitting: lazy-load heavy page components so they are
 // fetched on demand instead of shipping in the single initial JS chunk.
@@ -36,8 +22,7 @@ const MonitoringPage = lazy(() => import('./pages/MonitoringPage'))
 import { useTaskStore } from './store/taskStore'
 import { AuthProvider, useAuth } from './contexts/AuthContext'
 import { SIGNED_OUT_EVENT } from './contexts/session'
-import { PermissionGate } from './components/PermissionGate'
-import { useIdleTimeout } from './hooks/useIdleTimeout'
+import AppShell from './components/layout/AppShell'
 
 /** 429 is the one status where retrying is guaranteed to make things worse.
  *
@@ -103,262 +88,6 @@ function PermissionRoute({ permission, children }: { permission: string | string
   return <>{children}</>
 }
 
-// Main layout with cyber design
-function AppLayout() {
-  const navigate = useNavigate()
-  const location = useLocation()
-  const { user, logout } = useAuth()
-  const tasks = useTaskStore((state) => state.tasks)
-  const [mobileNavOpen, setMobileNavOpen] = useState(false)
-  const activeCount = Array.from(tasks.values()).filter(
-    (t) => t.status === 'pending' || t.status === 'running'
-  ).length
-
-  const navItems = [
-    { key: '/', icon: <HomeOutlined />, label: 'Dashboard', badge: activeCount },
-    { key: '/create', icon: <PlusOutlined />, label: 'New build' },
-    { key: '/history', icon: <HistoryOutlined />, label: 'Builds' },
-    { key: '/monitor', icon: <DashboardOutlined />, label: 'Monitoring' },
-  ]
-
-  const handleLogout = async () => {
-    await logout()
-    navigate('/login')
-  }
-
-  // Idle timeout auto-logout
-  const { showWarning, remainingSeconds, resetTimer } = useIdleTimeout({
-    onLogout: handleLogout,
-    enabled: true,
-  })
-
-  const formatCountdown = (seconds: number) => {
-    const m = Math.floor(seconds / 60)
-    const s = seconds % 60
-    return `${m}:${s.toString().padStart(2, '0')}`
-  }
-
-  // Get role display name
-  const getRoleDisplay = () => {
-    if (user?.role?.display_name) {
-      return user.role.display_name
-    }
-    return 'User'
-  }
-
-  // Navigate then close the mobile drawer (no-op on desktop).
-  const handleNav = (path: string) => {
-    navigate(path)
-    setMobileNavOpen(false)
-  }
-
-  // The version the *server* reports (pyproject.toml via /health). Read at
-  // runtime rather than baked into the bundle, so a stale frontend build next to
-  // an upgraded backend is visible instead of silently showing the old number.
-  const { data: serverVersion } = useQuery({
-    queryKey: ['serverVersion'],
-    queryFn: async () => {
-      const res = await fetch('/health')
-      return res.ok ? ((await res.json()).version as string | undefined) ?? null : null
-    },
-    staleTime: Infinity,
-  })
-
-  // Shared sidebar content, reused by the desktop sidebar and the mobile drawer.
-  const sidebarContent = (
-    <div className="h-full flex flex-col bg-void-900">
-      {/* Logo */}
-      <div className="h-16 flex items-center gap-3 px-5 border-b border-gray-700/50">
-        <div className="w-9 h-9 rounded-md bg-cyber-500 flex items-center justify-center">
-          <BuildOutlined className="text-lg text-void-950" />
-        </div>
-        <div className="flex flex-col leading-tight">
-          <span className="text-lg font-semibold text-white" style={{ fontFamily: 'var(--font-display)' }}>
-            Packwright
-          </span>
-          {serverVersion && (
-            <span className="text-[11px] text-gray-500" title="Version reported by the server">
-              v{serverVersion}
-            </span>
-          )}
-        </div>
-      </div>
-
-      {/* Navigation */}
-      <nav className="flex-1 p-4 space-y-1 overflow-y-auto">
-        {navItems.map((item) => (
-          <button
-            key={item.key}
-            onClick={() => handleNav(item.key)}
-            className={`nav-item w-full ${location.pathname === item.key ? 'active' : ''}`}
-          >
-            <span className="text-lg">{item.icon}</span>
-            <span className="flex-1 text-left">{item.label}</span>
-            {item.badge ? (
-              <span className="px-2 py-0.5 text-xs rounded-full bg-cyber-500/20 text-cyber-400 border border-cyber-500/30">
-                {item.badge}
-              </span>
-            ) : null}
-          </button>
-        ))}
-
-        {/* Settings */}
-        <button
-          onClick={() => handleNav('/settings/security')}
-          className={`nav-item w-full ${location.pathname.startsWith('/settings') ? 'active' : ''}`}
-        >
-          <span className="text-lg"><SettingOutlined /></span>
-          <span className="flex-1 text-left">Security</span>
-        </button>
-
-        {/* Admin: User & Role Management */}
-        <PermissionGate permission={['user:view', 'role:view']}>
-          <div className="pt-4 mt-4 border-t border-gray-700/30">
-            <p className="px-3 mb-2 text-xs font-medium text-gray-500 uppercase tracking-wider">
-              Administration
-            </p>
-            <PermissionGate permission="user:view">
-              <button
-                onClick={() => handleNav('/admin/users')}
-                className={`nav-item w-full ${location.pathname.startsWith('/admin/users') ? 'active' : ''}`}
-              >
-                <span className="text-lg"><TeamOutlined /></span>
-                <span className="flex-1 text-left">Users</span>
-              </button>
-            </PermissionGate>
-            <PermissionGate permission="role:view">
-              <button
-                onClick={() => handleNav('/admin/roles')}
-                className={`nav-item w-full ${location.pathname === '/admin/roles' ? 'active' : ''}`}
-              >
-                <span className="text-lg"><SafetyOutlined /></span>
-                <span className="flex-1 text-left">Roles</span>
-              </button>
-            </PermissionGate>
-            <PermissionGate permission="user:manage">
-              <button
-                onClick={() => handleNav('/settings/git-credentials')}
-                className={`nav-item w-full ${location.pathname === '/settings/git-credentials' ? 'active' : ''}`}
-              >
-                <span className="text-lg"><KeyOutlined /></span>
-                <span className="flex-1 text-left">Git credentials</span>
-              </button>
-            </PermissionGate>
-          </div>
-        </PermissionGate>
-      </nav>
-
-      {/* User section */}
-      <div className="p-4 border-t border-gray-700/50">
-        <div className="glass-card p-3">
-          <div className="flex items-center gap-3">
-            <div className="w-9 h-9 rounded-full bg-void-700 border border-cyber-500/40 flex items-center justify-center">
-              <span className="text-sm font-semibold text-cyber-300">
-                {user?.username?.charAt(0).toUpperCase()}
-              </span>
-            </div>
-            <div className="flex-1 min-w-0">
-              <p className="text-sm font-medium text-white truncate">
-                {user?.username}
-              </p>
-              <p className="text-xs text-gray-500">{getRoleDisplay()}</p>
-            </div>
-            <button
-              onClick={handleLogout}
-              className="p-2 rounded-lg text-gray-400 hover:text-alert-400 hover:bg-alert-500/10 transition-colors"
-              title="Sign out"
-              aria-label="Sign out"
-            >
-              <LogoutOutlined />
-            </button>
-          </div>
-        </div>
-      </div>
-    </div>
-  )
-
-  return (
-    <div className="min-h-screen flex">
-      {/* Desktop sidebar: fixed on wide screens, hidden below the lg breakpoint */}
-      <aside className="hidden lg:flex w-64 flex-col border-r border-gray-700/50">
-        {sidebarContent}
-      </aside>
-
-      {/* Mobile hamburger: shown only below the lg breakpoint */}
-      <button
-        type="button"
-        onClick={() => setMobileNavOpen(true)}
-        aria-label="Open navigation"
-        className="lg:hidden fixed top-4 left-4 z-40 w-10 h-10 rounded-md flex items-center justify-center border border-void-600 bg-void-900 text-cyber-300 hover:border-cyber-500 transition-colors"
-      >
-        <MenuOutlined className="text-lg" />
-      </button>
-
-      {/* Mobile navigation drawer: reuses the exact same sidebar content */}
-      <Drawer
-        placement="left"
-        open={mobileNavOpen}
-        onClose={() => setMobileNavOpen(false)}
-        closable={false}
-        width={256}
-        title="Navigation"
-        rootClassName="lg:hidden"
-        styles={{
-          body: { padding: 0, background: '#0e1319' },
-          header: { background: '#0e1319', borderBottom: '1px solid rgba(55, 65, 81, 0.5)' },
-        }}
-      >
-        {sidebarContent}
-      </Drawer>
-
-      {/* Main content — Suspense boundary sits INSIDE the authenticated layout
-          so the sidebar stays visible while a lazy route page loads */}
-      <main className="flex-1 overflow-auto px-6 pt-16 pb-10 lg:pt-8">
-        <div className="mx-auto w-full max-w-[1440px]">
-        <Suspense
-          fallback={
-            <div className="min-h-[60vh] flex items-center justify-center">
-              <Spin size="large" />
-            </div>
-          }
-        >
-          <Outlet />
-        </Suspense>
-        </div>
-      </main>
-
-      {/* Idle timeout warning modal */}
-      <Modal
-        open={showWarning}
-        title={
-          <span className="flex items-center gap-2">
-            <ClockCircleOutlined className="text-yellow-500" />
-            Session Timeout Warning
-          </span>
-        }
-        okText="Continue Session"
-        cancelText="Logout Now"
-        onOk={resetTimer}
-        onCancel={handleLogout}
-        closable={false}
-        maskClosable={false}
-      >
-        <div className="py-4 text-center">
-          <div className="text-4xl font-mono font-bold mb-3" style={{ color: remainingSeconds <= 60 ? '#ff4d4f' : '#faad14' }}>
-            {formatCountdown(remainingSeconds)}
-          </div>
-          <p className="text-gray-400">
-            You have been inactive. Your session will automatically end for security reasons.
-          </p>
-          <p className="text-gray-500 text-sm mt-2">
-            Click "Continue Session" or perform any action to stay logged in.
-          </p>
-        </div>
-      </Modal>
-    </div>
-  )
-}
-
 function App() {
   return (
     <QueryClientProvider client={queryClient}>
@@ -370,52 +99,47 @@ function App() {
           particular component states, so they survive to production. */}
       <ConfigProvider
         locale={enUS}
+        // antd's default empty picture is a light illustration that glares on the dark theme.
+        renderEmpty={() => <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} />}
         theme={{
+          // The console is dark. With antd's default (light) algorithm every
+          // token not overridden below was derived for a white page: invisible
+          // placeholders, white tags, near-black pagination arrows. The dark
+          // algorithm derives those from the seeds below instead.
+          algorithm: antdTheme.darkAlgorithm,
           token: {
-            // Instrument theme: flat cobalt primary on cool slate.
-            colorPrimary: '#4c8df0',
-            colorInfo: '#4c8df0',
-            colorSuccess: '#33c489',
-            colorWarning: '#e6a53a',
-            colorError: '#ec5f5f',
-            borderRadius: 7,
-            fontFamily: "'Inter', system-ui, sans-serif",
-            colorBgContainer: '#141b23',
-            colorBgElevated: '#1b232d',
-            colorBgLayout: '#0e1319',
-            colorBgSpotlight: '#273241',
-            colorText: '#e7ecf2',
-            colorTextSecondary: '#93a0b0',
-            colorTextTertiary: '#5e6b7a',
-            colorBorder: '#34424f',
-            colorBorderSecondary: '#273241',
+            // Workbench theme: brass primary on warm graphite. Keep in step with
+            // the CSS tokens in index.css (antd computes its colours in JS, so
+            // it cannot read the CSS variables).
+            colorPrimary: '#d4a72c',
+            colorInfo: '#4fb3ad',
+            colorSuccess: '#79b866',
+            colorWarning: '#c9a96e',
+            colorError: '#e0674f',
+            colorLink: '#e0b94a',
+            borderRadius: 10,
+            fontFamily: "'Familjen Grotesk', system-ui, sans-serif",
+            fontFamilyCode: "'Spline Sans Mono', monospace",
+            colorBgContainer: '#262220',
+            colorBgElevated: '#2f2a26',
+            colorBgLayout: '#1d1a17',
+            colorBgSpotlight: '#3d3631',
+            colorText: '#efe8dc',
+            colorTextSecondary: '#b8ad9d',
+            colorTextTertiary: '#8f8577',
+            colorTextPlaceholder: '#8f8577',
+            colorBorder: '#4b433c',
+            colorBorderSecondary: '#3d3631',
           },
           components: {
-            Modal: {
-              contentBg: '#1b232d',
-              headerBg: 'transparent',
-              titleColor: '#e7ecf2',
-              colorIcon: '#5e6b7a',
-              colorIconHover: '#e7ecf2',
-            },
-            Form: {
-              labelColor: '#93a0b0',
-            },
-            Input: {
-              colorBgContainer: '#0e1319',
-              colorBorder: '#273241',
-              colorText: '#e7ecf2',
-            },
-            Select: {
-              colorBgContainer: '#0e1319',
-              colorBgElevated: '#1b232d',
-              colorBorder: '#374151',
-              optionSelectedBg: 'rgba(76, 141, 240, 0.2)',
-            },
-            Checkbox: {
-              colorBgContainer: '#141b23',
-              colorBorder: '#374151',
-            },
+            Button: { primaryColor: '#1d1a17', fontWeight: 600 },
+            Modal: { contentBg: '#2f2a26', headerBg: 'transparent', titleColor: '#efe8dc' },
+            Form: { labelColor: '#b8ad9d' },
+            Input: { colorBgContainer: '#1d1a17', colorBorder: '#3d3631' },
+            InputNumber: { colorBgContainer: '#1d1a17', colorBorder: '#3d3631' },
+            Select: { colorBgContainer: '#1d1a17', colorBorder: '#3d3631', optionSelectedBg: 'rgba(212, 167, 44, 0.18)' },
+            Drawer: { colorBgElevated: '#262220' },
+            Tooltip: { colorBgSpotlight: '#3d3631' },
           },
         }}
       >
@@ -436,7 +160,7 @@ function App() {
 
               {/* Protected routes */}
               <Route element={<ProtectedRoute />}>
-                <Route path="/" element={<AppLayout />}>
+                <Route path="/" element={<AppShell />}>
                   <Route index element={<Dashboard />} />
                   <Route path="create" element={<CreateTask />} />
                   <Route path="history" element={<History />} />

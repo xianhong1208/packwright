@@ -1,5 +1,5 @@
 import { Button } from 'antd'
-import { CloseCircleOutlined } from '@ant-design/icons'
+import { CloseCircleOutlined, WarningOutlined } from '@ant-design/icons'
 import type { BuildResult } from '../../api/types'
 import { extractErrorLines } from '../../utils/diagnose'
 import { STAGE_LABELS } from './stages'
@@ -51,8 +51,8 @@ export default function FailureReport({ result, logs = [], statusMsg, logHint, o
         <div className="space-y-3 mb-3">
           {result.diagnosis.map((d, i) => (
             <div key={i} className="rounded-lg p-3 bg-void-950">
-              <div className="text-sm text-alert-400 font-medium mb-1">⚠ {d.problem}</div>
-              <div className="text-sm text-cyber-200">Suggested fix: {d.suggestion}</div>
+              <div className="text-sm text-alert-400 font-medium mb-1 flex items-start gap-1.5"><WarningOutlined className="mt-[3px]" />{d.problem}</div>
+              <div className="text-sm text-[var(--ink)]">Suggested fix: {d.suggestion}</div>
               {d.evidence && (
                 <code className="block text-xs mt-1.5 font-mono break-all" style={{ color: 'var(--ink-faint)' }}>
                   {d.evidence}
@@ -77,7 +77,7 @@ export default function FailureReport({ result, logs = [], statusMsg, logHint, o
 
       {errLines.length > 0 && (
         <div>
-          <div className="text-xs mb-1.5 uppercase tracking-wider" style={{ color: 'var(--ink-faint)' }}>
+          <div className="text-xs mb-1.5" style={{ color: 'var(--ink-faint)' }}>
             Key error lines
           </div>
           <div className="rounded-lg p-3 font-mono text-xs space-y-1 bg-void-950">

@@ -7,6 +7,13 @@ follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this proje
 ## [Unreleased]
 
 ### Changed
+- **The console is redesigned.** Warm graphite with a brass accent, and teal for anything running; a
+  narrow tool rail, a quick jump to any page or recent build (Ctrl/Cmd+K), and one page heading on every
+  screen. The home page (**On the bench**) lists running and recent builds by day: a running build shows
+  its stage and last log lines, and three or more cancelled builds in a row fold into one line. Beside it
+  are the last 30 days and the machine's load. **Builds** is a searchable list with a count per status,
+  **Machine** shows every core as one cell, and **Users** is now **People**. Deactivating someone asks
+  first, and isn't offered on your own account (the server refused it anyway).
 - **`pack_mode` defaults to `external` in the API**, as the console already did; leaving it out used
   to select `full`, which compiles every dependency and takes hours. Stored builds keep their mode.
 - **Renamed Build Center to Packwright**: packages, console title, login page, docs, scripts, the
@@ -63,6 +70,13 @@ follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this proje
   production 5 → 0 (axios, react-router).
 
 ### Fixed
+- Success rates counted cancelled and running builds as failures. They count only builds that passed or
+  failed now, in the summary, per day (which gains `failed`) and per project.
+- The sessions list marked every sign-in from the same address as "this device", so the current one
+  couldn't be told apart from the rest, or kept while signing the others out. Access tokens now carry
+  `sid`, the sign-in they belong to; tokens issued before this mark none until they're refreshed.
+- Times in the console were read as the browser's local time, but the server sends UTC without a zone, so
+  in a UTC+8 browser they were eight hours off (people, login history, Git credentials, build detail).
 - The same project produced a differently ordered Nuitka command on every build: the installed
   packages it excludes were listed in set order, which changes with each process. They are sorted.
 - The Builds page showed an empty "Build result" card for builds whose result held only a duration,

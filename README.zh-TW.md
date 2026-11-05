@@ -34,7 +34,7 @@ uv run python main.py         # 先套用 migration,再於 http://0.0.0.0:5018 �
 ```
 
 - 開啟 `http://localhost:5018`,以 **`admin`** 登入,密碼在啟動 log 裡(`Created bootstrap admin 'admin' with generated password: …`)。密碼於首次啟動時隨機產生且只顯示一次——登入後請改密碼,或在首次啟動前設定 `BOOTSTRAP_ADMIN_USERNAME` / `BOOTSTRAP_ADMIN_PASSWORD`。
-- **新增 Git 憑證**(選用,私有 repo 需要):Administration → Git credentials → 選 GitHub、GitLab 或自架伺服器,貼上 personal access token。
+- **新增 Git 憑證**(選用,私有 repo 需要):左側工具列的 **Git credentials** → 選 GitHub、GitLab 或自架伺服器,貼上 personal access token。
 - **建立打包**:選本機路徑或 Git URL、選模式、送出。日誌即時串流;完成的產物可下載(或匯出成 Docker image `.tar.gz`)。
 
 前端開發熱重載可在 `frontend/` 執行 `npm run dev`(會把 API 代理到 `:5018`)。逐步操作教學見 [docs/quickstart.zh-TW.md](docs/quickstart.zh-TW.md)。
@@ -113,7 +113,7 @@ DATABASE_URL=sqlite+aiosqlite:////srv/packwright/build_center.db
 
 ## Git 憑證
 
-私有 repo 的存取權杖在管理台設定(Administration → Git credentials,需要 `user:manage` 權限),不放在 `.env`:
+私有 repo 的存取權杖在管理台設定(左側工具列的 **Git credentials**,需要 `user:manage` 權限),不放在 `.env`:
 
 - 每個主機一組,支援 **GitHub**、**GitLab** 或自架實例(任意主機)。
 - 以 `SETTINGS_ENCRYPTION_KEY` 加密儲存,API 不回傳——介面只顯示末四碼。

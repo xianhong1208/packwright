@@ -1,6 +1,8 @@
 import { CodeOutlined, GlobalOutlined, AppstoreOutlined, CloudServerOutlined } from '@ant-design/icons'
 import { useCreateTask } from '../context'
 import { SectionHeader, SummaryRow } from '../ui'
+import type { ProjectType } from '../../../api/types'
+import { PROJECT_TYPE_META } from '../../../utils/projectTypeMeta'
 
 export default function ReviewStep() {
   const {
@@ -9,7 +11,6 @@ export default function ReviewStep() {
     sourceType,
     hasBackend,
     showFrontendSettings,
-    typeLabels,
     form,
     selectedDirs,
     selectedDataDirs,
@@ -23,7 +24,7 @@ export default function ReviewStep() {
       <div className="glass-card p-5 mb-4">
         <SectionHeader icon={<AppstoreOutlined />} title="Project" />
         <SummaryRow label="Name" value={form.getFieldValue('project_name')} />
-        <SummaryRow label="Type" value={projectType && typeLabels[projectType] ? typeLabels[projectType].text : projectType} />
+        <SummaryRow label="Type" value={projectType ? PROJECT_TYPE_META[projectType as ProjectType]?.label ?? projectType : projectType} />
         {sourceType === 'git' ? (
           <>
             <SummaryRow label="Source" value="Git URL" highlight />

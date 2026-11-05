@@ -162,7 +162,7 @@ export default function BackendStep() {
             name="dependency_group"
             label={
               <span style={{ color: 'var(--ink-muted)' }}>
-                Dependency group (uv <code className="text-cyber-400">--group</code>)
+                Dependency group (uv <code className="text-[var(--ink)]">--group</code>)
               </span>
             }
             tooltip={

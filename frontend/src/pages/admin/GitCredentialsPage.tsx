@@ -15,19 +15,21 @@ import {
   Tooltip,
   Typography,
 } from 'antd'
-import { DeleteOutlined, EditOutlined, PlusOutlined } from '@ant-design/icons'
+import { CloudServerOutlined, DeleteOutlined, EditOutlined, GithubOutlined, GitlabOutlined, PlusOutlined } from '@ant-design/icons'
+import PageHeader from '../../components/layout/PageHeader'
 import {
   gitCredentialsApi,
   type GitCredential,
   type GitProvider,
 } from '../../api/gitCredentialsApi'
+import { parseUtc } from '../../utils/time'
 
 const { Text } = Typography
 
-const PROVIDER_META: Record<GitProvider, { label: string; color: string; defaultHost: string }> = {
-  github: { label: 'GitHub', color: 'purple', defaultHost: 'github.com' },
-  gitlab: { label: 'GitLab', color: 'orange', defaultHost: 'gitlab.com' },
-  generic: { label: 'Other (self-hosted)', color: 'default', defaultHost: '' },
+const PROVIDER_META: Record<GitProvider, { label: string; icon: React.ReactNode; defaultHost: string }> = {
+  github: { label: 'GitHub', icon: <GithubOutlined />, defaultHost: 'github.com' },
+  gitlab: { label: 'GitLab', icon: <GitlabOutlined />, defaultHost: 'gitlab.com' },
+  generic: { label: 'Other (self-hosted)', icon: <CloudServerOutlined />, defaultHost: '' },
 }
 
 // Managing Git credentials replaces the old server-side GITLAB_TOKEN env var:
@@ -123,7 +125,7 @@ export default function GitCredentialsPage() {
       title: 'Provider',
       dataIndex: 'provider',
       key: 'provider',
-      render: (p: GitProvider) => <Tag color={PROVIDER_META[p].color}>{PROVIDER_META[p].label}</Tag>,
+      render: (p: GitProvider) => <span className="inline-flex items-center gap-2">{PROVIDER_META[p].icon}{PROVIDER_META[p].label}</span>,
     },
     { title: 'Host', dataIndex: 'host', key: 'host', render: (h: string) => <Text code>{h}</Text> },
     {
@@ -145,7 +147,7 @@ export default function GitCredentialsPage() {
       dataIndex: 'last_used_at',
       key: 'last_used_at',
       render: (v: string | null) =>
-        v ? new Date(v).toLocaleString() : <Text type="secondary">Never</Text>,
+        v ? parseUtc(v).toLocaleString() : <Text type="secondary">Never</Text>,
     },
     {
       title: '',
@@ -172,38 +174,32 @@ export default function GitCredentialsPage() {
   ]
 
   return (
-    <div className="max-w-4xl mx-auto">
-      {/* Page header */}
-      <div
-        className="flex flex-wrap items-start justify-between gap-4 pb-4 mb-6"
-        style={{ borderBottom: '1px solid var(--seam)' }}
-      >
-        <div>
-          <h1 className="text-2xl font-semibold" style={{ fontFamily: 'var(--font-display)', color: 'var(--ink)' }}>
-            Git credentials
-          </h1>
-          <p className="mt-1 text-sm" style={{ color: 'var(--ink-muted)' }}>
-            Access tokens used to clone private repositories during a build
-          </p>
-        </div>
-        <Button type="primary" icon={<PlusOutlined />} onClick={openCreate}>
-          Add credential
-        </Button>
-      </div>
-
-      <p className="mb-6 text-sm" style={{ color: 'var(--ink-muted)' }}>
-        The matching credential is selected automatically by the host in the Git URL, with support
-        for GitHub, GitLab, and self-hosted instances. Tokens are stored encrypted and are never
-        shown again in plain text.
-      </p>
+    <div className="max-w-5xl">
+      <PageHeader
+        title="Git credentials"
+        lead="Tokens for cloning private repositories. A build uses the one whose host matches its Git URL."
+        actions={
+          <Button type="primary" icon={<PlusOutlined />} onClick={openCreate}>
+            Add credential
+          </Button>
+        }
+      />
 
       <Table
+        scroll={{ x: 760 }}
         rowKey="id"
         loading={isLoading}
         columns={columns}
         dataSource={credentials}
         pagination={false}
-        locale={{ emptyText: <Empty description="No Git credentials configured yet" /> }}
+        locale={{ emptyText: (
+          <Empty
+            image={Empty.PRESENTED_IMAGE_SIMPLE}
+            description={<span style={{ color: 'var(--ink-muted)' }}>No credentials yet. Public repositories don't need one.</span>}
+          >
+            <Button icon={<PlusOutlined />} onClick={openCreate}>Add credential</Button>
+          </Empty>
+        ) }}
       />
 
       <Modal
@@ -227,7 +223,7 @@ export default function GitCredentialsPage() {
             >
               <div className="flex items-center justify-between">
                 <Text type="secondary">Provider</Text>
-                <Tag color={PROVIDER_META[editing.provider].color} style={{ marginInlineEnd: 0 }}>
+                <Tag icon={PROVIDER_META[editing.provider].icon} style={{ marginInlineEnd: 0 }}>
                   {PROVIDER_META[editing.provider].label}
                 </Tag>
               </div>
@@ -279,6 +275,7 @@ export default function GitCredentialsPage() {
             name="token"
             label={editing ? 'New token (leave blank to keep current)' : 'Access token'}
             rules={editing ? [] : [{ required: true, message: 'Enter a token' }]}
+            extra="Stored encrypted. It can't be shown again, only replaced."
           >
             <Input.Password
               placeholder={editing ? 'Leave blank to keep the current token' : 'ghp_… or glpat-…'}

@@ -1,64 +1,46 @@
-import { useEffect, useRef } from 'react'
-import { useNavigate } from 'react-router-dom'
-import { Empty, message, notification, Spin, Button } from 'antd'
-import { RocketOutlined } from '@ant-design/icons'
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import TaskCard from '../components/TaskCard'
-import BuildStatsPanel from '../components/BuildStatsPanel'
-import { taskApi } from '../api/client'
+import { useEffect, useMemo, useRef } from 'react'
+import { Link, useNavigate } from 'react-router-dom'
+import { Button, Empty, message, notification, Spin } from 'antd'
+import { PlusOutlined, WarningOutlined } from '@ant-design/icons'
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import api, { taskApi } from '../api/client'
+import type { BuildStats, HistoryItem, SystemStats, TaskResponse } from '../api/types'
 import { useTaskStore } from '../store/taskStore'
 import { getErrorDetail } from '../utils/errors'
 import { STATUS_META } from '../utils/statusMeta'
+import { PROJECT_TYPE_META } from '../utils/projectTypeMeta'
+import { STAGE_LABELS } from '../components/build/stages'
+import { benchDays, coreHeat, duration, heatColor, outcomeLine, stageTrack } from './dashboard/bench'
+import { parseUtc } from '../utils/time'
+import PageHeader from '../components/layout/PageHeader'
 
-/** A single KPI tile in the landing header, GitHub-Actions style: a big mono
- *  figure over a quiet uppercase label, colored by outcome. */
-function Kpi({ label, value, color }: { label: string; value: string; color: string }) {
-  return (
-    <div className="stat-card">
-      <div
-        className="text-xs uppercase tracking-wider"
-        style={{ color: 'var(--ink-faint)', fontFamily: 'var(--font-mono)' }}
-      >
-        {label}
-      </div>
-      <div className="text-2xl font-semibold mt-1" style={{ color, fontFamily: 'var(--font-display)' }}>
-        {value}
-      </div>
-    </div>
-  )
-}
-
+/**
+ * On the bench: what is running now and what ran recently, as one timeline,
+ * with the last 30 days and the machine in a quiet side column.
+ */
 export default function Dashboard() {
   const navigate = useNavigate()
   const queryClient = useQueryClient()
   const { setTasks, tasks } = useTaskStore()
 
-  // Fetch active tasks
-  const { data: activeTasks, isLoading } = useQuery({
-    queryKey: ['activeTasks'],
-    queryFn: taskApi.getActive,
+  const { data: activeTasks } = useQuery({ queryKey: ['activeTasks'], queryFn: taskApi.getActive, refetchInterval: 5000 })
+  const { data: history, isLoading: historyLoading } = useQuery({
+    queryKey: ['benchHistory'],
+    queryFn: () => taskApi.getHistory({ limit: 30 }),
+    refetchInterval: 15_000,
+  })
+  const { data: stats } = useQuery({ queryKey: ['buildStats'], queryFn: () => taskApi.getBuildStats(30), refetchInterval: 60_000, staleTime: 30_000 })
+  const { data: machine } = useQuery<SystemStats>({
+    queryKey: ['benchMachine'],
+    queryFn: async () => (await api.get('/monitoring/stats')).data,
     refetchInterval: 5000,
   })
 
-  // Build outcome aggregates. Refreshed far less often than the active-task
-  // poll — these move on the scale of hours, and a failed fetch must never
-  // take the task list down with it.
-  const { data: buildStats } = useQuery({
-    queryKey: ['buildStats'],
-    queryFn: () => taskApi.getBuildStats(30),
-    refetchInterval: 60_000,
-    staleTime: 30_000,
-  })
-
-  // Update store when tasks are fetched
   useEffect(() => {
-    if (activeTasks) {
-      setTasks(activeTasks)
-    }
+    if (activeTasks) setTasks(activeTasks)
   }, [activeTasks, setTasks])
 
-  // Notify when a task leaves the active list (finished/failed/cancelled) so
-  // the user isn't left staring at Dashboard with no idea it completed.
+  // A build leaving the running list gets a toast that opens its result.
   const prevActiveRef = useRef<Map<string, string> | null>(null)
   useEffect(() => {
     if (!activeTasks) return
@@ -66,95 +48,230 @@ export default function Dashboard() {
     if (prevActiveRef.current) {
       for (const [id, name] of prevActiveRef.current) {
         if (!current.has(id)) {
-          notification.info({
-            message: 'Task finished',
-            description: `"${name}" left the in-progress list. Click to view the result.`,
-            duration: 6,
-            onClick: () => navigate(`/task/${id}`),
-          })
+          notification.info({ message: `${name} finished`, description: 'Open it to see the result.', duration: 6, onClick: () => navigate(`/task/${id}`) })
+          queryClient.invalidateQueries({ queryKey: ['benchHistory'] })
         }
       }
     }
     prevActiveRef.current = current
-  }, [activeTasks, navigate])
+  }, [activeTasks, navigate, queryClient])
 
-  // Cancel task mutation
-  const cancelMutation = useMutation({
+  const cancel = useMutation({
     mutationFn: taskApi.cancel,
     onSuccess: () => {
-      message.success('Task cancelled')
+      message.success('Build cancelled')
       queryClient.invalidateQueries({ queryKey: ['activeTasks'] })
     },
-    onError: (err) => {
-      message.error(getErrorDetail(err, 'Failed to cancel task'))
-    },
+    onError: (err) => message.error(getErrorDetail(err, 'Could not cancel the build')),
   })
 
-  const handleCancel = (taskId: string) => {
-    cancelMutation.mutate(taskId)
-  }
-
-  const taskList = Array.from(tasks.values())
-  const runningCount = taskList.length
-  const summary = buildStats?.summary
-  const fmt = (n: number | undefined) => (n === undefined ? '—' : String(n))
+  const running = Array.from(tasks.values())
+  const days = useMemo(() => benchDays(running, history ?? []), [running, history])
 
   return (
-    <div>
-      {/* Page header — title + subtitle, matching the History landing. */}
-      <div style={{ marginBottom: 24 }}>
-        <h1 style={{ fontSize: 24, fontWeight: 600, margin: 0, color: 'var(--ink)' }}>Dashboard</h1>
-        <p style={{ margin: '4px 0 0', color: 'var(--ink-muted)' }}>
-          An overview of your recent build activity and everything running right now.
-        </p>
-      </div>
+    <div className="grid gap-8 lg:grid-cols-[minmax(0,1fr)_340px]">
+      <section aria-label="On the bench" className="min-w-0">
+        <PageHeader
+          title="On the bench"
+          lead={running.length > 0
+            ? `${running.length} ${running.length === 1 ? 'build is' : 'builds are'} running.`
+            : 'Nothing is running. Recent builds are below.'}
+        />
 
-      {/* KPI row — total / passed / failed / running, colored by outcome. */}
-      <div
-        className="grid gap-4 mb-6"
-        style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))' }}
-      >
-        <Kpi label="Total builds" value={fmt(summary?.total)} color="var(--ink)" />
-        <Kpi label="Passed" value={fmt(summary?.completed)} color={STATUS_META.completed.color} />
-        <Kpi label="Failed" value={fmt(summary?.failed)} color={STATUS_META.failed.color} />
-        <Kpi label="Running" value={String(runningCount)} color={STATUS_META.running.color} />
-      </div>
+        {stats && stats.environment.degraded.length > 0 && <DegradedBanner stats={stats} />}
 
-      {buildStats && <BuildStatsPanel stats={buildStats} />}
-
-      <h2
-        style={{ fontSize: 16, fontWeight: 600, margin: '0 0 12px', color: 'var(--ink)' }}
-      >
-        In progress
-      </h2>
-
-      {isLoading ? (
-        <div style={{ textAlign: 'center', padding: 40 }}>
-          <Spin size="large" />
-        </div>
-      ) : taskList.length === 0 ? (
-        <Empty
-          description={
-            <div>
-              <div style={{ color: 'var(--ink-muted)' }}>No builds in progress</div>
-              <div className="text-xs mt-1" style={{ color: 'var(--ink-faint)' }}>
-                Start a build to package a project into an executable or a Docker image.
+        {historyLoading && running.length === 0 ? (
+          <div className="py-20 text-center"><Spin size="large" /></div>
+        ) : days.length === 0 ? (
+          <Empty
+            image={Empty.PRESENTED_IMAGE_SIMPLE}
+            description={<span style={{ color: 'var(--ink-muted)' }}>Nothing has been built yet.</span>}
+            className="py-12"
+          >
+            <Button type="primary" icon={<PlusOutlined />} onClick={() => navigate('/create')}>New build</Button>
+          </Empty>
+        ) : (
+          <div className="bench">
+            {days.map((day) => (
+              <div key={day.label}>
+                <h2 className="bench-day">{day.label}</h2>
+                {day.entries.map((e) =>
+                  e.kind === 'running' ? (
+                    <RunningEntry key={e.task.id} task={e.task} onOpen={() => navigate(`/task/${e.task.id}`)} onCancel={() => cancel.mutate(e.task.id)} cancelling={cancel.isPending} />
+                  ) : e.kind === 'cancelled-run' ? (
+                    <CancelledRun key={e.items[0].task_id} items={e.items} />
+                  ) : (
+                    <FinishedEntry key={e.item.task_id} item={e.item} />
+                  ),
+                )}
               </div>
+            ))}
+            <Link to="/history" className="inline-block mt-2 ml-[112px] max-sm:ml-6" style={{ color: 'var(--color-cyber-400)' }}>
+              All builds
+            </Link>
+          </div>
+        )}
+      </section>
+
+      <aside className="flex flex-col gap-4" aria-label="Health">
+        <LastThirtyDays stats={stats} />
+        <Machine machine={machine} running={running.length} />
+      </aside>
+    </div>
+  )
+}
+
+function RunningEntry({ task, onOpen, onCancel, cancelling }: { task: TaskResponse; onOpen: () => void; onCancel: () => void; cancelling: boolean }) {
+  const track = stageTrack(task)
+  const tail = task.logs.slice(-2)
+  return (
+    <div className="bench-entry">
+      <span className="bench-time">{parseUtc(task.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
+      <span className="bench-dot" style={{ background: 'var(--color-teal-400)' }} aria-hidden="true" />
+      <article className="bench-card running">
+        <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1">
+          <Link to={`/task/${task.id}`} className="bench-name">{task.project_name}</Link>
+          <span className="bench-what">{PROJECT_TYPE_META[task.config.project_type].label}</span>
+          <span className="ml-auto font-semibold" style={{ color: 'var(--color-teal-400)' }}>
+            {task.status === 'pending' ? 'Waiting for a build slot' : task.status_msg || 'Running'}
+          </span>
+        </div>
+        <div className="bench-track" aria-label={`Stage ${STAGE_LABELS[task.stage] ?? task.stage}, ${task.progress}% overall`}>
+          {track.map((s) => (
+            <div key={s.key} className="min-w-0">
+              <div className={`bench-seg ${s.state}`} style={s.state === 'on' ? { ['--fill' as string]: `${task.progress}%` } : undefined} />
+              <div className={`bench-seglabel ${s.state}`}>{s.label}{s.state === 'on' ? ` ${task.progress}%` : ''}</div>
             </div>
-          }
-          style={{ padding: 48 }}
-        >
-          <Button type="primary" icon={<RocketOutlined />} size="large" onClick={() => navigate('/create')}>
-            Create your first build
-          </Button>
-        </Empty>
-      ) : (
-        <div className="flex flex-col gap-3">
-          {taskList.map((task) => (
-            <TaskCard key={task.id} task={task} onCancel={handleCancel} />
           ))}
         </div>
+        {tail.length > 0 && (
+          <div className="bench-tail" aria-label="Latest log lines">
+            {tail.map((l, i) => <div key={i} className="truncate">{l}</div>)}
+          </div>
+        )}
+        <div className="flex gap-2 mt-3">
+          <Button size="small" onClick={onOpen}>Open build</Button>
+          <Button size="small" danger onClick={onCancel} loading={cancelling}>Cancel</Button>
+        </div>
+      </article>
+    </div>
+  )
+}
+
+function FinishedEntry({ item }: { item: HistoryItem }) {
+  const meta = STATUS_META[item.status]
+  const type = item.config?.project_type ? PROJECT_TYPE_META[item.config.project_type] : null
+  const line = outcomeLine(item)
+  return (
+    <div className="bench-entry">
+      <span className="bench-time">{parseUtc(item.start_time).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
+      <span className="bench-dot" style={{ background: meta.color }} aria-hidden="true" />
+      <Link to={`/history/${item.task_id}`} className="bench-card finished">
+        <div className="min-w-0 flex-1">
+          <div className="bench-name">{item.project_name}</div>
+          <div className="bench-what truncate">{[type?.label, line.detail].filter(Boolean).join(', ')}</div>
+        </div>
+        <div className="text-right flex-none">
+          <div className="font-semibold" style={{ color: meta.color }}>{line.verdict}</div>
+          <div className="bench-what">{line.next}</div>
+        </div>
+      </Link>
+    </div>
+  )
+}
+
+function CancelledRun({ items }: { items: HistoryItem[] }) {
+  const names = [...new Set(items.map((i) => i.project_name))]
+  const at = (i: HistoryItem) => parseUtc(i.start_time).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+  return (
+    <div className="bench-entry">
+      <span className="bench-time">{at(items[0])}</span>
+      <span className="bench-dot" style={{ background: STATUS_META.cancelled.color }} aria-hidden="true" />
+      <Link to="/history" className="bench-card finished quiet">
+        <div className="min-w-0 flex-1">
+          <div className="bench-what" style={{ color: 'var(--ink)' }}>{items.length} builds cancelled</div>
+          <div className="bench-what truncate">{names.slice(0, 4).join(', ')}{names.length > 4 ? ` and ${names.length - 4} more` : ''}</div>
+        </div>
+        <div className="bench-what flex-none">since {at(items[items.length - 1])}</div>
+      </Link>
+    </div>
+  )
+}
+
+function LastThirtyDays({ stats }: { stats: BuildStats | undefined }) {
+  const s = stats?.summary
+  const finished = s ? s.completed + s.failed : 0
+  const topFailure = stats?.top_failures[0]
+  return (
+    <div className="glass-card p-5">
+      <h2 className="text-[15px] font-semibold m-0 mb-3" style={{ color: 'var(--ink)' }}>Last 30 days</h2>
+      {!s ? (
+        <Spin />
+      ) : finished === 0 ? (
+        <p className="m-0" style={{ color: 'var(--ink-muted)' }}>No finished builds yet.</p>
+      ) : (
+        <>
+          <div className="text-[52px] font-bold leading-none" style={{ color: (s.success_rate ?? 0) >= 80 ? 'var(--color-matrix-400)' : (s.success_rate ?? 0) >= 50 ? 'var(--color-signal-400)' : 'var(--color-alert-400)' }}>
+            {Math.round(s.success_rate ?? 0)}%
+          </div>
+          <p className="mt-2 mb-0 text-sm" style={{ color: 'var(--ink-muted)' }}>
+            {s.completed} of {finished} finished builds passed.
+            {s.cancelled > 0 && ` ${s.cancelled} cancelled ${s.cancelled === 1 ? 'build is' : 'builds are'} not counted.`}
+          </p>
+          {s.avg_duration_seconds != null && (
+            <div className="flex justify-between mt-4 text-sm"><span style={{ color: 'var(--ink-muted)' }}>Typical build</span><b>{duration(s.avg_duration_seconds)}</b></div>
+          )}
+          {topFailure && (
+            <p className="mt-3 mb-0 text-sm" style={{ color: 'var(--ink-faint)' }}>
+              Most common failure ({topFailure.count}×): {topFailure.problem}
+            </p>
+          )}
+        </>
       )}
+    </div>
+  )
+}
+
+function Machine({ machine, running }: { machine: SystemStats | undefined; running: number }) {
+  if (!machine) return <div className="glass-card p-5"><Spin /></div>
+  const heat = coreHeat(machine.cpu.percent_per_core, 16)
+  return (
+    <Link to="/monitor" className="glass-card p-5 block" style={{ color: 'var(--ink)' }}>
+      <h2 className="text-[15px] font-semibold m-0 mb-3">Machine</h2>
+      <div className="flex justify-between text-sm"><span style={{ color: 'var(--ink-muted)' }}>{machine.cpu.count_logical} cores</span><b>{Math.round(machine.cpu.percent)}% busy</b></div>
+      <div className="core-heat" aria-label={`Core load in ${heat.length} groups of ${Math.ceil(machine.cpu.percent_per_core.length / heat.length)} cores`}>
+        {heat.map((pct, i) => <i key={i} title={`${Math.round(pct)}%`} style={{ background: heatColor(pct) }} />)}
+      </div>
+      <Meter label="Memory" pct={machine.memory.percent} />
+      <Meter label="Disk" pct={machine.disk.percent} />
+      <div className="flex justify-between text-sm mt-1"><span style={{ color: 'var(--ink-muted)' }}>Running builds</span><span>{running}</span></div>
+    </Link>
+  )
+}
+
+function Meter({ label, pct }: { label: string; pct: number }) {
+  return (
+    <div className="mb-3">
+      <div className="flex justify-between text-sm"><span style={{ color: 'var(--ink-muted)' }}>{label}</span><span>{Math.round(pct)}%</span></div>
+      <div className="meter"><span style={{ width: `${pct}%`, background: pct >= 90 ? 'var(--color-alert-400)' : 'var(--ink-muted)' }} /></div>
+    </div>
+  )
+}
+
+function DegradedBanner({ stats }: { stats: BuildStats }) {
+  const env = stats.environment
+  // First and loud on purpose: a compile target whose venv stopped resolving
+  // produces no error anywhere — builds silently fall back to the service's own
+  // Python and hand users a binary that breaks on their machine.
+  return (
+    <div className="glass-card p-4 mb-6" style={{ borderColor: 'var(--color-alert-500)', background: 'color-mix(in srgb, var(--color-alert-500) 7%, transparent)' }}>
+      <div className="flex items-center gap-2 mb-1 font-semibold text-alert-400">
+        <WarningOutlined /> Python {env.degraded.join(', ')} cannot be compiled for right now
+      </div>
+      <div className="text-sm" style={{ color: 'var(--ink-muted)' }}>
+        Builds that pick it fall back to the service&apos;s Python {env.service_python}, and the result fails with
+        ModuleNotFoundError where it runs. Run <code className="text-[var(--ink)]">bash scripts/setup_nuitka_venvs.sh</code> on the server.
+      </div>
     </div>
   )
 }

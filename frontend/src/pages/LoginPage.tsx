@@ -261,7 +261,7 @@ export default function LoginPage() {
           <div className="mt-6">
             <div className="flex items-center gap-3 my-4">
               <div className="flex-1 h-px bg-void-700" />
-              <span className="text-xs uppercase tracking-wider text-[var(--ink-faint)]">or</span>
+              <span className="text-xs text-[var(--ink-faint)]">or</span>
               <div className="flex-1 h-px bg-void-700" />
             </div>
             <a
@@ -293,13 +293,6 @@ export default function LoginPage() {
             </button>
           </div>
         )}
-
-        {/* Footer */}
-        <div className="mt-8 pt-6 border-t border-[var(--seam)] text-center">
-          <p className="text-xs text-[var(--ink-faint)]">
-            Packwright
-          </p>
-        </div>
       </div>
     </div>
   )
