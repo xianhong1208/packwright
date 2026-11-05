@@ -27,7 +27,7 @@ SECRET_ENV = 'DATABASE_URL=postgres://u:pw@db/app\nAPI_KEY="sk-live-1234"'
 
 def _raw_config(**overrides) -> dict:
     return BuildConfig(
-        project_path="/media/disk0/x",
+        project_path="/srv/projects/x",
         docker_env_vars=SECRET_ENV,
         frontend_env_content="VITE_TOKEN=abc123",
         **overrides,
@@ -92,8 +92,8 @@ class TestAnUnreadableRecordDoesNotHideTheRest:
 
     _config_for validates every row the history list returns, so a config the
     current schema rejects used to fail the whole request. Tightening
-    frontend_output_dir made 73 of 698 records undeserialisable and the history
-    page went blank for everyone who owned one.
+    frontend_output_dir made a tenth of the stored records undeserialisable and
+    the history page went blank for everyone who owned one.
     """
 
     @pytest.mark.unit

@@ -450,9 +450,8 @@ def _generate_frontend_dockerfile(config: BuildConfig, port: int) -> str:
     body_size = _validate_nginx_value(
         config.nginx_client_max_body_size or "0", "nginx_client_max_body_size"
     )
-    # 300s, not nginx's 60s. Measured against real usage: of 100 builds that
-    # configured an API proxy, 96 ran at 60s and only 4 had raised it — those
-    # four being the people who hit the wall and worked out why. A
+    # 300s, not nginx's 60s. Almost nobody who configures an API proxy changes
+    # the default, and the few who do are the ones who already hit the wall. A
     # speech-to-text or LLM call returns nothing at all until it finishes, so
     # the idle timer expires mid-request and the user gets a 504 that looks
     # like their backend crashed.

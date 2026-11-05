@@ -3,7 +3,7 @@ Unit tests for the refresh-token garbage collector.
 Source: app/services/workspace_cleanup.sweep_refresh_tokens
 
 Token rotation mints a row per refresh and revokes the old one, so this table
-only grows: it reached 21,456 rows for 7 users, 92.7% of them unusable. The
+only grows, nearly all of it rows that can never be used again. The
 sweep must remove exactly the dead rows and never touch a live session — a
 mistake here logs everyone out.
 """

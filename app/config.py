@@ -5,6 +5,7 @@ import shutil
 from functools import lru_cache
 from pathlib import Path
 
+from pydantic import AliasChoices, Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -60,15 +61,20 @@ class Settings(BaseSettings):
     # set, one is generated on first use and appended to .env, like the JWT secret.
     settings_encryption_key: str | None = None
 
-    # === MCP Center single sign-on (optional) ===
-    # When enabled, the login page offers "Sign in with MCP Center". Packwright
-    # runs the OAuth 2.1 authorization-code + PKCE flow against MCP Center, then
+    # === MCP Gate single sign-on (optional) ===
+    # When enabled, the login page offers "Sign in with MCP Gate". Packwright
+    # runs the OAuth 2.1 authorization-code + PKCE flow against MCP Gate, then
     # issues its own session — local email/password sign-in stays available.
     mcp_oauth_enabled: bool = False
-    mcp_center_url: str = "http://localhost:4568"  # MCP Center issuer (OAUTH_ISSUER)
+    # MCP Gate's issuer (its OAUTH_ISSUER). MCP Gate was called MCP Center, so the
+    # old MCP_CENTER_URL is still read when MCP_GATE_URL is not set.
+    mcp_gate_url: str = Field(
+        "http://localhost:4568",
+        validation_alias=AliasChoices("MCP_GATE_URL", "MCP_CENTER_URL", "mcp_gate_url"),
+    )
     mcp_oauth_client_id: str = ""
     mcp_oauth_client_secret: str = ""  # blank for a public client (PKCE only)
-    # Where MCP Center sends the browser back — must be registered on the client.
+    # Where MCP Gate sends the browser back — must be registered on the client.
     mcp_oauth_redirect_uri: str = "http://localhost:5018/auth/oauth/mcp/callback"
     mcp_oauth_scopes: str = "openid"
 
@@ -153,7 +159,7 @@ class Settings(BaseSettings):
     # === Refresh token retention ===
     # Token rotation mints a new row on every refresh (~1 per 15 min per open
     # tab) and revokes the old one, so this table only ever grows without a
-    # sweep — it reached 21k rows for 7 users, 91% already expired. Rows are
+    # sweep, almost all of it long expired. Rows are
     # deleted once they have been unusable for this many days; the window keeps
     # recently ended sessions visible in the active-session view.
     refresh_token_retention_days: int = 7
@@ -161,20 +167,19 @@ class Settings(BaseSettings):
     # === Docker image exports ===
     # Threads for compressing the exported image, when pigz is installed.
     # `docker save | gzip` is single-threaded, so a multi-GB image spends
-    # minutes on one core of a 128-core host.
+    # minutes on one core of a many-core host.
     #
-    # 32 is chosen from this deployment's actual artifact sizes — 162 recorded
-    # builds averaging 2 GB, the largest 16 GB — not from a small sample.
-    # Measured throughput: gzip 32 MB/s, pigz -p 8 236 MB/s, pigz -p 32
-    # 577 MB/s. At real scale that is:
+    # Size it for real images (several GB), not a small test archive: measured
+    # throughput was roughly gzip 32 MB/s, pigz -p 8 236 MB/s, pigz -p 32
+    # 577 MB/s, so for a 16 GB image
     #
-    #     16 GB image:  gzip 8.4 min  |  -p 8 1.2 min  |  -p 32 28 s
+    #     gzip 8.4 min  |  -p 8 1.2 min  |  -p 32 28 s
     #
-    # so 8 -> 32 threads saves 26-41 s on the large builds, not the ~1 s a
-    # 572 MB test suggested. Still capped rather than "all 128 cores": the
-    # host runs up to MAX_CONCURRENT_BUILDS Nuitka compiles, disk write
-    # throughput becomes the limit well before 128 threads, and the export is
-    # a burst at the end of a build rather than a sustained load.
+    # and the step from 8 to 32 threads is worth tens of seconds on large
+    # images, while a sub-GB test makes it look like ~1 s. Still capped rather
+    # than "every core": the host runs up to MAX_CONCURRENT_BUILDS Nuitka
+    # compiles, disk write throughput becomes the limit long before that, and
+    # the export is a burst at the end of a build rather than a sustained load.
     #
     # Ignored entirely when pigz is absent — the export falls back to gzip
     # rather than failing an image that is already built.

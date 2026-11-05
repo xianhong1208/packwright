@@ -71,9 +71,9 @@ class TestSecretsAreNotForwarded:
         host_env(
             PATH="/usr/bin",
             LD_LIBRARY_PATH="/opt/buildhost/lib",
-            PYTHONPATH="/media/disk0/other-project",
-            PYTHONHOME="/media/disk0/venv",
-            VIRTUAL_ENV="/media/disk0/venv",
+            PYTHONPATH="/srv/projects/other-project",
+            PYTHONHOME="/srv/projects/venv",
+            VIRTUAL_ENV="/srv/projects/venv",
         )
 
         env = _build_smoke_env(None)

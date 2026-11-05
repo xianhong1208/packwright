@@ -24,8 +24,8 @@ export default function LoginPage() {
     }
   }, [isAuthenticated, navigate])
 
-  // MCP Center SSO: redeem the one-time code handed back in the URL fragment,
-  // surface errors, and decide whether to show the "Sign in with MCP Center" button.
+  // MCP Gate SSO: redeem the one-time code handed back in the URL fragment,
+  // surface errors, and decide whether to show the "Sign in with MCP Gate" button.
   // Tokens are never read from the URL: the code is only redeemable by the browser
   // that completed the flow (it holds an HttpOnly binding cookie), so a link with
   // someone else's code cannot sign this browser into their account.
@@ -42,12 +42,12 @@ export default function LoginPage() {
       })
         .then(async (r) => {
           const data = await r.json().catch(() => ({}))
-          if (!r.ok) throw new Error(typeof data.detail === 'string' ? data.detail : 'MCP Center sign-in failed.')
+          if (!r.ok) throw new Error(typeof data.detail === 'string' ? data.detail : 'MCP Gate sign-in failed.')
           tokenManager.clearTokens()
           tokenManager.setTokens(data.access_token, data.refresh_token, Number(data.expires_in || 900), false)
           window.location.replace('/')
         })
-        .catch((e: unknown) => setLocalError(e instanceof Error ? e.message : 'MCP Center sign-in failed.'))
+        .catch((e: unknown) => setLocalError(e instanceof Error ? e.message : 'MCP Gate sign-in failed.'))
       return
     }
     const params = new URLSearchParams(window.location.search)
@@ -55,8 +55,8 @@ export default function LoginPage() {
     if (ssoError) {
       setLocalError(
         ssoError === 'account_pending_approval'
-          ? 'Account created — an administrator must approve it before you can sign in with MCP Center.'
-          : `MCP Center sign-in failed: ${ssoError}`,
+          ? 'Account created — an administrator must approve it before you can sign in with MCP Gate.'
+          : `MCP Gate sign-in failed: ${ssoError}`,
       )
     }
     fetch('/auth/oauth/mcp/status')
@@ -256,7 +256,7 @@ export default function LoginPage() {
           </button>
         </form>
 
-        {/* MCP Center single sign-on (only when enabled on the server) */}
+        {/* MCP Gate single sign-on (only when enabled on the server) */}
         {ssoEnabled && !isRegisterMode && (
           <div className="mt-6">
             <div className="flex items-center gap-3 my-4">
@@ -269,7 +269,7 @@ export default function LoginPage() {
               className="w-full flex items-center justify-center gap-2 py-2.5 rounded-lg border border-void-600 text-[var(--ink)] hover:border-cyber-500 hover:text-cyber-300 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyber-500/60"
             >
               <SafetyCertificateOutlined />
-              Sign in with MCP Center
+              Sign in with MCP Gate
             </a>
           </div>
         )}
