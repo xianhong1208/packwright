@@ -196,10 +196,10 @@ async def get_system_info(current_user: AuthUser) -> dict:
     import sys
 
     from app.config import get_settings
-    from app.services.nuitka_worker import _BUILD_CENTER_ROOT
+    from app.services.nuitka_worker import _APP_ROOT
 
     versions: list[str] = []
-    for venv_dir in _BUILD_CENTER_ROOT.glob(".venv-py3*"):
+    for venv_dir in _APP_ROOT.glob(".venv-py3*"):
         compact = venv_dir.name.removeprefix(".venv-py")  # e.g. "314"
         python_bin = venv_dir / "bin" / "python"
         if compact.isdigit() and len(compact) >= 2 and python_bin.exists():
@@ -983,7 +983,7 @@ async def download_output_with_ticket(ticket: str, db: DB) -> Response:
         raise HTTPException(
             status_code=401,
             detail=(
-                "下載連結已失效。請回到 Build Center 重新點一次下載 —— "
+                "下載連結已失效。請回到 Packwright 重新點一次下載 —— "
                 "連結有時效,不能重複使用或分享給別人。"
             ),
         )

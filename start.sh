@@ -39,7 +39,7 @@ while [[ $# -gt 0 ]]; do
     esac
 done
 
-echo "=== Build Center ==="
+echo "=== Packwright ==="
 
 # Build frontend. Rebuild by default so code changes actually take effect —
 # the old "skip if dist/ exists" behavior silently served a stale build

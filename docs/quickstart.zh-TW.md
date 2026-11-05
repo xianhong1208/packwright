@@ -1,4 +1,4 @@
-# Build Center 快速上手 ⚡
+# Packwright 快速上手 ⚡
 
 > 目標:5 分鐘看完,馬上會用。完整參考請看 [README.md](./README.md)。
 

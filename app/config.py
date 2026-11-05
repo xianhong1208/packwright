@@ -60,7 +60,7 @@ class Settings(BaseSettings):
     settings_encryption_key: str | None = None
 
     # === MCP Center single sign-on (optional) ===
-    # When enabled, the login page offers "Sign in with MCP Center". Build Center
+    # When enabled, the login page offers "Sign in with MCP Center". Packwright
     # runs the OAuth 2.1 authorization-code + PKCE flow against MCP Center, then
     # issues its own session — local email/password sign-in stays available.
     mcp_oauth_enabled: bool = False

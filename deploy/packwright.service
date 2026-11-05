@@ -1,24 +1,24 @@
-# Build Center — systemd unit
+# Packwright — systemd unit
 #
 # Why this exists: the service is currently started by hand with `./start.sh`,
 # so it's gone after a reboot, and nothing brings it back up after it crashes.
 #
 # Install:
-#   cp deploy/build-center.service /etc/systemd/system/
+#   cp deploy/packwright.service /etc/systemd/system/
 #   systemctl daemon-reload
-#   systemctl enable --now build-center
-#   systemctl status build-center
-#   journalctl -u build-center -f
+#   systemctl enable --now packwright
+#   systemctl status packwright
+#   journalctl -u packwright -f
 #
 # Note: before installing, make sure no manually started instance is still
 # holding the port (ss -ltnp | grep 5018), or the new one will fail to bind.
 
 # Adjust WorkingDirectory / User / PATH / ExecStart below to match where you
-# installed Build Center and where uv lives.
+# installed Packwright and where uv lives.
 
 [Unit]
-Description=Build Center — Nuitka / frontend / Docker packaging service
-Documentation=https://github.com/xianhong1208/Fullstack-packager
+Description=Packwright — Nuitka / frontend / Docker packaging service
+Documentation=https://github.com/xianhong1208/packwright
 After=network-online.target postgresql.service
 Wants=network-online.target
 # On repeated crashes, don't restart forever and flood the journal; if it fails
@@ -37,11 +37,11 @@ Type=exec
 # the per-version venvs once failed en masse (see scripts/setup_nuitka_venvs.sh).
 User=root
 Group=root
-WorkingDirectory=/opt/build-center
+WorkingDirectory=/opt/packwright
 
 # uv is installed in the user's home directory, which systemd's default PATH
 # can't find.
-Environment=PATH=/opt/build-center/.venv/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
+Environment=PATH=/opt/packwright/.venv/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
 Environment=PYTHONUNBUFFERED=1
 
 # Secrets are brought in from here rather than pydantic-settings reading .env
@@ -51,7 +51,7 @@ Environment=PYTHONUNBUFFERED=1
 # os.environ to the "executable the user compiled". Before enabling this line,
 # change the smoke test to use an allowlist, or you're effectively handing
 # JWT_SECRET_KEY / GITLAB_TOKEN to arbitrary code under test.
-# EnvironmentFile=/opt/build-center/.env
+# EnvironmentFile=/opt/packwright/.env
 
 ExecStart=/usr/local/bin/uv run python main.py
 
@@ -65,7 +65,7 @@ RestartSec=10
 
 StandardOutput=journal
 StandardError=journal
-SyslogIdentifier=build-center
+SyslogIdentifier=packwright
 
 # A single process is intentional: TaskManager's task state, the WebSocket
 # connection set, and the build semaphore all live in process memory, so a

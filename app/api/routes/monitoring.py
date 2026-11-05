@@ -125,11 +125,11 @@ def _collect_build_environment() -> dict:
     Nothing surfaced that state before: it took reading the history table to
     notice. Surfacing it is the whole point of putting it on a dashboard.
     """
-    from app.services.nuitka_worker import _BUILD_CENTER_ROOT
+    from app.services.nuitka_worker import _APP_ROOT
 
     service_version = f"{sys.version_info.major}.{sys.version_info.minor}"
     targets: list[dict] = []
-    for venv_dir in sorted(_BUILD_CENTER_ROOT.glob(".venv-py3*")):
+    for venv_dir in sorted(_APP_ROOT.glob(".venv-py3*")):
         compact = venv_dir.name.removeprefix(".venv-py")
         if not compact.isdigit() or len(compact) < 2:
             continue

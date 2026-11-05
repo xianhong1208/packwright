@@ -29,7 +29,7 @@ from app.services.nuitka_worker import (
     find_target_python,
 )
 
-from .conftest import PATCH_BUILD_CENTER_ROOT
+from .conftest import PATCH_APP_ROOT
 
 
 class TestNormalizeTopLevelEntry:
@@ -429,7 +429,7 @@ class TestFindNuitkaPython:
         venv_python = tmp_path / ".venv-py313" / "bin" / "python"
         venv_python.parent.mkdir(parents=True)
         venv_python.write_text("", encoding="utf-8")
-        mocker.patch(PATCH_BUILD_CENTER_ROOT, tmp_path)
+        mocker.patch(PATCH_APP_ROOT, tmp_path)
 
         executable, matched = find_nuitka_python("3.13")
 
@@ -441,7 +441,7 @@ class TestFindNuitkaPython:
         self, mocker: MockerFixture, tmp_path: Path
     ):
         """TC-NUI-071: find_nuitka_python — no venv for the version falls back and flags the mismatch."""
-        mocker.patch(PATCH_BUILD_CENTER_ROOT, tmp_path)
+        mocker.patch(PATCH_APP_ROOT, tmp_path)
 
         executable, matched = find_nuitka_python("3.9")
 
@@ -453,7 +453,7 @@ class TestFindNuitkaPython:
         self, mocker: MockerFixture, tmp_path: Path
     ):
         """TC-NUI-072: find_nuitka_python — fallback is still a match if the service runs that version."""
-        mocker.patch(PATCH_BUILD_CENTER_ROOT, tmp_path)
+        mocker.patch(PATCH_APP_ROOT, tmp_path)
         own_version = f"{sys.version_info.major}.{sys.version_info.minor}"
 
         executable, matched = find_nuitka_python(own_version)
@@ -477,7 +477,7 @@ class TestFindNuitkaPython:
         venv_python = tmp_path / ".venv-py39" / "bin" / "python"
         venv_python.parent.mkdir(parents=True)
         venv_python.symlink_to(tmp_path / "does" / "not" / "exist" / "python")
-        mocker.patch(PATCH_BUILD_CENTER_ROOT, tmp_path)
+        mocker.patch(PATCH_APP_ROOT, tmp_path)
 
         executable, matched = find_nuitka_python("3.9")
 
