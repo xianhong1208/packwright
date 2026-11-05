@@ -18,7 +18,7 @@ import { taskApi } from '../api/client'
 import type { TaskResponse, ProjectType } from '../api/types'
 import { triggerUrlDownload } from '../utils/download'
 import { STATUS_META, VERIFY_META, isTerminal } from '../utils/statusMeta'
-import { getErrorDetail } from '../utils/errors'
+import { getErrorDetail, isNotFound } from '../utils/errors'
 import { extractErrorLines } from '../utils/diagnose'
 import { binaryName } from '../utils/buildConfig'
 
@@ -98,13 +98,21 @@ export default function TaskDetail() {
   // plus a reconciling poll. While WS is connected we poll slowly (5s) just
   // to correct any drift; if WS drops we fall back to 1s. Either way polling
   // stops once the task reaches a terminal state.
-  const { data: task, isLoading } = useQuery({
+  const { data: task, isLoading, error } = useQuery({
     queryKey: ['task', taskId],
     queryFn: () => taskApi.get(taskId!),
     enabled: !!taskId,
+    retry: (failures, err) => !isNotFound(err) && failures < 1,
     refetchInterval: (query) =>
-      isTerminal(query.state.data?.status) ? false : wsConnected ? 5000 : 1000,
+      query.state.error || isTerminal(query.state.data?.status) ? false : wsConnected ? 5000 : 1000,
   })
+
+  // Only running and recently finished builds live in memory; after a restart or
+  // eviction the API answers 404 here. The finished build is still in the history,
+  // so send the link there instead of a dead end (or a spinner polling forever).
+  useEffect(() => {
+    if (isNotFound(error)) navigate(`/history/${taskId}`, { replace: true })
+  }, [error, taskId, navigate])
 
   // Apply live updates straight into the query cache so the UI reacts
   // instantly without re-fetching the whole task every tick.
