@@ -152,7 +152,7 @@ function AppLayout() {
           <BuildOutlined className="text-lg text-void-950" />
         </div>
         <span className="text-lg font-semibold text-white" style={{ fontFamily: 'var(--font-display)' }}>
-          Build Center
+          Packwright
         </span>
       </div>
 

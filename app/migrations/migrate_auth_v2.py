@@ -243,7 +243,7 @@ async def migrate_users(db: AsyncSession):
 async def run_migration():
     """Run the full migration."""
     print("=" * 60)
-    print("Build Center - Auth System V2 Migration")
+    print("Packwright - Auth System V2 Migration")
     print("=" * 60)
 
     # Step 1: Schema migration (create tables, add columns)

@@ -1,6 +1,6 @@
 """MCP Center single sign-on: OAuth 2.1 authorization-code + PKCE client.
 
-Build Center keeps its own accounts; this adds an optional "Sign in with MCP
+Packwright keeps its own accounts; this adds an optional "Sign in with MCP
 Center" path. The flow authenticates the user against MCP Center, then Build
 Center issues its own session. Only the subject (and email, if MCP Center
 provides one) is taken from the identity token — authorisation stays local.

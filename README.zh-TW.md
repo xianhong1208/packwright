@@ -1,6 +1,8 @@
-# Build Center
+# Packwright
 
 **全端打包平台。** 指向一個本機路徑或 Git URL,它就用 [Nuitka](https://nuitka.net/) 把 Python 編成獨立執行檔、用 npm / yarn / pnpm / bun 建置前端、把兩者打包在一起,還能把結果輸出成 Docker image `.tar.gz`——全部在一個有即時建置日誌、使用者帳號與角色權限的網頁管理台裡完成。
+
+Packwright 在 v1.0.0 以前名為 *Build Center*。存在於既有資料中的名稱保留舊拼法,不需要任何遷移:SQLite 檔 `data/build_center.db`、預設的 PostgreSQL 資料庫 `build_center`,以及煙霧測試時執行檔仍會收到的 `BUILD_CENTER_SMOKE_TEST`(與新的 `PACKWRIGHT_SMOKE_TEST` 並存)。systemd unit 改為 `deploy/packwright.service`。
 
 [English](README.md) · [快速開始](#快速開始) · [運作方式](#運作方式) · [設定](#設定) · [Git 憑證](#git-憑證) · [完整手冊](docs/manual.zh-TW.md)
 
@@ -18,8 +20,8 @@
 **環境需求:** Python 3.13+、[uv](https://docs.astral.sh/uv/)、Node.js(前端建置用),以及各引擎所需的 Nuitka 工具鏈(C 編譯器)與 Docker(Docker 輸出用)。資料庫預設用本機 SQLite 檔(免設定);PostgreSQL 為選用(設 `DATABASE_URL`)。`pigz` 選用,可加速 image 壓縮。
 
 ```bash
-git clone https://github.com/xianhong1208/Fullstack-packager.git build-center
-cd build-center
+git clone https://github.com/xianhong1208/packwright.git
+cd packwright
 uv sync                       # 後端相依
 cd frontend && npm install && npm run build && cd ..
 cp .env.example .env          # 選用;用 SQLite 完全免設定
@@ -75,7 +77,7 @@ uv run python main.py         # 先套用 migration,再於 http://0.0.0.0:5018 �
 
 ## 儲存與資料
 
-Build Center 所有狀態都寫在單一的 `data/` 目錄下。預設這些路徑是**相對於你啟動時的工作目錄**(執行 `uv run python main.py` 的位置),所以預設安裝會把資料全部放在專案內:
+Packwright 所有狀態都寫在單一的 `data/` 目錄下。預設這些路徑是**相對於你啟動時的工作目錄**(執行 `uv run python main.py` 的位置),所以預設安裝會把資料全部放在專案內:
 
 ```
 data/
@@ -91,10 +93,10 @@ data/
 **搬移儲存位置**(例如換到更大的磁碟)——在 `.env` 設定絕對路徑後重啟:
 
 ```bash
-GIT_WORKSPACE_DIR=/srv/build-center/workspace     # clone、建置、可下載的產物
-DOCKER_IMAGES_DIR=/srv/build-center/docker_images # 匯出的 image tarball
+GIT_WORKSPACE_DIR=/srv/packwright/workspace     # clone、建置、可下載的產物
+DOCKER_IMAGES_DIR=/srv/packwright/docker_images # 匯出的 image tarball
 # 資料庫也可一起搬(SQLite 檔,或改指向 PostgreSQL):
-DATABASE_URL=sqlite+aiosqlite:////srv/build-center/build_center.db
+DATABASE_URL=sqlite+aiosqlite:////srv/packwright/build_center.db
 ```
 
 把 `GIT_WORKSPACE_DIR` 和 `BOOTSTRAP_UV_CACHE_DIR` 放在同一個檔案系統,`uv` 安裝相依時才能用 hardlink 而非複製。
@@ -127,7 +129,7 @@ cd frontend && npx vitest run        # 前端單元測試
 
 ## 安全與信任模型
 
-Build Center 本質上會執行不受信任的建置指令,所以**帳號核准才是真正的安全邊界**:任何能建立任務的人都能以服務使用者的身分執行程式碼。Git URL 驗證、本機路徑限制、subprocess argv-only、token 遮罩與速率限制是縱深防禦,不是沙箱。請跑在隔離主機、前面掛 HTTPS,除非真的有代理改寫 `X-Forwarded-For`,否則 `TRUSTED_PROXY_IPS` 保持空白。
+Packwright 本質上會執行不受信任的建置指令,所以**帳號核准才是真正的安全邊界**:任何能建立任務的人都能以服務使用者的身分執行程式碼。Git URL 驗證、本機路徑限制、subprocess argv-only、token 遮罩與速率限制是縱深防禦,不是沙箱。請跑在隔離主機、前面掛 HTTPS,除非真的有代理改寫 `X-Forwarded-For`,否則 `TRUSTED_PROXY_IPS` 保持空白。
 
 ## 授權
 

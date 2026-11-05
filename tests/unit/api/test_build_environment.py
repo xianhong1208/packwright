@@ -20,7 +20,7 @@ from pytest_mock import MockerFixture
 
 from app.api.routes.monitoring import _collect_build_environment
 
-PATCH_ROOT = "app.services.nuitka_worker._BUILD_CENTER_ROOT"
+PATCH_ROOT = "app.services.nuitka_worker._APP_ROOT"
 
 
 def _make_venv(root: Path, version_compact: str, *, target: Path | None) -> Path:

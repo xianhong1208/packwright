@@ -135,7 +135,7 @@ def diagnose_build_failure(log_text: str) -> list[dict]:
             evidence = abi_match.group(0) if abi_match else so_match.group(0)
             add(
                 "目標專案的編譯 Python 版本與依賴的 .so ABI 不符",
-                "將「Python 版本」改為「自動偵測」,或確認 build_center 已建對應的 "
+                "將「Python 版本」改為「自動偵測」,或確認 Packwright 已建對應的 "
                 ".venv-pyXYZ(執行 scripts/setup_nuitka_venvs.sh)。",
                 evidence,
                 # The single most common diagnosed failure, and the fix is one
