@@ -1,8 +1,8 @@
-"""MCP Center single sign-on: OAuth 2.1 authorization-code + PKCE client.
+"""MCP Gate single sign-on: OAuth 2.1 authorization-code + PKCE client.
 
 Packwright keeps its own accounts; this adds an optional "Sign in with MCP
-Center" path. The flow authenticates the user against MCP Center, then Build
-Center issues its own session. Only the subject (and email, if MCP Center
+Gate" path. The flow authenticates the user against MCP Gate, then Packwright
+issues its own session. Only the subject (and email, if MCP Gate
 provides one) is taken from the identity token — authorisation stays local.
 """
 
@@ -29,11 +29,11 @@ class McpOAuthError(RuntimeError):
 
 def is_enabled() -> bool:
     s = get_settings()
-    return bool(s.mcp_oauth_enabled and s.mcp_center_url and s.mcp_oauth_client_id)
+    return bool(s.mcp_oauth_enabled and s.mcp_gate_url and s.mcp_oauth_client_id)
 
 
 def _issuer() -> str:
-    return get_settings().mcp_center_url.rstrip("/")
+    return get_settings().mcp_gate_url.rstrip("/")
 
 
 def generate_pkce() -> tuple[str, str]:
@@ -44,7 +44,7 @@ def generate_pkce() -> tuple[str, str]:
 
 
 def build_authorize_url(state: str, code_challenge: str) -> str:
-    """Build the MCP Center /oauth/authorize URL for the redirect."""
+    """Build the MCP Gate /oauth/authorize URL for the redirect."""
     from urllib.parse import urlencode
 
     s = get_settings()
@@ -81,7 +81,7 @@ def read_flow_state(cookie: str | None, returned_state: str) -> str:
 
 
 async def exchange_code(code: str, code_verifier: str) -> dict:
-    """Exchange the authorization code for tokens at MCP Center's token endpoint."""
+    """Exchange the authorization code for tokens at MCP Gate's token endpoint."""
     s = get_settings()
     data = {
         "grant_type": "authorization_code",
@@ -102,12 +102,12 @@ async def exchange_code(code: str, code_verifier: str) -> dict:
 def identity_from_token(access_token: str) -> dict:
     """Read the subject (and email if present) from the access token.
 
-    The token was just received directly from MCP Center's token endpoint, and its
-    signature is verified against MCP Center's JWKS; a JWKS fetch or verification
+    The token was just received directly from MCP Gate's token endpoint, and its
+    signature is verified against MCP Gate's JWKS; a JWKS fetch or verification
     failure fails the login.
     """
-    # Verify the token's RS256 signature against MCP Center's JWKS, unconditionally.
-    # The backend just reached the same MCP Center host for the token exchange, so its
+    # Verify the token's RS256 signature against MCP Gate's JWKS, unconditionally.
+    # The backend just reached the same MCP Gate host for the token exchange, so its
     # JWKS is reachable; any fetch or verification failure fails the login rather than
     # falling back to an unverified read (which would accept a forged token).
     issuer = _issuer()

@@ -3,7 +3,7 @@ Unit tests for choosing the image-export compressor.
 Source: app/services/docker_worker._compressor_argv
 
 `docker save | gzip` is single-threaded, so a multi-GB image spends minutes on
-one core of a 128-core host. pigz emits a standard gzip stream from many
+one core of a many-core host. pigz emits a standard gzip stream from many
 threads, so the output stays a plain .tar.gz that `docker load` reads unchanged.
 
 The property that matters most here is the fallback: the image is already built
@@ -74,11 +74,10 @@ class TestCompressorSelection:
     def test_tc_cmp_005_thread_count_is_tuned_but_still_capped(self):
         """TC-CMP-005: settings — parallel enough for real images, short of the whole host.
 
-        Sized from this deployment's actual artifacts: 162 recorded builds
-        averaging 2 GB with a 16 GB maximum. At measured throughput a 16 GB
+        Sized for real images of several GB. At measured throughput a 16 GB
         export takes 8.4 min with gzip, 1.2 min at 8 threads and 28 s at 32 —
-        so the jump from 8 to 32 is worth 26-41 s on the large builds, not the
-        ~1 s a small test archive implies.
+        so the jump from 8 to 32 is worth tens of seconds on large images, not
+        the ~1 s a small test archive implies.
 
         Still capped rather than every core: the host runs up to
         MAX_CONCURRENT_BUILDS Nuitka compiles, and disk write throughput

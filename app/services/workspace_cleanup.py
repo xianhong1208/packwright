@@ -259,9 +259,9 @@ async def sweep_refresh_tokens() -> dict:
 
     Token rotation issues a fresh row on every refresh and revokes the old
     one, so an open browser tab produces roughly one row per 15 minutes. That
-    is correct security behaviour with no garbage collection behind it: this
-    table reached 21,455 rows for 7 users, 91% of them already expired, with
-    the oldest dating back to the install.
+    is correct security behaviour with no garbage collection behind it: the
+    table grows for as long as the install runs, almost all of it rows that
+    expired long ago.
 
     Rows are removed once they are BOTH unusable and past the grace period.
     The grace window keeps recently revoked tokens around so the login-history

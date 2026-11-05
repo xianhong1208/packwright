@@ -665,9 +665,9 @@ async def start_build_task(task_id: str, config: BuildConfig) -> None:
                 from app.services.error_diagnosis import build_failure_report
                 logs = await task_manager.get_logs(task_id)
                 # Always persist an explanation, not only when a rule matched.
-                # Previously this was `if diags:`, so 87% of failures stored
-                # nothing and the user saw a bare red "failed" — which is how one
-                # project reached 55 retries in five weeks. The report falls
+                # Previously this was `if diags:`, so most failures stored
+                # nothing and the user saw a bare red "failed" — and with nothing
+                # to act on, people simply retried. The report falls
                 # back to naming the failed stage and the log's error lines,
                 # which is at least something to act on or forward.
                 report = build_failure_report(

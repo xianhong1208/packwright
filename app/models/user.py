@@ -37,7 +37,7 @@ class User(Base):
     security_question: Mapped[str | None] = mapped_column(Text, nullable=True)
     security_answer_hash: Mapped[str | None] = mapped_column(String(255), nullable=True)
 
-    # External identity when the account signs in through MCP Center SSO.
+    # External identity when the account signs in through MCP Gate SSO.
     oauth_provider: Mapped[str | None] = mapped_column(String(32), nullable=True)
     oauth_subject: Mapped[str | None] = mapped_column(String(255), nullable=True, index=True)
 

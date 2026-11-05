@@ -108,8 +108,8 @@ def _config_for(raw_config: dict | None) -> BuildConfig | None:
         # run something — it has to survive a schema that has moved on since.
         # This list validates every row it returns, so one unreadable record
         # used to fail the whole request: tightening frontend_output_dir made
-        # 73 of 698 rows undeserialisable and the history page went blank for
-        # everyone who had one, with a Dockerfile-injection message that named
+        # a tenth of the stored rows undeserialisable and the history page went
+        # blank for everyone who had one, with a Dockerfile-injection message that named
         # nothing the user could act on.
         logger.warning(
             "history config failed validation, listing the record without it",
@@ -851,8 +851,8 @@ async def export_history(
     # Export the full matching set, not just one page.
     # Page through the whole set rather than taking one 1000-row slice.
     #
-    # The previous hardcoded limit=1000 was already close to binding — 680 rows
-    # today, growing ~145 a month — and it fails in the worst way: the CSV looks
+    # A hardcoded limit (it was 1000) is reached by any install that keeps
+    # building, and it fails in the worst way: the CSV looks
     # complete, carries no marker, and is still called history.csv, so an audit
     # or a yearly report silently omits the oldest builds with nothing to
     # suggest anything is missing.

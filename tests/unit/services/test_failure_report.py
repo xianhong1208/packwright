@@ -2,11 +2,10 @@
 Unit tests for guaranteed failure explanations.
 Source: app/services/error_diagnosis.py
 
-The measured problem this fixes: of 174 real failures, only 22 carried a
-diagnosis. The caller persisted a result only when a rule matched, so 87% of
-the time a user saw a red "失敗" and nothing else — which is how one project
-accumulated 55 retries against 3 successes in five weeks. Nobody was ignoring
-the guidance; there wasn't any.
+The problem this fixes: only a small share of real failures carried a
+diagnosis. The caller persisted a result only when a rule matched, so most of
+the time a user saw a red "failed" and nothing else, and simply retried, again
+and again. Nobody was ignoring the guidance; there wasn't any.
 
 So the property under test is not "does the matcher work" but "is a failure
 ever left unexplained".

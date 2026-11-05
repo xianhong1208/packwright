@@ -297,7 +297,7 @@ class BuildConfig(BaseModel):
     )
     docker_api_proxy: str = Field(
         default="",
-        description="Backend API URL for nginx reverse proxy (e.g., http://build-host.example:5011)",
+        description="Backend API URL for nginx reverse proxy (e.g., http://backend:8000)",
     )
 
     # === Nginx Settings (frontend-only Docker image) ===
