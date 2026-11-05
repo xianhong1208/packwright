@@ -1,7 +1,7 @@
 import { useMemo, useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { Button, Empty, Input, Pagination, Select, Spin, Tooltip, message } from 'antd'
-import { DockerOutlined, DownloadOutlined, PlusOutlined, RedoOutlined, SearchOutlined } from '@ant-design/icons'
+import { ArrowClockwiseIcon, CubeIcon, DownloadSimpleIcon, MagnifyingGlassIcon, PlusIcon } from '../components/ui/icons'
 import { useQuery } from '@tanstack/react-query'
 import { taskApi } from '../api/client'
 import type { HistoryItem } from '../api/types'
@@ -96,14 +96,14 @@ export default function History() {
               aria-label="Builds by"
             />
           )}
-          <Button icon={<DownloadOutlined />} onClick={handleExport}>Export CSV</Button>
+          <Button icon={<DownloadSimpleIcon />} onClick={handleExport}>Export CSV</Button>
         </>}
       />
 
       <div className="flex flex-wrap items-center gap-3 mb-4">
         <Input
           allowClear
-          prefix={<SearchOutlined />}
+          prefix={<MagnifyingGlassIcon />}
           placeholder="Search by project or person"
           value={filters.query}
           onChange={(e) => update({ query: e.target.value })}
@@ -161,7 +161,7 @@ export default function History() {
           {filtering ? (
             <Button onClick={() => update(DEFAULT_FILTERS)}>Clear filters</Button>
           ) : (
-            <Button type="primary" icon={<PlusOutlined />} onClick={() => navigate('/create')}>New build</Button>
+            <Button type="primary" icon={<PlusIcon />} onClick={() => navigate('/create')}>New build</Button>
           )}
         </Empty>
       ) : (
@@ -180,7 +180,7 @@ export default function History() {
                       {type && <span className="inline-flex items-center gap-1">{type.icon}{type.label}</span>}
                       {record.config?.docker_enabled && (
                         <Tooltip title={record.config.docker_image_name || 'Docker image'}>
-                          <span className="inline-flex items-center gap-1"><DockerOutlined />Docker</span>
+                          <span className="inline-flex items-center gap-1"><CubeIcon />Docker</span>
                         </Tooltip>
                       )}
                       <span>{record.user_name}</span>
@@ -194,14 +194,14 @@ export default function History() {
                   <div className="flex gap-1.5 flex-none">
                     {record.config && (
                       <Tooltip title="Rebuild with these settings">
-                        <Button aria-label={`Rebuild ${record.project_name}`} icon={<RedoOutlined />} onClick={() => rebuild(record)} />
+                        <Button aria-label={`Rebuild ${record.project_name}`} icon={<ArrowClockwiseIcon />} onClick={() => rebuild(record)} />
                       </Tooltip>
                     )}
                     {record.status === 'completed' && (
                       <Tooltip title="Download output">
                         <Button
                           aria-label={`Download ${record.project_name}`}
-                          icon={<DownloadOutlined />}
+                          icon={<DownloadSimpleIcon />}
                           loading={downloadingId === record.task_id}
                           onClick={() => download(record)}
                         />

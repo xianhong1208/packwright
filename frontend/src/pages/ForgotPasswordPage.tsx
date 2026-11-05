@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { useNavigate, Link } from 'react-router-dom'
-import { QuestionCircleOutlined, LoadingOutlined, ArrowLeftOutlined } from '@ant-design/icons'
+import { ArrowLeftIcon, QuestionIcon, SpinnerIcon } from '../components/ui/icons'
 import AuthLayout from '../components/layout/AuthLayout'
 import { authApi } from '../api/authApi'
 
@@ -130,7 +130,7 @@ export default function ForgotPasswordPage() {
               disabled={isSubmitting}
               className="btn-cyber w-full flex items-center justify-center gap-2 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyber-300"
             >
-              {isSubmitting ? <LoadingOutlined className="animate-spin" /> : null}
+              {isSubmitting ? <SpinnerIcon /> : null}
               Continue
             </button>
           </form>
@@ -141,7 +141,7 @@ export default function ForgotPasswordPage() {
           <form onSubmit={handleAnswerSubmit} className="space-y-5">
             <div className="p-4 rounded-lg bg-void-800/50 border border-void-700">
               <div className="flex items-start gap-3">
-                <QuestionCircleOutlined className="text-cyber-400 text-lg mt-0.5" />
+                <QuestionIcon className="text-cyber-400 text-lg mt-0.5" />
                 <p className="text-[var(--ink)]">{securityQuestion}</p>
               </div>
             </div>
@@ -170,7 +170,7 @@ export default function ForgotPasswordPage() {
               disabled={isSubmitting}
               className="btn-cyber w-full flex items-center justify-center gap-2 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyber-300"
             >
-              {isSubmitting ? <LoadingOutlined className="animate-spin" /> : null}
+              {isSubmitting ? <SpinnerIcon /> : null}
               Verify answer
             </button>
           </form>
@@ -220,7 +220,7 @@ export default function ForgotPasswordPage() {
               disabled={isSubmitting}
               className="btn-cyber w-full flex items-center justify-center gap-2 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyber-300"
             >
-              {isSubmitting ? <LoadingOutlined className="animate-spin" /> : null}
+              {isSubmitting ? <SpinnerIcon /> : null}
               Reset password
             </button>
           </form>
@@ -245,7 +245,7 @@ export default function ForgotPasswordPage() {
               to="/login"
               className="inline-flex items-center gap-2 text-sm text-[var(--ink-muted)] hover:text-cyber-400 transition-colors rounded focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyber-500/60"
             >
-              <ArrowLeftOutlined />
+              <ArrowLeftIcon />
               Back to sign in
             </Link>
           </div>

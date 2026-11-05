@@ -1,18 +1,7 @@
 import { useState, useEffect } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import { Spin, Button, Tag, Tooltip, Descriptions, message, Modal } from 'antd'
-import {
-  ArrowLeftOutlined,
-  RedoOutlined,
-  DownloadOutlined,
-  CloudServerOutlined,
-  DesktopOutlined,
-  
-  DockerOutlined,
-  CopyOutlined,
-  DeleteOutlined,
-  ExclamationCircleOutlined,
-} from '@ant-design/icons'
+import { ArrowClockwiseIcon, ArrowLeftIcon, CopyIcon, CubeIcon, DesktopIcon, DownloadSimpleIcon, HardDrivesIcon, TrashIcon, WarningCircleIcon } from '../components/ui/icons'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { taskApi } from '../api/client'
 import BuildResultPanel from '../components/build/BuildResultPanel'
@@ -64,7 +53,7 @@ export default function HistoryDetail() {
     if (!record) return
     Modal.confirm({
       title: 'Delete this workspace?',
-      icon: <ExclamationCircleOutlined style={{ color: 'var(--color-alert-400)' }} />,
+      icon: <WarningCircleIcon style={{ color: 'var(--color-alert-400)' }} />,
       content: (
         <div>
           <p>
@@ -154,7 +143,7 @@ export default function HistoryDetail() {
           className="p-2 rounded-lg mt-0.5 transition-colors"
           style={{ color: 'var(--ink-muted)' }}
         >
-          <ArrowLeftOutlined className="text-lg" />
+          <ArrowLeftIcon className="text-lg" />
         </button>
 
         <span
@@ -203,7 +192,7 @@ export default function HistoryDetail() {
                 onClick={() => copyToClipboard(record.task_id)}
               >
                 #{record.task_id.slice(0, 8)}
-                <CopyOutlined />
+                <CopyIcon />
               </span>
             </Tooltip>
           </div>
@@ -213,7 +202,7 @@ export default function HistoryDetail() {
         <div className="flex items-center gap-2 flex-shrink-0">
           {config && (
             <Button
-              icon={<RedoOutlined />}
+              icon={<ArrowClockwiseIcon />}
               onClick={() =>
                 navigate('/create', {
                   state: {
@@ -230,7 +219,7 @@ export default function HistoryDetail() {
           {record.status === 'completed' && (
             <Button
               type="primary"
-              icon={<DownloadOutlined />}
+              icon={<DownloadSimpleIcon />}
               loading={downloading}
               onClick={async () => {
                 setDownloading(true)
@@ -252,7 +241,7 @@ export default function HistoryDetail() {
             record.status !== 'pending' && (
               <Button
                 danger
-                icon={<DeleteOutlined />}
+                icon={<TrashIcon />}
                 loading={deletingWorkspace}
                 onClick={handleDeleteWorkspace}
               >
@@ -353,7 +342,7 @@ export default function HistoryDetail() {
                   </Tag>
                 )}
                 {config.docker_enabled && (
-                  <Tag icon={<DockerOutlined />} color="#2496ED" style={{ fontSize: 14, padding: '2px 10px' }}>
+                  <Tag icon={<CubeIcon />} color="#2496ED" style={{ fontSize: 14, padding: '2px 10px' }}>
                     Docker
                   </Tag>
                 )}
@@ -411,7 +400,7 @@ export default function HistoryDetail() {
               {(config.project_type === 'backend_only' || config.project_type === 'fullstack') && (
                 <div className="border-t pt-3" style={{ borderColor: 'var(--seam)' }}>
                   <h4 className="text-sm font-semibold text-[var(--ink-muted)] mb-3">
-                    <CloudServerOutlined className="mr-1" /> Backend
+                    <HardDrivesIcon className="mr-1" /> Backend
                   </h4>
                   <Descriptions
                     column={2}
@@ -452,7 +441,7 @@ export default function HistoryDetail() {
               {(config.project_type === 'frontend_only' || config.project_type === 'fullstack') && (
                 <div className="border-t pt-3" style={{ borderColor: 'var(--seam)' }}>
                   <h4 className="text-xs font-medium text-matrix-500 mb-3">
-                    <DesktopOutlined className="mr-1" /> Frontend
+                    <DesktopIcon className="mr-1" /> Frontend
                   </h4>
                   <Descriptions
                     column={2}
@@ -499,7 +488,7 @@ export default function HistoryDetail() {
                     className="text-xs font-medium mb-3"
                     style={{ color: 'var(--color-cyber-500)' }}
                   >
-                    <DockerOutlined className="mr-1" /> Docker
+                    <CubeIcon className="mr-1" /> Docker
                   </h4>
                   <Descriptions
                     column={2}

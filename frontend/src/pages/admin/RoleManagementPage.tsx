@@ -1,15 +1,6 @@
 import { useState, useEffect } from 'react'
 import { Table, Tag, Button, Modal, Form, Input, Select, Checkbox, message, Empty, Tooltip } from 'antd'
-import {
-  PlusOutlined,
-  EditOutlined,
-  DeleteOutlined,
-  LoadingOutlined,
-  ReloadOutlined,
-  LockOutlined,
-  SafetyOutlined,
-  TeamOutlined,
-} from '@ant-design/icons'
+import { ArrowsClockwiseIcon, LockIcon, PencilSimpleIcon, PlusIcon, ShieldCheckIcon, SpinnerIcon, TrashIcon, UsersIcon } from '../../components/ui/icons'
 import type { ColumnsType } from 'antd/es/table'
 import { userApi } from '../../api/userApi'
 import type { Role, RoleCreate, RoleUpdate, PermissionCategory } from '../../api/types'
@@ -132,9 +123,9 @@ export default function RoleManagementPage() {
             record.is_system ? 'bg-signal-500/20' : 'bg-cyber-500/20'
           }`}>
             {record.is_system ? (
-              <LockOutlined className="text-signal-400" />
+              <LockIcon className="text-signal-400" />
             ) : (
-              <TeamOutlined className="text-cyber-400" />
+              <UsersIcon className="text-cyber-400" />
             )}
           </div>
           <div>
@@ -162,7 +153,7 @@ export default function RoleManagementPage() {
       render: (_, record) => {
         const permCodes = record.permissions.map(p => p.code)
         if (permCodes.includes('*:*')) {
-          return <Tag color="gold" icon={<SafetyOutlined />}>Full access</Tag>
+          return <Tag color="gold" icon={<ShieldCheckIcon />}>Full access</Tag>
         }
         return (
           <div className="flex flex-wrap gap-1">
@@ -206,11 +197,11 @@ export default function RoleManagementPage() {
           {canManage && (
             <>
               <Tooltip title="Edit">
-                <Button aria-label={`Edit ${record.display_name}`} icon={<EditOutlined />} onClick={() => handleEdit(record)} />
+                <Button aria-label={`Edit ${record.display_name}`} icon={<PencilSimpleIcon />} onClick={() => handleEdit(record)} />
               </Tooltip>
               {!record.is_system && (
                 <Tooltip title="Delete">
-                  <Button aria-label={`Delete ${record.display_name}`} danger icon={<DeleteOutlined />} onClick={() => handleDelete(record)} />
+                  <Button aria-label={`Delete ${record.display_name}`} danger icon={<TrashIcon />} onClick={() => handleDelete(record)} />
                 </Tooltip>
               )}
             </>
@@ -228,10 +219,10 @@ export default function RoleManagementPage() {
         actions={
           <>
             <Tooltip title="Reload">
-              <Button aria-label="Reload roles" icon={<ReloadOutlined />} onClick={loadData} />
+              <Button aria-label="Reload roles" icon={<ArrowsClockwiseIcon />} onClick={loadData} />
             </Tooltip>
             {canManage && (
-              <Button type="primary" icon={<PlusOutlined />} onClick={handleCreate}>
+              <Button type="primary" icon={<PlusIcon />} onClick={handleCreate}>
                 Add role
               </Button>
             )}
@@ -247,7 +238,7 @@ export default function RoleManagementPage() {
         rowKey="id"
         loading={{
           spinning: isLoading,
-          indicator: <LoadingOutlined className="text-cyber-400" />,
+          indicator: <SpinnerIcon className="text-cyber-400" />,
         }}
         pagination={false}
         locale={{

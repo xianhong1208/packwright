@@ -1,12 +1,7 @@
 import { useState, useEffect, type ReactNode } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import { Progress, Button, Spin, message, Steps } from 'antd'
-import {
-  ArrowLeftOutlined,
-  StopOutlined,
-  RedoOutlined,
-  DownloadOutlined,
-} from '@ant-design/icons'
+import { ArrowClockwiseIcon, ArrowLeftIcon, DownloadSimpleIcon, ProhibitIcon } from '../components/ui/icons'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import LogViewer from '../components/LogViewer'
 import BuildResultPanel from '../components/build/BuildResultPanel'
@@ -165,7 +160,7 @@ export default function TaskDetail() {
           className="p-2 rounded-lg mt-0.5 transition-colors"
           style={{ color: 'var(--ink-muted)' }}
         >
-          <ArrowLeftOutlined className="text-lg" />
+          <ArrowLeftIcon className="text-lg" />
         </button>
 
         <span
@@ -223,7 +218,7 @@ export default function TaskDetail() {
           {isActive ? (
             <Button
               danger
-              icon={<StopOutlined />}
+              icon={<ProhibitIcon />}
               onClick={() => cancelMutation.mutate(task.id)}
               loading={cancelMutation.isPending}
             >
@@ -232,7 +227,7 @@ export default function TaskDetail() {
           ) : (
             <>
               <Button
-                icon={<RedoOutlined />}
+                icon={<ArrowClockwiseIcon />}
                 onClick={() =>
                   navigate('/create', {
                     state: {
@@ -248,7 +243,7 @@ export default function TaskDetail() {
               {task.status === 'completed' && (
                 <Button
                   type="primary"
-                  icon={<DownloadOutlined />}
+                  icon={<DownloadSimpleIcon />}
                   loading={downloading}
                   onClick={async () => {
                     setDownloading(true)

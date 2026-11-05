@@ -1,19 +1,7 @@
 import { useState, useEffect } from 'react'
 import { useParams, useNavigate, Link } from 'react-router-dom'
 import { Descriptions, Tag, Table, message, Modal, Select, Tabs, Empty, Spin, Button, Popconfirm } from 'antd'
-import {
-  UserOutlined,
-  ArrowLeftOutlined,
-  CheckCircleOutlined,
-  CloseCircleOutlined,
-  CrownOutlined,
-  LoadingOutlined,
-  HistoryOutlined,
-  SafetyCertificateOutlined,
-  KeyOutlined,
-  StopOutlined,
-  CheckOutlined,
-} from '@ant-design/icons'
+import { ArrowLeftIcon, CheckCircleIcon, CheckIcon, ClockCounterClockwiseIcon, CrownIcon, KeyIcon, ProhibitIcon, SealCheckIcon, SpinnerIcon, UserIcon, XCircleIcon } from '../../components/ui/icons'
 import { userApi } from '../../api/userApi'
 import type { User, Role, LoginHistoryItem } from '../../api/types'
 import { useAuth } from '../../contexts/AuthContext'
@@ -142,11 +130,11 @@ export default function UserDetailPage() {
       key: 'success',
       render: (success: boolean) =>
         success ? (
-          <Tag color="green" icon={<CheckCircleOutlined />}>
+          <Tag color="green" icon={<CheckCircleIcon />}>
             Success
           </Tag>
         ) : (
-          <Tag color="red" icon={<CloseCircleOutlined />}>
+          <Tag color="red" icon={<XCircleIcon />}>
             Failed
           </Tag>
         ),
@@ -179,7 +167,7 @@ export default function UserDetailPage() {
   if (isLoading) {
     return (
       <div className="flex justify-center items-center h-64">
-        <Spin indicator={<LoadingOutlined className="text-cyber-400 text-3xl" />} />
+        <Spin indicator={<SpinnerIcon className="text-cyber-400 text-3xl" />} />
       </div>
     )
   }
@@ -199,7 +187,7 @@ export default function UserDetailPage() {
       key: 'details',
       label: (
         <span className="flex items-center gap-2">
-          <UserOutlined />
+          <UserIcon />
           Details
         </span>
       ),
@@ -226,7 +214,7 @@ export default function UserDetailPage() {
               </Select>
             ) : user.role ? (
               <Tag color={user.role.name === 'admin' ? 'gold' : undefined}>
-                {user.role.name === 'admin' && <CrownOutlined className="mr-1" />}
+                {user.role.name === 'admin' && <CrownIcon className="mr-1" />}
                 {user.role.display_name}
               </Tag>
             ) : (
@@ -236,14 +224,14 @@ export default function UserDetailPage() {
           <Descriptions.Item label="Status">
             <Tag
               color={user.is_active ? 'green' : 'red'}
-              icon={user.is_active ? <CheckCircleOutlined /> : <CloseCircleOutlined />}
+              icon={user.is_active ? <CheckCircleIcon /> : <XCircleIcon />}
             >
               {user.is_active ? 'Active' : 'Disabled'}
             </Tag>
           </Descriptions.Item>
           <Descriptions.Item label="Security question">
             {user.has_security_question ? (
-              <Tag color="green" icon={<CheckCircleOutlined />}>
+              <Tag color="green" icon={<CheckCircleIcon />}>
                 Set
               </Tag>
             ) : (
@@ -263,7 +251,7 @@ export default function UserDetailPage() {
       key: 'login_history',
       label: (
         <span className="flex items-center gap-2">
-          <HistoryOutlined />
+          <ClockCounterClockwiseIcon />
           Login history
         </span>
       ),
@@ -290,7 +278,7 @@ export default function UserDetailPage() {
       key: 'permissions',
       label: (
         <span className="flex items-center gap-2">
-          <SafetyCertificateOutlined />
+          <SealCheckIcon />
           Permissions
         </span>
       ),
@@ -331,7 +319,7 @@ export default function UserDetailPage() {
           className="inline-flex items-center gap-2 hover:!text-cyber-300 transition-colors mb-4"
           style={{ color: 'var(--ink-muted)' }}
         >
-          <ArrowLeftOutlined />
+          <ArrowLeftIcon />
           Back to people
         </Link>
 
@@ -341,7 +329,7 @@ export default function UserDetailPage() {
               className="w-16 h-16 rounded-full flex items-center justify-center"
               style={{ background: 'var(--color-void-700)' }}
             >
-              <UserOutlined className="text-2xl" style={{ color: 'var(--ink-muted)' }} />
+              <UserIcon className="text-2xl" style={{ color: 'var(--ink-muted)' }} />
             </div>
             <div>
               <h1 className="page-title">{user.username}</h1>
@@ -352,7 +340,7 @@ export default function UserDetailPage() {
           {/* Actions */}
           <div className="flex flex-wrap items-center gap-2">
             {hasPermission('user:reset_password') && (
-              <Button icon={<KeyOutlined />} onClick={handleResetPassword}>Set a new password</Button>
+              <Button icon={<KeyIcon />} onClick={handleResetPassword}>Set a new password</Button>
             )}
             {hasPermission('user:manage') && !isSelf && (user.is_active ? (
               <Popconfirm
@@ -362,10 +350,10 @@ export default function UserDetailPage() {
                 okButtonProps={{ danger: true }}
                 onConfirm={() => handleStatusChange(false)}
               >
-                <Button danger icon={<StopOutlined />}>Deactivate</Button>
+                <Button danger icon={<ProhibitIcon />}>Deactivate</Button>
               </Popconfirm>
             ) : (
-              <Button icon={<CheckOutlined />} onClick={() => handleStatusChange(true)}>Activate</Button>
+              <Button icon={<CheckIcon />} onClick={() => handleStatusChange(true)}>Activate</Button>
             ))}
           </div>
         </div>

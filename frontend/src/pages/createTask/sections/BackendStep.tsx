@@ -1,11 +1,5 @@
 import { Form, Input, Select, Switch, Button, Row, Col, Checkbox, Spin, Collapse } from 'antd'
-import {
-  FolderOutlined,
-  ReloadOutlined,
-  CodeOutlined,
-  SettingOutlined,
-  WarningOutlined,
-} from '@ant-design/icons'
+import { ArrowsClockwiseIcon, CodeIcon, FolderIcon, GearIcon, WarningIcon } from '../../../components/ui/icons'
 
 import { useCreateTask } from '../context'
 import { SectionHeader } from '../ui'
@@ -44,7 +38,7 @@ export default function BackendStep() {
     <>
       {hasBackend && (
         <div className="glass-card p-5 mb-4">
-          <SectionHeader icon={<CodeOutlined />} title="Backend settings" />
+          <SectionHeader icon={<CodeIcon />} title="Backend settings" />
           {/* Version mismatch is caught here rather than during the
               build. The same ABI detection already ran in preflight, but
               only after the user had filled in every step, queued, and
@@ -53,7 +47,7 @@ export default function BackendStep() {
           {pythonMismatch && (
             <div className="p-4 mb-4 rounded-lg border-l-2 border-signal-400 bg-signal-500/8">
               <div className="flex items-start gap-2">
-                <WarningOutlined style={{ color: 'var(--color-signal-400)', marginTop: 3 }} />
+                <WarningIcon style={{ color: 'var(--color-signal-400)', marginTop: 3 }} />
                 <div className="flex-1">
                   <div className="text-sm text-signal-400">
                     This project's packages were compiled with <b>Python {pythonMismatch.detected}</b>,
@@ -208,7 +202,7 @@ export default function BackendStep() {
               forceRender: true,
               label: (
                 <span className="text-sm" style={{ color: 'var(--ink-muted)' }}>
-                  <SettingOutlined className="mr-2" />Advanced: CPU parallelism, forced packages, extra directories
+                  <GearIcon className="mr-2" />Advanced: CPU parallelism, forced packages, extra directories
                 </span>
               ),
               children: (
@@ -260,7 +254,7 @@ export default function BackendStep() {
 
                   {/* ── Nuitka compile optimization & diagnostics ── */}
                   <div className="mb-1 text-sm" style={{ color: 'var(--ink-muted)' }}>
-                    <SettingOutlined className="mr-2" />Compile optimization and diagnostics
+                    <GearIcon className="mr-2" />Compile optimization and diagnostics
                   </div>
                   <div className="text-xs mb-3" style={{ color: 'var(--ink-faint)', lineHeight: 1.6 }}>
                     You can leave all three at their defaults. Reach for them to shrink the binary, or when the built binary can't find a file at runtime.
@@ -315,7 +309,7 @@ export default function BackendStep() {
                   <div className="mt-2">
                     <div className="flex items-center justify-between mb-3">
                       <label className="text-sm" style={{ color: 'var(--ink-muted)' }}>
-                        <FolderOutlined className="mr-2" />Source code to bundle (Python)
+                        <FolderIcon className="mr-2" />Source code to bundle (Python)
                       </label>
                       {directories.length > 0 && (
                         <div className="flex items-center gap-2">
@@ -333,7 +327,7 @@ export default function BackendStep() {
                             style={{ color: 'var(--ink-muted)' }}
                             title="Refresh"
                           >
-                            <ReloadOutlined />
+                            <ArrowsClockwiseIcon />
                           </button>
                         </div>
                       )}
@@ -379,7 +373,7 @@ export default function BackendStep() {
                   <div className="mt-4">
                     <div className="flex items-center justify-between mb-3">
                       <label className="text-sm" style={{ color: 'var(--ink-muted)' }}>
-                        <FolderOutlined className="mr-2" />Data directories (copied as-is next to the binary)
+                        <FolderIcon className="mr-2" />Data directories (copied as-is next to the binary)
                       </label>
                     </div>
                     <div className="text-xs mb-2" style={{ color: 'var(--ink-faint)', lineHeight: 1.6 }}>

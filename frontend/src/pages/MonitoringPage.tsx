@@ -1,7 +1,7 @@
 import { useQuery } from '@tanstack/react-query'
 import { useState } from 'react'
 import { Spin, Button, Tooltip } from 'antd'
-import { ReloadOutlined, ExclamationCircleOutlined, ArrowUpOutlined } from '@ant-design/icons'
+import { ArrowUpIcon, ArrowsClockwiseIcon, WarningCircleIcon } from '../components/ui/icons'
 import api from '../api/client'
 import { getErrorDetail } from '../utils/errors'
 import type { SystemStats } from '../api/types'
@@ -75,10 +75,10 @@ export default function MonitoringPage() {
   if (isError && !stats) {
     return (
       <div className="glass-card flex flex-col items-center justify-center gap-3 py-16 px-4 text-center">
-        <ExclamationCircleOutlined style={{ fontSize: 36, color: 'var(--color-alert-400)' }} aria-hidden="true" />
+        <WarningCircleIcon style={{ fontSize: 36, color: 'var(--color-alert-400)' }} aria-hidden="true" />
         <div className="font-semibold text-alert-400">Could not read the machine's load</div>
         <div className="max-w-md" style={{ color: 'var(--ink-muted)' }}>{getErrorDetail(error)}</div>
-        <Button icon={<ReloadOutlined />} onClick={() => refetch()}>Try again</Button>
+        <Button icon={<ArrowsClockwiseIcon />} onClick={() => refetch()}>Try again</Button>
       </div>
     )
   }
@@ -104,7 +104,7 @@ export default function MonitoringPage() {
         <Tile label="Disk" value={formatBytes(stats.disk.used)} of={`of ${formatBytes(stats.disk.total)}, ${formatBytes(stats.disk.free)} free`} pct={stats.disk.percent} />
         <Tile label="Network" value={`${formatBytes(samples.rate.recv)}/s`} of="received now">
           <div className="flex flex-col gap-1 mt-3 text-sm" style={{ color: 'var(--ink-muted)' }}>
-            <span className="inline-flex items-center gap-2"><ArrowUpOutlined />{formatBytes(samples.rate.sent)}/s sent now</span>
+            <span className="inline-flex items-center gap-2"><ArrowUpIcon />{formatBytes(samples.rate.sent)}/s sent now</span>
             <span>{formatBytes(stats.network.bytes_sent)} sent, {formatBytes(stats.network.bytes_recv)} received since boot</span>
           </div>
         </Tile>

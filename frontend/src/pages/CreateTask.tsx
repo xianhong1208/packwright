@@ -1,5 +1,5 @@
 import { Form, Button, Tour, type TourProps } from 'antd'
-import { RocketOutlined, ArrowLeftOutlined, ArrowRightOutlined, CheckOutlined } from '@ant-design/icons'
+import { ArrowLeftIcon, ArrowRightIcon, CheckIcon, RocketLaunchIcon } from '../components/ui/icons'
 import { useCreateTaskModel } from './createTask/useCreateTaskModel'
 import { CreateTaskContext } from './createTask/context'
 import BasicsStep from './createTask/sections/BasicsStep'
@@ -131,7 +131,7 @@ export default function CreateTask() {
                             color: active ? 'var(--color-void-950)' : done ? 'var(--color-matrix-400)' : 'var(--ink-faint)',
                           }}
                         >
-                          {done ? <CheckOutlined /> : i + 1}
+                          {done ? <CheckIcon /> : i + 1}
                         </span>
                         <span className="min-w-0">
                           <span
@@ -287,7 +287,7 @@ export default function CreateTask() {
                   <Button
                     htmlType="button"
                     size="large"
-                    icon={<ArrowLeftOutlined />}
+                    icon={<ArrowLeftIcon />}
                     onClick={goBack}
                     style={{ height: 44 }}
                   >
@@ -303,7 +303,7 @@ export default function CreateTask() {
                     className="btn-cyber"
                     style={{ height: 44, minWidth: 148 }}
                   >
-                    Next <ArrowRightOutlined />
+                    Next <ArrowRightIcon />
                   </Button>
                 ) : (
                   <Button
@@ -312,7 +312,7 @@ export default function CreateTask() {
                     loading={createMutation.isPending}
                     disabled={createMutation.isPending}
                     size="large"
-                    icon={<RocketOutlined />}
+                    icon={<RocketLaunchIcon />}
                     className="btn-cyber"
                     style={{ height: 44, minWidth: 164 }}
                     onClick={handleManualSubmit}

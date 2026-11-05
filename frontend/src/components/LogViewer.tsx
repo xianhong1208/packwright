@@ -1,11 +1,6 @@
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Button, Card, Empty, Input, Tooltip, message } from 'antd'
-import {
-  CopyOutlined,
-  DownloadOutlined,
-  VerticalAlignBottomOutlined,
-  PauseOutlined,
-} from '@ant-design/icons'
+import { ArrowLineDownIcon, CopyIcon, DownloadSimpleIcon, PauseIcon } from './ui/icons'
 
 interface LogViewerProps {
   logs: string[]
@@ -146,7 +141,7 @@ export default function LogViewer({
               size="small"
               type={paused ? 'default' : 'primary'}
               aria-label={paused ? 'Resume auto-scroll' : 'Pause auto-scroll'}
-              icon={paused ? <VerticalAlignBottomOutlined /> : <PauseOutlined />}
+              icon={paused ? <ArrowLineDownIcon /> : <PauseIcon />}
               onClick={() => (paused ? scrollToBottom() : setPaused(true))}
             />
           </Tooltip>
@@ -154,7 +149,7 @@ export default function LogViewer({
             <Button
               size="small"
               aria-label="Copy all logs"
-              icon={<CopyOutlined />}
+              icon={<CopyIcon />}
               onClick={handleCopy}
             />
           </Tooltip>
@@ -162,7 +157,7 @@ export default function LogViewer({
             <Button
               size="small"
               aria-label="Download log file"
-              icon={<DownloadOutlined />}
+              icon={<DownloadSimpleIcon />}
               onClick={handleDownload}
             />
           </Tooltip>

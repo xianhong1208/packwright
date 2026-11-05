@@ -1,5 +1,5 @@
 import type { ReactNode } from 'react'
-import { AppstoreOutlined, CloudServerOutlined, DesktopOutlined } from '@ant-design/icons'
+import { DesktopIcon, HardDrivesIcon, SquaresFourIcon } from '../components/ui/icons'
 import type { ProjectType } from '../api/types'
 
 /**
@@ -12,7 +12,7 @@ export const PROJECT_TYPE_META: Record<ProjectType, { label: string; icon: React
   // Neutral on purpose: colour is kept for status (running, passed, failed),
   // and a type label that competes with it only adds noise. The icon tells
   // the types apart.
-  backend_only: { label: 'Backend', icon: <CloudServerOutlined />, tag: 'default', text: 'var(--ink-muted)' },
-  frontend_only: { label: 'Frontend', icon: <DesktopOutlined />, tag: 'default', text: 'var(--ink-muted)' },
-  fullstack: { label: 'Full stack', icon: <AppstoreOutlined />, tag: 'default', text: 'var(--ink-muted)' },
+  backend_only: { label: 'Backend', icon: <HardDrivesIcon />, tag: 'default', text: 'var(--ink-muted)' },
+  frontend_only: { label: 'Frontend', icon: <DesktopIcon />, tag: 'default', text: 'var(--ink-muted)' },
+  fullstack: { label: 'Full stack', icon: <SquaresFourIcon />, tag: 'default', text: 'var(--ink-muted)' },
 }
