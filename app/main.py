@@ -76,6 +76,10 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
         _n = await task_manager.fail_orphaned_tasks(_db)
         if _n:
             logger.info("Reconciled %d orphaned task(s) left by a previous run → failed", _n)
+    # Put back project files that a build interrupted by that crash left changed
+    # (entry-point loader, frontend .env, .dockerignore). Before any build can run.
+    from app.services.source_guard import recover_interrupted
+    await asyncio.to_thread(recover_interrupted)
     # Background task: periodic workspace cleanup (git mode only).
     # Safe to start unconditionally — the loop itself honors
     # settings.workspace_cleanup_enabled and no-ops if disabled.
