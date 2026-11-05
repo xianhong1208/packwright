@@ -110,3 +110,11 @@ class TestSsoHandoff:
         assert "access_token" not in location and "refresh_token" not in location
         cookie = r.headers.get("set-cookie", "")
         assert "mcp_sso_handoff=" in cookie and "HttpOnly" in cookie
+
+
+@pytest.mark.integration
+def test_tc_int_005_health_reports_the_version(client):
+    """TC-INT-005: /health carries the server version (the console shows it)."""
+    from app.version import __version__
+
+    assert client.get("/health").json() == {"status": "healthy", "version": __version__}

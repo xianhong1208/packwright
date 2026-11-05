@@ -8,6 +8,8 @@
   },
   "scripts": {
     "dev": "vite",
+    "sync-version": "node scripts/sync-version.mjs",
+    "prebuild": "npm run sync-version",
     "build": "tsc -b && vite build",
     "lint": "eslint .",
     "preview": "vite preview",
