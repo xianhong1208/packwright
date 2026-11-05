@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest'
 import { AxiosError } from 'axios'
-import { getErrorDetail } from './errors'
+import { getErrorDetail, isNotFound } from './errors'
 
 /**
  * Every error toast in the app goes through here, so what it drops is what the
@@ -51,5 +51,16 @@ describe('getErrorDetail', () => {
 
   it('has a default fallback so a call site cannot produce an empty message', () => {
     expect(getErrorDetail(null)).toBeTruthy()
+  })
+})
+
+describe('isNotFound', () => {
+  it('is true only for an HTTP 404 response', () => {
+    const withStatus = (status: number) =>
+      new AxiosError('x', 'ERR', undefined, undefined, { status, data: {} } as never)
+    expect(isNotFound(withStatus(404))).toBe(true)
+    expect(isNotFound(withStatus(403))).toBe(false)
+    expect(isNotFound(new AxiosError('network down'))).toBe(false)
+    expect(isNotFound(new Error('404'))).toBe(false)
   })
 })

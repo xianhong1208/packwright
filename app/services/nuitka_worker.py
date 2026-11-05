@@ -912,7 +912,7 @@ async def run_nuitka_build(task_id: str, config: BuildConfig, db: AsyncSession) 
     """
     await task_manager.append_log(
         task_id,
-        f"Nuitka Build | Output: {config.output_name} | Python: {config.python_version}",
+        f"Nuitka Build | Output: {config.output_name or Path(config.entry_point).stem} | Python: {config.python_version}",
     )
 
     process = None

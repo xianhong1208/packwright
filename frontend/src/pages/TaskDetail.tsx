@@ -18,8 +18,9 @@ import { taskApi } from '../api/client'
 import type { TaskResponse, ProjectType } from '../api/types'
 import { triggerUrlDownload } from '../utils/download'
 import { STATUS_META, VERIFY_META, isTerminal } from '../utils/statusMeta'
-import { getErrorDetail } from '../utils/errors'
+import { getErrorDetail, isNotFound } from '../utils/errors'
 import { extractErrorLines } from '../utils/diagnose'
+import { binaryName } from '../utils/buildConfig'
 
 // ── Build-stage stepper (set by nuitka_worker: preflight→compile→bundle→verify→done) ──
 const STAGE_ORDER = ['queued', 'preflight', 'compile', 'bundle', 'verify', 'done'] as const
@@ -97,13 +98,21 @@ export default function TaskDetail() {
   // plus a reconciling poll. While WS is connected we poll slowly (5s) just
   // to correct any drift; if WS drops we fall back to 1s. Either way polling
   // stops once the task reaches a terminal state.
-  const { data: task, isLoading } = useQuery({
+  const { data: task, isLoading, error } = useQuery({
     queryKey: ['task', taskId],
     queryFn: () => taskApi.get(taskId!),
     enabled: !!taskId,
+    retry: (failures, err) => !isNotFound(err) && failures < 1,
     refetchInterval: (query) =>
-      isTerminal(query.state.data?.status) ? false : wsConnected ? 5000 : 1000,
+      query.state.error || isTerminal(query.state.data?.status) ? false : wsConnected ? 5000 : 1000,
   })
+
+  // Only running and recently finished builds live in memory; after a restart or
+  // eviction the API answers 404 here. The finished build is still in the history,
+  // so send the link there instead of a dead end (or a spinner polling forever).
+  useEffect(() => {
+    if (isNotFound(error)) navigate(`/history/${taskId}`, { replace: true })
+  }, [error, taskId, navigate])
 
   // Apply live updates straight into the query cache so the UI reacts
   // instantly without re-fetching the whole task every tick.
@@ -407,7 +416,7 @@ export default function TaskDetail() {
       )}
 
       {/* Build result panel — verification / artifact / preflight */}
-      {result && (
+      {result && (result.verify || result.artifact || result.preflight?.length || result.report_file) && (
         <div className="glass-card p-5 mb-6">
           <div className="flex items-center justify-between mb-4">
             <h3 className="text-base font-medium" style={{ color: 'var(--ink)' }}>
@@ -462,7 +471,7 @@ export default function TaskDetail() {
               {result.artifact.sha256 && (
                 <div className="rounded-lg p-3 col-span-2 bg-void-950">
                   <div className="text-xs mb-1" style={{ color: 'var(--ink-faint)' }}>
-                    SHA-256 (main binary)
+                    SHA-256
                   </div>
                   <Tooltip title="Click to copy the full hash">
                     <code
@@ -569,7 +578,7 @@ export default function TaskDetail() {
                     {task.config.entry_point}
                   </DetailRow>
                   <DetailRow label="Binary name" mono>
-                    {task.config.output_name}
+                    {binaryName(task.config)}
                   </DetailRow>
                   <DetailRow label="One-file binary">
                     {task.config.onefile ? 'Yes' : 'No'}
