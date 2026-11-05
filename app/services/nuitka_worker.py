@@ -346,6 +346,26 @@ def get_valid_std_libs() -> tuple[list[str], set[str]]:
     return valid_libs, force_packages
 
 
+def _path_present(path: Path, *, accept_dangling: bool = False) -> bool:
+    """``Path.exists()`` that answers instead of raising.
+
+    On Python 3.13 ``exists()`` raises PermissionError — rather than returning
+    False — when a symlink's target sits in a directory this account cannot enter.
+    That is the normal case for a venv created by root with uv (its python links
+    into /root/.local/share/uv/...) when the service runs as another user, and it
+    used to crash the build's preflight.
+
+    ``accept_dangling`` counts a symlink as present without looking at its target
+    (lstat only), for callers that need the path but not a runnable file.
+    """
+    try:
+        if accept_dangling and path.is_symlink():
+            return True
+        return path.exists()
+    except OSError:
+        return False
+
+
 def find_nuitka_python(version: str) -> tuple[str, bool]:
     """Return (python_executable, version_matched) for running Nuitka.
 
@@ -358,8 +378,9 @@ def find_nuitka_python(version: str) -> tuple[str, bool]:
     compact = version.replace(".", "")
     candidate = _APP_ROOT / f".venv-py{compact}" / "bin" / "python"
     # exists() follows symlinks — a venv cloned from another machine has a
-    # dangling python symlink and is correctly rejected here.
-    if candidate.exists():
+    # dangling python symlink and is correctly rejected here — as is one whose
+    # target this account cannot reach, since Nuitka could not run it either.
+    if _path_present(candidate):
         return str(candidate), True
     service_version = f"{sys.version_info.major}.{sys.version_info.minor}"
     return sys.executable, service_version == version
@@ -507,9 +528,9 @@ def find_target_python(version: str, project_path: Path) -> str | None:
         project_path / "venv" / "Scripts" / "python.exe",
     ]
     for venv_python in venv_candidates:
-        # Use is_symlink() as fallback — exists() returns False when
-        # the symlink target is inaccessible (e.g., uv links to /root/.local/...)
-        if venv_python.exists() or venv_python.is_symlink():
+        # A dangling or unreachable link still identifies the project's
+        # interpreter (uv links to /root/.local/...): only the path is needed.
+        if _path_present(venv_python, accept_dangling=True):
             return str(venv_python)
     return None
 

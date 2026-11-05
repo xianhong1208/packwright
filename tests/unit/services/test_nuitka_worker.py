@@ -484,6 +484,24 @@ class TestFindNuitkaPython:
         assert executable == sys.executable
         assert matched is False
 
+    @pytest.mark.unit
+    def test_tc_nui_074_unreachable_venv_falls_back_instead_of_raising(
+        self, mocker: MockerFixture, tmp_path: Path
+    ):
+        """TC-NUI-074: find_nuitka_python — a venv whose python this account cannot reach
+        falls back. On Python 3.13 Path.exists() raises PermissionError for a link
+        into a directory it cannot enter (simulated: tests run as root here)."""
+        venv_python = tmp_path / ".venv-py39" / "bin" / "python"
+        venv_python.parent.mkdir(parents=True)
+        venv_python.write_text("")
+        mocker.patch(PATCH_APP_ROOT, tmp_path)
+        mocker.patch.object(Path, "exists", side_effect=PermissionError(13, "denied"))
+
+        executable, matched = find_nuitka_python("3.9")
+
+        assert executable == sys.executable
+        assert matched is False
+
 
 class TestFindTargetPython:
     """Tests for find_target_python — locates the TARGET project's interpreter."""
@@ -515,6 +533,21 @@ class TestFindTargetPython:
         (bin_dir / "python").symlink_to("/root/.local/share/uv/python/nonexistent")
 
         assert find_target_python("3.13", tmp_path) == str(bin_dir / "python")
+
+    @pytest.mark.unit
+    def test_tc_nui_083_unreachable_link_target_does_not_raise(
+        self, mocker: MockerFixture, tmp_path: Path
+    ):
+        """TC-NUI-083: find_target_python — a link into a directory this account cannot
+        enter (root's uv store, service running as another user) is still found,
+        and a project with no venv answers None rather than raising."""
+        bin_dir = tmp_path / ".venv" / "bin"
+        bin_dir.mkdir(parents=True)
+        (bin_dir / "python").symlink_to("/root/.local/share/uv/python/cpython/bin/python3")
+        mocker.patch.object(Path, "exists", side_effect=PermissionError(13, "denied"))
+
+        assert find_target_python("3.13", tmp_path) == str(bin_dir / "python")
+        assert find_target_python("3.13", tmp_path / "elsewhere") is None
 
 
 class TestDetectLazyPackages:
