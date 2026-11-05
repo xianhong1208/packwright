@@ -69,6 +69,9 @@ follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this proje
   terminal shows it (only the final frame of a `\r`-redrawn line), Nuitka no longer runs with the
   obsolete `--show-progress`, its progress bars still drive the progress indicator, and a
   multi-byte character split across two reads is no longer mangled.
+- Frontend builds showed no duration and no artifact on their detail page. Every build now
+  records its wall time, a frontend build records its output's size and file count, and a blank
+  binary name shows the name derived from the entry point instead of an empty row.
 
 ## [1.0.0] — 2026-09-10
 

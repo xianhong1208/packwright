@@ -20,6 +20,7 @@ import { triggerUrlDownload } from '../utils/download'
 import { STATUS_META, VERIFY_META, isTerminal } from '../utils/statusMeta'
 import { getErrorDetail } from '../utils/errors'
 import { extractErrorLines } from '../utils/diagnose'
+import { binaryName } from '../utils/buildConfig'
 
 // ── Build-stage stepper (set by nuitka_worker: preflight→compile→bundle→verify→done) ──
 const STAGE_ORDER = ['queued', 'preflight', 'compile', 'bundle', 'verify', 'done'] as const
@@ -407,7 +408,7 @@ export default function TaskDetail() {
       )}
 
       {/* Build result panel — verification / artifact / preflight */}
-      {result && (
+      {result && (result.verify || result.artifact || result.preflight?.length || result.report_file) && (
         <div className="glass-card p-5 mb-6">
           <div className="flex items-center justify-between mb-4">
             <h3 className="text-base font-medium" style={{ color: 'var(--ink)' }}>
@@ -462,7 +463,7 @@ export default function TaskDetail() {
               {result.artifact.sha256 && (
                 <div className="rounded-lg p-3 col-span-2 bg-void-950">
                   <div className="text-xs mb-1" style={{ color: 'var(--ink-faint)' }}>
-                    SHA-256 (main binary)
+                    SHA-256
                   </div>
                   <Tooltip title="Click to copy the full hash">
                     <code
@@ -569,7 +570,7 @@ export default function TaskDetail() {
                     {task.config.entry_point}
                   </DetailRow>
                   <DetailRow label="Binary name" mono>
-                    {task.config.output_name}
+                    {binaryName(task.config)}
                   </DetailRow>
                   <DetailRow label="One-file binary">
                     {task.config.onefile ? 'Yes' : 'No'}

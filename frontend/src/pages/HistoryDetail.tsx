@@ -21,6 +21,7 @@ import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { taskApi } from '../api/client'
 import type { ProjectType } from '../api/types'
 import { triggerUrlDownload } from '../utils/download'
+import { binaryName } from '../utils/buildConfig'
 import LogViewer from '../components/LogViewer'
 import { STATUS_META, VERIFY_META } from '../utils/statusMeta'
 import { extractErrorLines } from '../utils/diagnose'
@@ -620,11 +621,9 @@ export default function HistoryDetail() {
                     <Descriptions.Item label="Entry point">
                       <code style={{ fontSize: 12 }}>{config.entry_point}</code>
                     </Descriptions.Item>
-                    {config.output_name && (
-                      <Descriptions.Item label="Binary name">
-                        <code style={{ fontSize: 12 }}>{config.output_name}</code>
-                      </Descriptions.Item>
-                    )}
+                    <Descriptions.Item label="Binary name">
+                      <code style={{ fontSize: 12 }}>{binaryName(config)}</code>
+                    </Descriptions.Item>
                     <Descriptions.Item label="CPU jobs">
                       {config.nuitka_jobs > 0 ? `${config.nuitka_jobs} cores` : 'Auto'}
                     </Descriptions.Item>
