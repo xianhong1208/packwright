@@ -1,5 +1,6 @@
 """Local worker service for running Nuitka builds directly on the host."""
 
+import ast
 import asyncio
 import hashlib
 import importlib.util
@@ -21,6 +22,7 @@ from app.services.paths import safe_join
 from app.config import get_settings
 from app.schemas.task import BuildConfig, PackMode
 from app.services.task_manager import task_manager
+from app.services.terminal_output import TerminalLineBuffer
 
 settings = get_settings()
 logger = logging.getLogger(__name__)
@@ -37,6 +39,49 @@ _APP_ROOT = Path(__file__).resolve().parents[2]
 # unguarded. Two builds of the same local path destroyed each other's backups.
 # Do not reintroduce a second lock here; one owner for the whole
 # prepare -> build -> restore window is the point.
+
+# Nuitka's in-place progress bars ("PASS 1:  34% 102/296 [...]") mapped onto the
+# task's 0-100 progress: (label, start, span, status message).
+_NUITKA_BARS: tuple[tuple[str, float, float, str], ...] = (
+    ("pass 1", 10, 10, "Analyzing Python..."),
+    ("pass 2", 20, 20, "Optimizing..."),
+    ("backend c", 50, 45, "Compiling C code..."),
+)
+_BAR_RE = re.compile(r"^\s*([A-Za-z][\w .]*?):\s+(\d{1,3})%")
+
+
+def parse_nuitka_progress(text: str, current: float, status_msg: str = "") -> tuple[float, str]:
+    """Advance the task's progress from one line (or progress-bar frame) of Nuitka output.
+
+    Progress only ever moves forward. Returns ``(progress, status_msg)``; the status
+    is left unchanged when the text says nothing about the build phase.
+    """
+    lower = text.lower()
+    bar = _BAR_RE.match(lower)
+    if bar:
+        for label, start, span, message in _NUITKA_BARS:
+            if bar.group(1) == label:
+                percent = min(int(bar.group(2)), 100)
+                return max(current, start + span * percent / 100), f"{message} {percent}%"
+
+    if "starting python compilation" in lower:
+        return max(current, 10), "Starting compilation..."
+    if "completed python level" in lower:
+        return max(current, 40), "Python compiled"
+    if "generating source code" in lower:
+        return max(current, 45), "Generating C code..."
+    if "running c compilation" in lower or "running scons" in lower:
+        return max(current, 50), "Compiling C code..."
+    if "linking" in lower:
+        return max(current, 95), "Linking..."
+    if "onefile" in lower and "creating" in lower:
+        return max(current, 97), "Creating executable..."
+    if "successfully created" in lower:
+        return 100.0, "Complete!"
+    if "error" in lower and "nuitka" in lower:
+        return current, "Error occurred"
+    return current, status_msg
+
 
 # Known packages that use lazy/dynamic imports and need --include-package
 # Maps: package install name -> list of Nuitka --include-package values
@@ -126,19 +171,51 @@ def detect_lazy_packages(project_path: Path) -> list[str]:
     return sorted(set(include_packages))
 
 
-# Runtime injection code for libs loading
-INJECT_CODE = """import sys
-import os
-# ==================== [LIBS LOADER] ====================
-base_dir = os.path.dirname(os.path.abspath(sys.argv[0]))
-libs_dir = os.path.join(base_dir, "libs")
-if os.path.exists(libs_dir):
-    sys.path.insert(0, libs_dir)
-    print(f"使用打包後啟動(已掛載外部依賴庫): {libs_dir}")
-else:
-    print(f"使用開發環境啟動")
+# Runtime code injected into the entry point so an External-mode binary finds the
+# libs/ directory shipped next to it. It runs inside the user's program, so it must
+# stay invisible: no output (it would corrupt a CLI's piped stdout) and no names left
+# behind in the user's __main__ namespace.
+INJECT_CODE = """# ==================== [LIBS LOADER] ====================
+import os as _pw_os, sys as _pw_sys
+_pw_libs = _pw_os.path.join(_pw_os.path.dirname(_pw_os.path.abspath(_pw_sys.argv[0])), "libs")
+if _pw_os.path.isdir(_pw_libs):
+    _pw_sys.path.insert(0, _pw_libs)
+del _pw_os, _pw_sys, _pw_libs
 # =======================================================
 """
+
+
+def inject_libs_loader(source: str) -> str:
+    """Insert INJECT_CODE into an entry point's source, after its module docstring
+    and ``from __future__`` imports.
+
+    Python requires ``from __future__`` imports to come first (only the docstring
+    may precede them), so code prepended at line 1 turns every entry point that
+    uses ``from __future__ import annotations`` into a SyntaxError and the build
+    fails. Source that does not parse is prepended to unchanged: Nuitka reports
+    the user's own syntax error either way.
+    """
+    try:
+        body = ast.parse(source).body
+    except SyntaxError:
+        return INJECT_CODE + source
+    end_line = 0
+    for i, node in enumerate(body):
+        is_docstring = (
+            i == 0 and isinstance(node, ast.Expr)
+            and isinstance(node.value, ast.Constant) and isinstance(node.value.value, str)
+        )
+        if is_docstring or (isinstance(node, ast.ImportFrom) and node.module == "__future__"):
+            end_line = node.end_lineno or node.lineno
+        else:
+            break
+    if not end_line:
+        return INJECT_CODE + source
+    lines = source.splitlines(keepends=True)
+    head = "".join(lines[:end_line])
+    if not head.endswith("\n"):
+        head += "\n"
+    return head + INJECT_CODE + "".join(lines[end_line:])
 
 
 _MODULE_NAME_RE = re.compile(r"[A-Za-z_][A-Za-z0-9_]*(\.[A-Za-z_][A-Za-z0-9_]*)*")
@@ -1011,7 +1088,7 @@ async def run_nuitka_build(task_id: str, config: BuildConfig, db: AsyncSession) 
             if "[LIBS LOADER]" not in original_content:
                 await task_manager.append_log(task_id, "Injecting libs loader into entry point...")
                 shutil.copy2(entry_point, backup_file)
-                injected_content = INJECT_CODE + original_content
+                injected_content = inject_libs_loader(original_content)
                 entry_point.write_text(injected_content, encoding="utf-8")
             else:
                 await task_manager.append_log(task_id, "Libs loader already present, skipping injection")
@@ -1032,7 +1109,6 @@ async def run_nuitka_build(task_id: str, config: BuildConfig, db: AsyncSession) 
             f"--output-filename={output_name}",
             f"--output-dir={output_dir}",
             "--remove-output",
-            "--show-progress",  # Show compilation progress
             # Never block on an interactive y/n prompt: Nuitka may want to
             # download ccache/gcc/dependency-walker, and we run it on a PTY,
             # so without this the build would hang waiting for stdin.
@@ -1265,95 +1341,45 @@ async def run_nuitka_build(task_id: str, config: BuildConfig, db: AsyncSession) 
         # blocked thread behind on every 0.5s timeout during quiet compile
         # phases, eventually starving the process-wide default executor).
         os.set_blocking(master_fd, False)
-        buffer = ""
+        terminal = TerminalLineBuffer()
 
-        def read_pty():
+        def read_pty() -> bytes:
             try:
-                return os.read(master_fd, 65536).decode("utf-8", errors="replace")
-            except (BlockingIOError, InterruptedError):
-                return ""
-            except OSError:
-                return ""
+                return os.read(master_fd, 65536)
+            except OSError:  # incl. BlockingIOError: nothing to read right now
+                return b""
+
+        async def consume(lines: list[str], frame: str | None) -> None:
+            nonlocal current_progress
+            status_msg = ""
+            for text in lines:
+                await task_manager.append_log(task_id, text)
+                current_progress, status_msg = parse_nuitka_progress(text, current_progress, status_msg)
+            if frame:  # an in-place progress bar: drives progress, never logged
+                current_progress, status_msg = parse_nuitka_progress(frame, current_progress, status_msg)
+            if not lines and not frame:
+                return
+            if status_msg:
+                await task_manager.update_task(task_id, "status_msg", status_msg)
+            current_progress = max(current_progress, 5.0)
+            await task_manager.update_task(
+                task_id,
+                "progress",
+                min(int(current_progress), 99 if current_progress < 100 else 100),
+            )
 
         while True:
-            # Check if process has finished
             if process.returncode is not None:
-                # Read any remaining output
-                while True:
-                    data = read_pty()
-                    if not data:
-                        break
-                    buffer += data
+                while data := read_pty():
+                    await consume(*terminal.feed(data))
+                await consume(terminal.flush(), None)
                 break
 
             data = read_pty()
             if data:
-                buffer += data
+                await consume(*terminal.feed(data))
             else:
                 await asyncio.sleep(0.1)
-
-            # Process complete lines
-            while "\n" in buffer:
-                line, buffer = buffer.split("\n", 1)
-                clean_line = re.sub(r"\x1b\[[0-9;]*[a-zA-Z]", "", line).rstrip()
-                if not clean_line:
-                    continue
-
-                await task_manager.append_log(task_id, clean_line)
-
-                # Parse progress from Nuitka output
-                status_msg = ""
-                line_lower = clean_line.lower()
-
-                # Parse actual percentage from Nuitka progress output (e.g., "Scons: 50%")
-                percent_match = re.search(r"(\d+)%", clean_line)
-                if percent_match:
-                    parsed_percent = int(percent_match.group(1))
-                    # Map Nuitka's scons percentage (0-100) to our 50-95 range
-                    if "scons" in line_lower:
-                        current_progress = max(current_progress, 50 + parsed_percent * 0.45)
-                        status_msg = f"Compiling C code... {parsed_percent}%"
-
-                if "starting python compilation" in line_lower:
-                    current_progress = max(current_progress, 10)
-                    status_msg = "Starting compilation..."
-                elif "completed python level" in line_lower or "analysing" in line_lower:
-                    current_progress = max(current_progress, 20)
-                    status_msg = "Analyzing Python..."
-                elif "optimizing" in line_lower:
-                    current_progress = max(current_progress, 30)
-                    status_msg = "Optimizing..."
-                elif "generating source code" in line_lower or "generating c" in line_lower:
-                    current_progress = max(current_progress, 40)
-                    status_msg = "Generating C code..."
-                elif "running scons" in line_lower or "backend c" in line_lower:
-                    current_progress = max(current_progress, 50)
-                    status_msg = "Compiling C code..."
-                elif "linking" in line_lower:
-                    current_progress = max(current_progress, 95)
-                    status_msg = "Linking..."
-                elif "onefile" in line_lower and "creating" in line_lower:
-                    current_progress = max(current_progress, 97)
-                    status_msg = "Creating executable..."
-                elif "successfully created" in line_lower:
-                    current_progress = 100
-                    status_msg = "Complete!"
-                elif "error" in line_lower and "nuitka" in line_lower:
-                    status_msg = "Error occurred"
-
-                # Update status message if we have one
-                if status_msg:
-                    await task_manager.update_task(task_id, "status_msg", status_msg)
-
-                # Update progress
-                if current_progress < 5:
-                    current_progress = 5
-
-                await task_manager.update_task(
-                    task_id,
-                    "progress",
-                    min(int(current_progress), 99 if current_progress < 100 else 100),
-                )
 
         # Close PTY master
         try:

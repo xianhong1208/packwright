@@ -602,3 +602,62 @@ class TestDetectLazyPackages:
             nuitka_worker.Path, "read_text", side_effect=OSError("permission denied")
         )
         assert detect_lazy_packages(tmp_path) == []
+
+
+class TestInjectLibsLoader:
+    """The libs/ loader is spliced into the user's entry point before compiling."""
+
+    @staticmethod
+    def _run(source: str, tmp_path: Path, with_libs: bool) -> tuple[dict, list[str]]:
+        from app.services.nuitka_worker import inject_libs_loader
+
+        (tmp_path / "libs").mkdir(exist_ok=True) if with_libs else None
+        code = compile(inject_libs_loader(source), "main.py", "exec")
+        saved_argv, saved_path = sys.argv[:], sys.path[:]
+        sys.argv = [str(tmp_path / "main")]
+        namespace: dict = {"__name__": "__packwright_test__"}
+        try:
+            exec(code, namespace)
+            return namespace, sys.path[:]
+        finally:
+            sys.argv, sys.path[:] = saved_argv, saved_path
+
+    @pytest.mark.unit
+    def test_tc_nui_104_future_import_entry_point_still_compiles(self, tmp_path):
+        """TC-NUI-104: code is placed after the docstring and __future__ imports,
+        which Python requires to come first."""
+        from app.services.nuitka_worker import inject_libs_loader
+
+        src = '"""My tool."""\nfrom __future__ import annotations\n\nX: "int" = 1\n'
+        out = inject_libs_loader(src)
+        compile(out, "main.py", "exec")
+        assert out.startswith('"""My tool."""\nfrom __future__ import annotations\n# ====')
+
+    @pytest.mark.unit
+    def test_tc_nui_105_libs_dir_is_put_first_on_sys_path(self, tmp_path):
+        """TC-NUI-105: when libs/ sits next to the binary it is searched first."""
+        _, path = self._run("pass\n", tmp_path, with_libs=True)
+        assert path[0] == str(tmp_path / "libs")
+
+    @pytest.mark.unit
+    @pytest.mark.parametrize("with_libs", [True, False])
+    def test_tc_nui_106_loader_is_silent_and_leaves_no_names(self, tmp_path, capsys, with_libs):
+        """TC-NUI-106: nothing is printed (a CLI's stdout may be piped) and the
+        user's namespace gets no extra names — whether or not libs/ exists."""
+        namespace, _ = self._run("pass\n", tmp_path, with_libs=with_libs)
+        assert capsys.readouterr().out == ""
+        assert not [k for k in namespace if not k.startswith("__")]
+
+    @pytest.mark.unit
+    def test_tc_nui_107_marker_survives_for_double_injection_check(self):
+        """TC-NUI-107: the [LIBS LOADER] marker the worker checks for is present."""
+        from app.services.nuitka_worker import inject_libs_loader
+
+        assert "[LIBS LOADER]" in inject_libs_loader("print(1)\n")
+
+    @pytest.mark.unit
+    def test_tc_nui_108_unparsable_source_is_prepended_unchanged(self):
+        """TC-NUI-108: a syntax error in the user's file is left for Nuitka to report."""
+        from app.services.nuitka_worker import INJECT_CODE, inject_libs_loader
+
+        assert inject_libs_loader("def (:\n") == INJECT_CODE + "def (:\n"

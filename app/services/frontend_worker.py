@@ -11,6 +11,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.schemas.task import BuildConfig, FrontendBuildTool
 from app.services.task_manager import task_manager
+from app.services.terminal_output import TerminalLineBuffer
 
 # Hard ceiling per install/build step so a hung npm/yarn (network stall, an
 # interactive prompt) never holds the build slot — and the whole queue — forever.
@@ -313,24 +314,24 @@ async def _run_command(
         # long note in nuitka_worker.run_nuitka_build for why the old
         # run_in_executor(os.read) pattern deadlocked under concurrency.
         os.set_blocking(master_fd, False)
-        buffer = ""
+        terminal = TerminalLineBuffer()
 
-        def read_pty():
+        def read_pty() -> bytes:
             try:
-                return os.read(master_fd, 65536).decode("utf-8", errors="replace")
-            except (BlockingIOError, InterruptedError):
-                return ""
-            except OSError:
-                return ""
+                return os.read(master_fd, 65536)
+            except OSError:  # incl. BlockingIOError: nothing to read right now
+                return b""
+
+        async def consume(lines: list[str]) -> None:
+            for text in lines:
+                await task_manager.append_log(task_id, text)
 
         while True:
             if process.returncode is not None:
                 # Drain remaining output
-                while True:
-                    data = read_pty()
-                    if not data:
-                        break
-                    buffer += data
+                while data := read_pty():
+                    await consume(terminal.feed(data)[0])
+                await consume(terminal.flush())
                 break
 
             # Overall-timeout guard — kill a hung command and fail the step.
@@ -352,16 +353,9 @@ async def _run_command(
 
             data = read_pty()
             if data:
-                buffer += data
+                await consume(terminal.feed(data)[0])
             else:
                 await asyncio.sleep(0.1)
-
-            # Process complete lines
-            while "\n" in buffer:
-                line, buffer = buffer.split("\n", 1)
-                clean_line = re.sub(r"\x1b\[[0-9;]*[a-zA-Z]", "", line).rstrip()
-                if clean_line:
-                    await task_manager.append_log(task_id, clean_line)
 
         os.close(master_fd)
         ret_code = await process.wait()
