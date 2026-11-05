@@ -103,6 +103,13 @@ def _role(role_id: int = 5, *, name="viewer", permissions=(), parent=None, **kwa
     )
 
 
+@pytest.fixture(autouse=True)
+def target_holds_nothing(mocker: MockerFixture):
+    """The outranking guard resolves the target's permissions; these tests act on
+    plain accounts, so it sees none (the guard has its own tests)."""
+    return mocker.patch.object(users_route, "get_user_permissions", autospec=True, return_value=set())
+
+
 @pytest.fixture
 def audit(mocker: MockerFixture):
     """Intercept log_action and hand back the kwargs it was called with."""

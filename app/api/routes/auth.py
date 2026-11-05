@@ -2,9 +2,11 @@
 
 import secrets
 from typing import Annotated
+from urllib.parse import urlencode
 
 from fastapi import APIRouter, Depends, HTTPException, Request, Response, status
 from fastapi.responses import RedirectResponse
+from pydantic import BaseModel, Field
 from sqlalchemy import select, func, text
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
@@ -575,6 +577,7 @@ async def revoke_session_endpoint(
 # ---------------------------------------------------------------------------
 
 _SSO_STATE_COOKIE = "mcp_sso_state"
+_SSO_HANDOFF_COOKIE = "mcp_sso_handoff"
 
 
 @router.get("/oauth/mcp/status")
@@ -622,7 +625,8 @@ async def mcp_oauth_callback(
     frontend = settings.mcp_oauth_redirect_uri.rsplit("/auth/", 1)[0]  # app origin
 
     def _fail(reason: str) -> RedirectResponse:
-        r = RedirectResponse(f"{frontend}/login?sso_error={reason}", status_code=302)
+        # The reason may come straight from the provider's ?error=; encode it.
+        r = RedirectResponse(f"{frontend}/login?{urlencode({'sso_error': reason})}", status_code=302)
         r.delete_cookie(_SSO_STATE_COOKIE, path="/auth/oauth/mcp")
         return r
 
@@ -642,22 +646,50 @@ async def mcp_oauth_callback(
     if not user.is_active:
         return _fail("account_pending_approval")
 
-    ip = resolve_client_ip(request)
+    # resolve_client_ip() needs the trusted-proxy set; get_client_ip() supplies it.
+    # Calling the former bare raised TypeError, so every approved SSO sign-in 500ed.
+    ip = get_client_ip(request)
     access_token, refresh_token = await create_tokens(
         db, user, remember_me=False, device_info="MCP Center SSO", ip_address=ip
     )
     await update_last_login(db, user)
-    expires_in = ACCESS_TOKEN_EXPIRE_MINUTES * 60
 
-    # Hand the tokens to the SPA in the URL fragment (never sent to a server, so it
-    # does not land in access logs), where the login page stores them and continues.
-    r = RedirectResponse(
-        f"{frontend}/login#access_token={access_token}"
-        f"&refresh_token={refresh_token}&expires_in={expires_in}",
-        status_code=302,
-    )
+    # Tokens never go in the URL: a one-time code does, redeemable only by this
+    # browser (binding cookie). See mcp_oauth.issue_handoff for why.
+    code, binding = mcp_oauth.issue_handoff({
+        "access_token": access_token,
+        "refresh_token": refresh_token,
+        "token_type": "bearer",
+        "expires_in": ACCESS_TOKEN_EXPIRE_MINUTES * 60,
+    })
+    r = RedirectResponse(f"{frontend}/login#{urlencode({'sso_code': code})}", status_code=302)
     r.delete_cookie(_SSO_STATE_COOKIE, path="/auth/oauth/mcp")
+    r.set_cookie(
+        _SSO_HANDOFF_COOKIE,
+        binding,
+        max_age=60,
+        httponly=True,
+        secure=settings.mcp_oauth_redirect_uri.lower().startswith("https"),
+        samesite="strict",
+        path="/auth/oauth/mcp",
+    )
     return r
+
+
+class SsoExchangeRequest(BaseModel):
+    code: str = Field(..., min_length=1, max_length=128)
+
+
+@router.post("/oauth/mcp/exchange")
+async def mcp_oauth_exchange(
+    body: SsoExchangeRequest, request: Request, response: Response
+) -> dict:
+    """Trade the one-time SSO code for the session tokens (same browser only)."""
+    tokens = mcp_oauth.redeem_handoff(body.code, request.cookies.get(_SSO_HANDOFF_COOKIE))
+    response.delete_cookie(_SSO_HANDOFF_COOKIE, path="/auth/oauth/mcp")
+    if tokens is None:
+        raise HTTPException(status_code=400, detail="Sign-in link expired or already used. Sign in again.")
+    return tokens
 
 
 async def _find_or_create_sso_user(db: AsyncSession, identity: dict) -> User:

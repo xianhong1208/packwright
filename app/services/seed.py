@@ -54,26 +54,41 @@ async def _seed_bootstrap_admin(db: AsyncSession) -> None:
     """Create the default admin account on a database that has no users yet.
 
     Skipped when any user already exists (so it never resets a changed password)
-    or when BOOTSTRAP_ADMIN_PASSWORD is blank (self-registration is used instead).
+    or when BOOTSTRAP_ADMIN_PASSWORD is set but blank (self-registration is used
+    instead). When it is not set at all, a random password is generated and logged
+    once: there is no default credential to forget to change.
     """
+    import secrets
+
     from app.services.auth import hash_password
 
     settings = get_settings()
-    if not settings.bootstrap_admin_password:
+    configured = settings.bootstrap_admin_password
+    if configured == "":
         return
     if (await db.execute(select(User))).first() is not None:
         return
+    password = configured or secrets.token_urlsafe(12)
 
     admin_role = (await db.execute(select(Role).where(Role.name == "admin"))).scalar_one_or_none()
     admin = User(
         username=settings.bootstrap_admin_username,
-        password_hash=hash_password(settings.bootstrap_admin_password),
+        password_hash=hash_password(password),
         role_id=admin_role.id if admin_role else None,
         is_active=True,
     )
     db.add(admin)
     await db.commit()
-    logger.warning(
-        "Created bootstrap admin '%s' with the default password — change it after first login.",
-        settings.bootstrap_admin_username,
-    )
+    if configured:
+        logger.warning(
+            "Created bootstrap admin '%s' with BOOTSTRAP_ADMIN_PASSWORD — change it after first login.",
+            settings.bootstrap_admin_username,
+        )
+    else:
+        # Logged once, on the start that creates the account; never stored.
+        logger.warning(
+            "Created bootstrap admin '%s' with generated password: %s  "
+            "(shown only now — sign in and change it)",
+            settings.bootstrap_admin_username,
+            password,
+        )
