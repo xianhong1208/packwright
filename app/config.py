@@ -44,7 +44,7 @@ class Settings(BaseSettings):
     # this only bounds RAM growth of the live-task dict (incl. log buffers).
     finished_task_retention_minutes: int = 60
 
-    # Build concurrency — how many Nuitka builds can run simultaneously
+    # Build concurrency — how many builds (of any kind) run at once; the rest queue
     max_concurrent_builds: int = 3
 
     # JWT settings (optional - if not set, a random key is generated on startup)

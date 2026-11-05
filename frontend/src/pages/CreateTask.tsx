@@ -1322,7 +1322,7 @@ export default function CreateTask() {
                     <Form.Item
                       name="pack_mode"
                       label={<span style={{ color: 'var(--ink-muted)' }}>Nuitka pack mode</span>}
-                      tooltip="External (recommended): third-party packages go in a separate libs/ directory and compile faster. Full: every dependency is packed into a single binary, but Nuitka takes a very long time — 8 hours or more."
+                      tooltip="External (recommended): third-party packages go in a separate libs/ directory and compile faster. Full: every dependency is packed into a single binary, but Nuitka takes a very long time — hours on a large project."
                       extra={<span className="text-xs" style={{ color: 'var(--ink-faint)' }}>When in doubt use External — fast and reliable. Full bundles everything into one binary but compiles for a very long time.</span>}
                     >
                       <Select>

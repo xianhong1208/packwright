@@ -4,7 +4,7 @@
 
 Packwright 在 v1.0.0 以前名為 *Build Center*。存在於既有資料中的名稱保留舊拼法,不需要任何遷移:SQLite 檔 `data/build_center.db`、預設的 PostgreSQL 資料庫 `build_center`,以及煙霧測試時執行檔仍會收到的 `BUILD_CENTER_SMOKE_TEST`(與新的 `PACKWRIGHT_SMOKE_TEST` 並存)。systemd unit 改為 `deploy/packwright.service`。
 
-[English](README.md) · [快速開始](#快速開始) · [運作方式](#運作方式) · [設定](#設定) · [Git 憑證](#git-憑證) · [完整手冊](docs/manual.zh-TW.md)
+[English](README.md) · [快速開始](#快速開始) · [運作方式](#運作方式) · [設定](#設定) · [Git 憑證](#git-憑證) · [全部設定項](docs/configuration.md) · [完整手冊](docs/manual.zh-TW.md) · [5 分鐘上手](docs/quickstart.zh-TW.md)
 
 ## 主要功能
 
@@ -34,7 +34,7 @@ uv run python main.py         # 先套用 migration,再於 http://0.0.0.0:5018 �
 ```
 
 - 開啟 `http://localhost:5018`,以 **`admin`** 登入,密碼在啟動 log 裡(`Created bootstrap admin 'admin' with generated password: …`)。密碼於首次啟動時隨機產生且只顯示一次——登入後請改密碼,或在首次啟動前設定 `BOOTSTRAP_ADMIN_USERNAME` / `BOOTSTRAP_ADMIN_PASSWORD`。
-- **新增 Git 憑證**(選用,私有 repo 需要):設定 → Git 憑證 → 選 GitHub / GitLab,貼上 Personal Access Token。
+- **新增 Git 憑證**(選用,私有 repo 需要):Administration → Git credentials → 選 GitHub、GitLab 或自架伺服器,貼上 personal access token。
 - **建立打包**:選本機路徑或 Git URL、選模式、送出。日誌即時串流;完成的產物可下載(或匯出成 Docker image `.tar.gz`)。
 
 前端開發熱重載可在 `frontend/` 執行 `npm run dev`(會把 API 代理到 `:5018`)。逐步操作教學見 [docs/quickstart.zh-TW.md](docs/quickstart.zh-TW.md)。
@@ -53,13 +53,13 @@ uv run python main.py         # 先套用 migration,再於 http://0.0.0.0:5018 �
 ```
 
 - **來源。** 一個建置不是*本機路徑*(限制在 `LOCAL_SOURCE_ROOTS` 內)就是 *Git URL*。Git 模式會驗證 URL(拒絕 `file://`、`ssh://`、localhost、link-local、或帶帳密的 URL),clone 到指定 branch/tag,Python 專案還會先建 `.venv` 再打包。
-- **Token 注入。** 私有 repo 會依主機查出對應 token、解密,只在 subprocess 呼叫當下注入 clone URL(GitHub 用 `x-access-token:…@`、GitLab 用 `oauth2:…@`);絕不寫進持久化 URL、不明文記錄、不由 API 回傳。
-- **併發。** `MAX_CONCURRENT_BUILDS` 以 semaphore 限制同時的 Nuitka 編譯;行程刻意單一 worker,因為任務狀態、WebSocket 連線與 build semaphore 都在行程記憶體裡。
+- **Token 注入。** 私有 repo 會依主機查出對應 token、解密,只在那一次呼叫 `git` 時,以限定在該 repo 來源的 HTTP 認證 header 交給它(經由 `GIT_CONFIG_*` 環境變數,所以也不會出現在命令列)。不會出現在網址、保存的建置設定或日誌,API 也不會回傳。
+- **併發。** `MAX_CONCURRENT_BUILDS` 以 semaphore 限制同時進行的建置(各種類型都算),其餘排隊;行程刻意單一 worker,因為任務狀態、WebSocket 連線與 build semaphore 都在行程記憶體裡。
 - **清理。** 背景迴圈依狀態與時間刪除各任務工作區與匯出的 image,並可將成功建置的工作區縮到只剩產出。
 
 ## 設定
 
-全部由環境變數驅動。`.env.example` 只列必填,完整清單與預設值見 `app/config.py`。最重要的幾個:
+全部由環境變數驅動,沒有任何必填項。`.env.example` 列出常用的幾項,[docs/configuration.md](docs/configuration.md) 列出全部設定。最重要的幾個:
 
 | 變數 | 預設 | 說明 |
 |---|---|---|
@@ -72,7 +72,7 @@ uv run python main.py         # 先套用 migration,再於 http://0.0.0.0:5018 �
 | `DOCKER_IMAGES_DIR` | `./data/docker_images` | 匯出的 Docker image(`.tar.gz`)寫入位置。 |
 | `LOCAL_SOURCE_ROOTS` | *(空)* | 本機來源可讀取的絕對路徑前綴(CSV);留空則停用本機模式。 |
 | `UV_BIN` / `PRE_BUILD_PATH` | 自動 | uv 路徑與 subprocess PATH;留空自動偵測。 |
-| `MAX_CONCURRENT_BUILDS` | `3` | 同時進行的 Nuitka 建置數。 |
+| `MAX_CONCURRENT_BUILDS` | `3` | 同時進行的建置數,其餘排隊。 |
 | `TRUSTED_PROXY_IPS` | *(空)* | 可信任 `X-Forwarded-For` 的代理 IP;留空最安全。 |
 
 ## 儲存與資料
@@ -83,7 +83,7 @@ Packwright 所有狀態都寫在單一的 `data/` 目錄下。預設這些路徑
 data/
 ├── build_center.db     # SQLite 資料庫(使用者、角色、歷史、Git 憑證)
 ├── workspace/          # 每個建置一個目錄:clone、.venv、以及編譯產物
-└── docker_images/      # 匯出的 Docker image,檔名為 <image>_<tag>.tar.gz
+└── docker_images/      # 匯出的 Docker image,檔名為 <task-id>.tar.gz
 ```
 
 **建置完成後產物在哪:**
@@ -113,11 +113,11 @@ DATABASE_URL=sqlite+aiosqlite:////srv/packwright/build_center.db
 
 ## Git 憑證
 
-私有 repo 的存取權杖在管理台設定(設定 → Git 憑證),不放在 `.env`:
+私有 repo 的存取權杖在管理台設定(Administration → Git credentials,需要 `user:manage` 權限),不放在 `.env`:
 
 - 每個主機一組,支援 **GitHub**、**GitLab** 或自架實例(任意主機)。
 - 以 `SETTINGS_ENCRYPTION_KEY` 加密儲存,API 不回傳——介面只顯示末四碼。
-- 建置 clone URL 時,自動選用主機相符的 token,並以該服務期望的格式注入。
+- 建置 clone URL 時,自動選用主機完全相符的 token。
 - `.env` 的 `GITLAB_TOKEN` 仍作為沒有相符憑證時的後備,但只會送給 `GITLAB_TOKEN_HOST` 指定的那一台主機(預設 `gitlab.com`;自架 GitLab 請設成該主機名稱)。
 
 ## 測試

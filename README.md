@@ -4,7 +4,7 @@
 
 Packwright was called *Build Center* up to v1.0.0. Names that live in existing data keep the old spelling, so nothing needs migrating: the SQLite file `data/build_center.db`, the default PostgreSQL database `build_center`, and the `BUILD_CENTER_SMOKE_TEST` variable that smoke-tested binaries still receive (alongside the new `PACKWRIGHT_SMOKE_TEST`). The systemd unit is now `deploy/packwright.service`.
 
-[繁體中文](README.zh-TW.md) · [Quick start](#quick-start) · [How it works](#how-it-works) · [Configuration](#configuration) · [Git credentials](#git-credentials) · [Detailed manual](docs/manual.zh-TW.md)
+[繁體中文](README.zh-TW.md) · [Quick start](#quick-start) · [How it works](#how-it-works) · [Configuration](#configuration) · [Git credentials](#git-credentials) · [All settings](docs/configuration.md) · [Detailed manual (zh-TW)](docs/manual.zh-TW.md)
 
 ## Key features
 
@@ -34,7 +34,7 @@ uv run python main.py         # applies migrations, then serves on http://0.0.0.
 ```
 
 - Open `http://localhost:5018` and sign in as **`admin`** with the password printed in the startup log (`Created bootstrap admin 'admin' with generated password: …`). It is generated on first start and shown only once — change it after logging in, or set `BOOTSTRAP_ADMIN_USERNAME` / `BOOTSTRAP_ADMIN_PASSWORD` before first start.
-- **Add a Git credential** (optional, for private repos): Settings → Git 憑證 → choose GitHub / GitLab, paste a Personal Access Token.
+- **Add a Git credential** (optional, for private repos): Administration → Git credentials → choose GitHub, GitLab or a self-hosted server, paste a personal access token.
 - **Create a build**: pick Local path or Git URL, choose the mode, and submit. Logs stream live; the finished artifact is downloadable (or exported as a Docker image `.tar.gz`).
 
 For a development frontend with hot reload, run `npm run dev` in `frontend/` (it proxies the API to `:5018`). A step-by-step walkthrough (in Traditional Chinese) is in [docs/quickstart.zh-TW.md](docs/quickstart.zh-TW.md).
@@ -53,13 +53,13 @@ Console (React + antd)  ──HTTP / WebSocket──▶  FastAPI
 ```
 
 - **Sources.** A build is either a *local path* (confined to `LOCAL_SOURCE_ROOTS`) or a *Git URL*. Git mode validates the URL (no `file://`, `ssh://`, localhost, link-local or credential-bearing URLs), clones at a specific branch/tag, and — for Python projects — bootstraps a `.venv` before building.
-- **Token injection.** For a private repo the token for that host is looked up, decrypted, and injected into the clone URL only at subprocess-call time (`x-access-token:…@` for GitHub, `oauth2:…@` for GitLab); it is never persisted into the URL, logged unmasked, or returned by the API.
-- **Concurrency.** `MAX_CONCURRENT_BUILDS` bounds simultaneous Nuitka compiles behind a semaphore; the process is intentionally single-worker because task state, WebSocket connections and the build semaphore live in process memory.
+- **Token injection.** For a private repo the token for that host is looked up, decrypted, and handed to `git` only for that call, as an HTTP auth header scoped to the repository's origin (through `GIT_CONFIG_*` environment variables, so it is not on the command line either). It never appears in the URL, the stored build config or the log, and the API never returns it.
+- **Concurrency.** `MAX_CONCURRENT_BUILDS` bounds simultaneous builds (of every kind) behind a semaphore, and the rest queue; the process is intentionally single-worker because task state, WebSocket connections and the build semaphore live in process memory.
 - **Cleanup.** A background loop deletes per-task workspaces and exported images by status and age, and (optionally) shrinks a successful build's workspace to just its output.
 
 ## Configuration
 
-Everything is environment-driven. `.env.example` lists the essentials; `app/config.py` has the full set with defaults. The most important ones:
+Everything is environment-driven, and nothing is required. `.env.example` lists the essentials and [docs/configuration.md](docs/configuration.md) documents every setting. The most important ones:
 
 | Variable | Default | Description |
 |---|---|---|
@@ -72,7 +72,7 @@ Everything is environment-driven. `.env.example` lists the essentials; `app/conf
 | `DOCKER_IMAGES_DIR` | `./data/docker_images` | Where exported Docker images (`.tar.gz`) are written. |
 | `LOCAL_SOURCE_ROOTS` | *(empty)* | CSV of absolute prefixes a local-source build may read; empty disables local mode. |
 | `UV_BIN` / `PRE_BUILD_PATH` | auto | uv binary and subprocess PATH; auto-detected when empty. |
-| `MAX_CONCURRENT_BUILDS` | `3` | Simultaneous Nuitka builds. |
+| `MAX_CONCURRENT_BUILDS` | `3` | Simultaneous builds; the rest wait in the queue. |
 | `TRUSTED_PROXY_IPS` | *(empty)* | Proxy IPs whose `X-Forwarded-For` may be trusted; empty is safest. |
 
 ## Storage & data
@@ -83,7 +83,7 @@ Packwright writes everything under a single `data/` directory. By default these 
 data/
 ├── build_center.db     # SQLite database (users, roles, history, Git credentials)
 ├── workspace/          # one dir per build: clone, .venv, and the compiled output
-└── docker_images/      # exported Docker images, as <image>_<tag>.tar.gz
+└── docker_images/      # exported Docker images, as <task-id>.tar.gz
 ```
 
 **Where a finished build ends up:**
@@ -113,11 +113,11 @@ On a successful build the workspace is also trimmed automatically: a non-Docker 
 
 ## Git credentials
 
-Access tokens for private repositories are managed in the console (Settings → Git 憑證), not in `.env`:
+Access tokens for private repositories are managed in the console (Administration → Git credentials, `user:manage` permission), not in `.env`:
 
 - One token per host, for **GitHub**, **GitLab**, or a self-hosted instance (any host).
 - Tokens are encrypted at rest with `SETTINGS_ENCRYPTION_KEY` and never returned by the API — the UI shows only the last four characters.
-- When a build clones a URL, the token whose host matches is selected automatically and injected with the provider's expected form.
+- When a build clones a URL, the token whose host matches exactly is selected automatically.
 - `GITLAB_TOKEN` in `.env` remains a fallback when no stored credential matches, sent only to the exact host in `GITLAB_TOKEN_HOST` (default `gitlab.com`; set it to your server's name for a self-hosted GitLab).
 
 ## Testing
