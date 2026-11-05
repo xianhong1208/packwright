@@ -3,6 +3,7 @@
 import asyncio
 import os
 import shutil
+import time
 from pathlib import Path
 
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -265,6 +266,12 @@ async def _build_frontend_only(task_id: str, config: BuildConfig, db: AsyncSessi
         else:
             final_output = build_output
 
+        if final_output.exists():
+            from app.services.nuitka_worker import _summarize_artifact
+
+            artifact = await asyncio.to_thread(_summarize_artifact, final_output)
+            await task_manager.merge_result(task_id, {"artifact": artifact}, db)
+            await task_manager.update_task(task_id, "stage", "done")
         await task_manager.update_task(task_id, "status", TaskStatus.COMPLETED, db)
         await task_manager.update_task(task_id, "progress", 100)
         await task_manager.update_task(task_id, "status_msg", "Frontend build complete")
@@ -644,8 +651,10 @@ async def start_build_task(task_id: str, config: BuildConfig) -> None:
                 )
                 return
 
+        started = time.monotonic()
         async with async_session() as db:
             await dispatch_build(task_id, effective_config, db)
+        await _record_duration(task_id, time.monotonic() - started)
 
         # On failure, scan the log for known error patterns and attach a
         # human-friendly diagnosis (problem + suggestion) so the UI can tell
@@ -681,6 +690,25 @@ async def start_build_task(task_id: str, config: BuildConfig) -> None:
                 await task_manager.append_log(
                     task_id, f"Post-build cleanup error (ignored): {e!s}"
                 )
+
+
+async def _record_duration(task_id: str, seconds: float) -> None:
+    """Store the build's wall time (slot acquired -> finished) on its result.
+
+    Every build type gets one, so the detail page can show how long it took; the
+    Nuitka worker's own figure covers only its compile and leaves out a full-stack
+    build's frontend step, so this total replaces it.
+    """
+    from app.database import async_session
+
+    current = await task_manager.get_task(task_id)
+    if current is None or current.status not in (TaskStatus.COMPLETED, TaskStatus.FAILED):
+        return
+    try:
+        async with async_session() as db:
+            await task_manager.merge_result(task_id, {"duration_seconds": round(seconds, 1)}, db)
+    except Exception as e:  # bookkeeping must never fail a finished build
+        await task_manager.append_log(task_id, f"(duration not recorded: {e!s})")
 
 
 async def _post_build_cleanup(task_id: str, config: BuildConfig) -> None:

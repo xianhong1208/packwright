@@ -19,3 +19,8 @@ export function getErrorDetail(err: unknown, fallback = 'Something went wrong. P
   if (err instanceof Error && err.message) return err.message
   return fallback
 }
+
+/** True when the API answered 404 — the thing asked for does not exist (any more). */
+export function isNotFound(err: unknown): boolean {
+  return err instanceof AxiosError && err.response?.status === 404
+}
