@@ -35,6 +35,7 @@ const GitCredentialsPage = lazy(() => import('./pages/admin/GitCredentialsPage')
 const MonitoringPage = lazy(() => import('./pages/MonitoringPage'))
 import { useTaskStore } from './store/taskStore'
 import { AuthProvider, useAuth } from './contexts/AuthContext'
+import { SIGNED_OUT_EVENT } from './contexts/session'
 import { PermissionGate } from './components/PermissionGate'
 import { useIdleTimeout } from './hooks/useIdleTimeout'
 
@@ -59,6 +60,14 @@ const queryClient = new QueryClient({
       retry: false,
     },
   },
+})
+
+// Sign-out must not leave the previous user's data on screen: the query cache
+// (history, users, stats) and the task store would otherwise be shown to
+// whoever signs in next in this tab.
+window.addEventListener(SIGNED_OUT_EVENT, () => {
+  queryClient.clear()
+  useTaskStore.getState().setTasks([])
 })
 
 // Protected route wrapper

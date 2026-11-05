@@ -1,6 +1,8 @@
 import { createContext, useContext, useState, useEffect, useCallback, useRef, type ReactNode } from 'react'
 import type { User, TokenResponse } from '../api/types'
 import { refreshTokens, TOKENS_REFRESHED_EVENT } from '../api/client'
+import { clearFormDraft } from '../hooks/useFormDraft'
+import { SIGNED_OUT_EVENT, isSessionRejected } from './session'
 
 interface AuthContextType {
   user: User | null
@@ -104,10 +106,17 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     try {
       await refreshTokens()
       return true
-    } catch {
-      tokenManager.clearTokens()
-      setUser(null)
-      setPermissions(new Set())
+    } catch (err) {
+      // Only a rejected token ends the session. A network error or a 5xx (the
+      // backend restarting) used to clear the tokens too, so reloading during
+      // a deploy destroyed every remember-me session.
+      if (isSessionRejected(err)) {
+        tokenManager.clearTokens()
+        setUser(null)
+        setPermissions(new Set())
+      } else {
+        setError('Cannot reach the server. Your session is kept; reload once it is back.')
+      }
       return false
     }
   }
@@ -174,11 +183,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
             // Token decode failed, permissions will be empty
           }
         }
-      } else {
+      } else if (res.status === 401 || res.status === 403) {
         tokenManager.clearTokens()
+      } else {
+        setError('Cannot reach the server. Your session is kept; reload once it is back.')
       }
     } catch {
-      tokenManager.clearTokens()
+      // Network failure: the server is down, not the session.
+      setError('Cannot reach the server. Your session is kept; reload once it is back.')
     } finally {
       setIsLoading(false)
     }
@@ -249,6 +261,21 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
   }
 
+  // Everything a signed-out browser must forget: tokens, the form draft (it may
+  // hold another system's secrets, and belongs to this user), and — via
+  // SIGNED_OUT_EVENT — the query cache and task store, which otherwise showed
+  // the previous user's builds to whoever signed in next on this tab.
+  const signOutLocally = () => {
+    tokenManager.clearTokens()
+    clearFormDraft()
+    setUser(null)
+    setPermissions(new Set())
+    if (refreshTimeoutRef.current) {
+      clearTimeout(refreshTimeoutRef.current)
+    }
+    window.dispatchEvent(new Event(SIGNED_OUT_EVENT))
+  }
+
   const logout = async () => {
     const refreshToken = tokenManager.getRefreshToken()
     const accessToken = tokenManager.getAccessToken()
@@ -268,13 +295,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       }
     }
 
-    tokenManager.clearTokens()
-    setUser(null)
-    setPermissions(new Set())
-
-    if (refreshTimeoutRef.current) {
-      clearTimeout(refreshTimeoutRef.current)
-    }
+    signOutLocally()
   }
 
   const logoutAllDevices = async () => {
@@ -293,13 +314,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       }
     }
 
-    tokenManager.clearTokens()
-    setUser(null)
-    setPermissions(new Set())
-
-    if (refreshTimeoutRef.current) {
-      clearTimeout(refreshTimeoutRef.current)
-    }
+    signOutLocally()
   }
 
   const refreshToken = async (): Promise<boolean> => {
