@@ -249,11 +249,21 @@ def require_any_permission(*required_permissions: str | PermissionCode):
 class CurrentUser:
     """Represents the current authenticated user from JWT token."""
 
-    def __init__(self, id: int, username: str, permissions: list[str], role: str | None):
+    def __init__(
+        self,
+        id: int,
+        username: str,
+        permissions: list[str],
+        role: str | None,
+        session_id: int | None = None,
+    ):
         self.id = id
         self.username = username
         self.permissions = set(permissions)
         self.role = role
+        # Refresh-token row this access token was issued with (JWT ``sid``);
+        # None for tokens minted before the claim existed.
+        self.session_id = session_id
 
     def has_permission(self, permission: str | PermissionCode) -> bool:
         """Check if user has a specific permission (supports wildcards)."""
@@ -322,6 +332,7 @@ async def get_current_user(
         username=user.username,
         permissions=db_permissions,
         role=db_role,
+        session_id=payload.get("sid"),
     )
 
 
