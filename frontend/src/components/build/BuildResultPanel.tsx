@@ -1,10 +1,5 @@
 import { Tooltip, message } from 'antd'
-import {
-  CheckCircleOutlined,
-  CloseCircleOutlined,
-  WarningOutlined,
-  FileZipOutlined,
-} from '@ant-design/icons'
+import { CheckCircleIcon, FileZipIcon, WarningIcon, XCircleIcon } from '../ui/icons'
 import type { BuildResult } from '../../api/types'
 import { VERIFY_META } from '../../utils/statusMeta'
 import { hasBuildResult } from './stages'
@@ -47,10 +42,10 @@ export default function BuildResultPanel({ result }: { result: BuildResult | nul
         <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-4">
           <div className="rounded-lg p-3 bg-void-950">
             <div className="text-xs mb-1" style={{ color: 'var(--ink-faint)' }}>
-              <FileZipOutlined className="mr-1" />
+              <FileZipIcon className="mr-1" />
               Artifact size
             </div>
-            <div className="text-lg font-semibold text-cyber-300">{result.artifact.size_human}</div>
+            <div className="text-lg font-semibold text-[var(--ink)]">{result.artifact.size_human}</div>
           </div>
           <div className="rounded-lg p-3 bg-void-950">
             <div className="text-xs mb-1" style={{ color: 'var(--ink-faint)' }}>
@@ -84,7 +79,7 @@ export default function BuildResultPanel({ result }: { result: BuildResult | nul
 
       {result.preflight && result.preflight.length > 0 && (
         <div>
-          <div className="text-xs mb-2 uppercase tracking-wider" style={{ color: 'var(--ink-faint)' }}>
+          <div className="text-xs mb-2" style={{ color: 'var(--ink-faint)' }}>
             Preflight checks
           </div>
           <div className="space-y-1.5">
@@ -94,7 +89,7 @@ export default function BuildResultPanel({ result }: { result: BuildResult | nul
                   className={c.passed ? 'text-matrix-400' : c.critical ? 'text-alert-400' : 'text-signal-400'}
                   style={{ marginTop: 2 }}
                 >
-                  {c.passed ? <CheckCircleOutlined /> : c.critical ? <CloseCircleOutlined /> : <WarningOutlined />}
+                  {c.passed ? <CheckCircleIcon /> : c.critical ? <XCircleIcon /> : <WarningIcon />}
                 </span>
                 <span className="w-28 flex-shrink-0" style={{ color: 'var(--ink)' }}>
                   {c.label}

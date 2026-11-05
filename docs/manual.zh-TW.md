@@ -71,7 +71,7 @@ cp .env.example .env                      # 選用;全部用預設值可以不�
 **各 Python 版本的 Nuitka 環境(建議)。** 編出來的執行檔與執行 Nuitka 的直譯器 ABI 綁定:專案的
 依賴是 3.12 編的,就要用 3.12 的 Nuitka 來編。`scripts/setup_nuitka_venvs.sh` 會建立
 `.venv-py312` / `.venv-py313` / `.venv-py314`,建置時依專案自動挑選;找不到對應版本時會退回服務
-自己的直譯器,並在 Dashboard 顯示環境降級的警告。
+自己的直譯器,並在首頁(**On the bench**)顯示環境降級的警告。
 
 ```bash
 ./scripts/setup_nuitka_venvs.sh
@@ -139,12 +139,12 @@ journalctl -u packwright -f
   `Created bootstrap admin 'admin' with generated password: …`。
 - 設成某個值則使用該密碼;**設成空字串**則不建立,改由第一個自行註冊的人成為管理員。
 
-登入後請到 **Security** 改密碼。
+登入後請從左下角頭像選單的 **Security** 改密碼。
 
 ### 自行註冊與核准
 
 登入頁的註冊功能永遠開放,但除了資料庫中的第一個帳號,**新註冊的帳號都是停用狀態**,登入會得到
-「not active yet」。管理員在 **Users** 頁把帳號改成啟用才算核准。這是刻意的設計:核准帳號就是授予
+「not active yet」。管理員在 **People** 頁把帳號改成啟用才算核准。這是刻意的設計:核准帳號就是授予
 在伺服器上執行程式碼的能力,見[信任模型](#核心假設建立建置--這台機器的-shell)。
 
 ### 登入與工作階段
@@ -188,7 +188,7 @@ LOCAL_SOURCE_ROOTS=/srv/projects,/data/builds
 
 ### Git 憑證(私有 repo)
 
-管理員在側邊欄 **Administration → Git credentials** 設定存取權杖(需要 `user:manage` 權限):
+管理員在左側工具列的 **Git credentials** 設定存取權杖(需要 `user:manage` 權限):
 
 - 供應商可選 **GitHub**、**GitLab** 或 **Other (self-hosted)**;每個主機一組。
 - 權杖用 `SETTINGS_ENCRYPTION_KEY` 加密儲存,API 不會回傳,介面只顯示末四碼。
@@ -202,7 +202,7 @@ LOCAL_SOURCE_ROOTS=/srv/projects,/data/builds
 
 ## New build 精靈
 
-側邊欄 **New build**。步驟依專案類型而定:
+左側工具列或頂端的 **New build**。步驟依專案類型而定:
 
 | 專案類型 | 步驟 |
 |---|---|
@@ -374,11 +374,11 @@ docker run --rm --env-file .env my-service:latest
 
 ## 個人安全設定
 
-側邊欄 **Security**:
+左下角頭像選單 → **Security**:
 
 - **Change password**:需要目前的密碼。
 - **Security question**:設定後可以透過 **Forgot password** 自行重設密碼。
-- **Active sessions**:列出所有登入中的裝置,可以逐一登出或登出其他全部。
+- **Active sessions**:列出所有登入中的裝置,目前這一個標示 **This device**;其他的可以逐一登出,或按 **Sign out of all devices**。
 - **Login history**:自己的登入紀錄(時間、IP、裝置、成功或失敗)。
 
 ---
@@ -584,7 +584,7 @@ gunzip -c packwright-<時間>.sql.gz | psql -h HOST -U USER -d DBNAME    # Postg
 | 方法 | 路徑 | 權限 | 說明 |
 |---|---|---|---|
 | GET | `/api/monitoring/stats` | 登入 | CPU、記憶體、磁碟與編譯環境狀態 |
-| GET | `/api/monitoring/build-stats` | `history:view_own / history:view_all` | Dashboard 的建置統計 |
+| GET | `/api/monitoring/build-stats` | `history:view_own / history:view_all` | 首頁的建置統計 |
 | GET | `/health` | 公開 | 健康檢查與版本 |
 | WS | `/ws/tasks` | `task:view_all` | 所有建置的即時串流 |
 | WS | `/ws/tasks/{id}` | 建置擁有者或 `task:view_all` | 單一建置的日誌與進度(只推送連線後的增量,先用 `/logs` 取快照) |
@@ -598,7 +598,7 @@ gunzip -c packwright-<時間>.sql.gz | psql -h HOST -U USER -d DBNAME    # Postg
 (全新安裝)重來,或設定 `BOOTSTRAP_ADMIN_PASSWORD` 後用新的資料庫啟動;已經有其他管理員就請他重設。
 
 **註冊完登不進去**
-新帳號需要管理員在 **Users** 頁啟用。
+新帳號需要管理員在 **People** 頁啟用。
 
 **每次重啟所有人都被登出、Git 憑證失效**
 自動產生的金鑰沒能存下來:啟動 log 會有 `Could not save the generated …` 的警告,通常是
@@ -611,7 +611,7 @@ gunzip -c packwright-<時間>.sql.gz | psql -h HOST -U USER -d DBNAME    # Postg
 **內網 Git 伺服器被拒絕**
 私有網段位址預設被擋,把主機加進 `GIT_ALLOWED_HOSTS`。
 
-**Dashboard 出現環境降級警告**
+**首頁出現環境降級警告**
 某個 Python 版本沒有專用的 Nuitka 環境,選到它時會用服務自己的直譯器編譯,產物可能在執行時壞掉。
 執行 `scripts/setup_nuitka_venvs.sh`。
 

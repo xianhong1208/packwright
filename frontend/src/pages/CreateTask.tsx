@@ -1,5 +1,5 @@
 import { Form, Button, Tour, type TourProps } from 'antd'
-import { RocketOutlined, ArrowLeftOutlined, ArrowRightOutlined, CheckOutlined } from '@ant-design/icons'
+import { ArrowLeftIcon, ArrowRightIcon, CheckIcon, RocketLaunchIcon } from '../components/ui/icons'
 import { useCreateTaskModel } from './createTask/useCreateTaskModel'
 import { CreateTaskContext } from './createTask/context'
 import BasicsStep from './createTask/sections/BasicsStep'
@@ -36,15 +36,15 @@ export default function CreateTask() {
 
   return (
     <CreateTaskContext.Provider value={model}>
-      <div className="max-w-5xl mx-auto">
+      <div className="max-w-5xl">
         {/* Page header — title + subtitle, form-mode toggle on the right, hairline seam under it */}
-        <div className="pb-5 mb-6 border-b border-[var(--seam)] flex items-start justify-between gap-4 flex-wrap">
+        <div className="mb-6 flex items-end justify-between gap-4 flex-wrap">
           <div className="min-w-0">
-            <h1 className="text-2xl font-semibold" style={{ fontFamily: 'var(--font-display)', color: 'var(--ink)' }}>
-              {isRebuild ? 'Rebuild task' : 'New build'}
+            <h1 className="page-title">
+              {isRebuild ? 'Rebuild' : 'New build'}
             </h1>
-            <p className="mt-1 text-sm" style={{ color: 'var(--ink-muted)' }}>
-              {isRebuild ? `Rebuilding "${rebuildState?.projectName}"` : 'Configure and start a new build.'}
+            <p className="page-lead">
+              {isRebuild ? `Rebuilding "${rebuildState?.projectName}"` : 'Point it at your code, choose how to package it, and start.'}
             </p>
             {!isRebuild && draftSavedAt && (
               <div className="mt-2 flex items-center gap-3 text-xs" style={{ color: 'var(--ink-faint)' }}>
@@ -109,7 +109,7 @@ export default function CreateTask() {
                           active
                             ? 'bg-cyber-500/10 border-cyber-500'
                             : clickable
-                            ? 'border-transparent cursor-pointer hover:bg-[rgba(231,236,242,0.04)]'
+                            ? 'border-transparent cursor-pointer hover:bg-[color-mix(in srgb, var(--ink) 4%, transparent)]'
                             : 'border-transparent cursor-default'
                         }`}
                       >
@@ -121,17 +121,17 @@ export default function CreateTask() {
                             background: active
                               ? 'var(--color-cyber-500)'
                               : done
-                              ? 'rgba(51, 196, 137, 0.14)'
+                              ? 'color-mix(in srgb, var(--color-matrix-500) 14%, transparent)'
                               : 'transparent',
                             border: active
                               ? '1px solid var(--color-cyber-400)'
                               : done
-                              ? '1px solid rgba(51, 196, 137, 0.4)'
+                              ? '1px solid color-mix(in srgb, var(--color-matrix-500) 40%, transparent)'
                               : '1px solid var(--color-void-600)',
-                            color: active ? '#071018' : done ? 'var(--color-matrix-400)' : 'var(--ink-faint)',
+                            color: active ? 'var(--color-void-950)' : done ? 'var(--color-matrix-400)' : 'var(--ink-faint)',
                           }}
                         >
-                          {done ? <CheckOutlined /> : i + 1}
+                          {done ? <CheckIcon /> : i + 1}
                         </span>
                         <span className="min-w-0">
                           <span
@@ -287,7 +287,7 @@ export default function CreateTask() {
                   <Button
                     htmlType="button"
                     size="large"
-                    icon={<ArrowLeftOutlined />}
+                    icon={<ArrowLeftIcon />}
                     onClick={goBack}
                     style={{ height: 44 }}
                   >
@@ -303,7 +303,7 @@ export default function CreateTask() {
                     className="btn-cyber"
                     style={{ height: 44, minWidth: 148 }}
                   >
-                    Next <ArrowRightOutlined />
+                    Next <ArrowRightIcon />
                   </Button>
                 ) : (
                   <Button
@@ -312,7 +312,7 @@ export default function CreateTask() {
                     loading={createMutation.isPending}
                     disabled={createMutation.isPending}
                     size="large"
-                    icon={<RocketOutlined />}
+                    icon={<RocketLaunchIcon />}
                     className="btn-cyber"
                     style={{ height: 44, minWidth: 164 }}
                     onClick={handleManualSubmit}
@@ -335,13 +335,15 @@ export default function CreateTask() {
               {
                 title: 'Choose a source',
                 description:
-                  'Use a local path that already exists on the server, or paste a GitLab HTTP(S) URL and let the server clone it for you.',
+                  'Use a folder that already exists on the server, or paste the HTTPS URL of a Git repository (GitHub, GitLab or your own server) and let the server clone it.',
                 target: () => sourceModeRef.current,
+                // Above, so the bubble does not cover the path field right below.
+                placement: 'top',
               },
               {
                 title: 'Enter the Git URL',
                 description:
-                  'In Git URL mode, paste the repo\'s HTTPS URL and the server fetches the available branches and tags. The access token is set server-side — don\'t put it in the URL.',
+                  'Paste the repository\'s HTTPS URL and the server lists its branches and tags. For a private repository, add an access token under Git credentials; never put one in the URL.',
                 target: () => gitUrlRef.current,
               },
               {

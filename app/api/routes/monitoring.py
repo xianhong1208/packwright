@@ -186,6 +186,13 @@ async def get_build_stats(
     def _status(t: Task) -> str:
         return (t.status or "").upper()
 
+    def _pass_rate(passed: int, failed: int) -> float | None:
+        """Passed out of the builds that reached a verdict. Cancelled and still
+        running builds say nothing about whether builds work: counting them as
+        failures showed 30% for a week of 12 passes, 6 failures and 22 cancels."""
+        finished = passed + failed
+        return round(passed / finished * 100, 1) if finished else None
+
     total = len(rows)
     completed = sum(1 for t in rows if _status(t) == "COMPLETED")
     failed = sum(1 for t in rows if _status(t) == "FAILED")
@@ -199,7 +206,7 @@ async def get_build_stats(
     avg_seconds = sum(durations) / len(durations) if durations else None
 
     # Daily totals, keyed by calendar day.
-    by_day: dict[date, dict] = defaultdict(lambda: {"total": 0, "completed": 0})
+    by_day: dict[date, dict] = defaultdict(lambda: {"total": 0, "completed": 0, "failed": 0})
     for t in rows:
         if t.start_time is None:
             continue
@@ -207,12 +214,15 @@ async def get_build_stats(
         by_day[d]["total"] += 1
         if _status(t) == "COMPLETED":
             by_day[d]["completed"] += 1
+        elif _status(t) == "FAILED":
+            by_day[d]["failed"] += 1
     daily = [
         {
             "day": str(d),
             "total": v["total"],
             "completed": v["completed"],
-            "success_rate": round(v["completed"] / v["total"] * 100, 1) if v["total"] else None,
+            "failed": v["failed"],
+            "success_rate": _pass_rate(v["completed"], v["failed"]),
         }
         for d, v in sorted(by_day.items())
     ]
@@ -233,7 +243,7 @@ async def get_build_stats(
             "total": len(tasks),
             "completed": p_completed,
             "failed": p_failed,
-            "success_rate": round(p_completed / len(tasks) * 100, 1) if tasks else None,
+            "success_rate": _pass_rate(p_completed, p_failed),
             "last_status": _status(tasks[0]).lower() if tasks else "",
             "last_run": last_run.isoformat() if last_run else None,
             "recent": [_status(t).lower() for t in tasks[:12]],
@@ -265,7 +275,7 @@ async def get_build_stats(
             "completed": completed,
             "failed": failed,
             "cancelled": cancelled,
-            "success_rate": round(completed / total * 100, 1) if total else None,
+            "success_rate": _pass_rate(completed, failed),
             "avg_duration_seconds": round(avg_seconds, 1) if avg_seconds is not None else None,
         },
         "daily": daily,

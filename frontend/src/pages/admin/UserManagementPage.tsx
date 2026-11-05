@@ -1,22 +1,16 @@
 import { useState, useEffect } from 'react'
 import { Link } from 'react-router-dom'
-import { Table, Tag, Input, Select, message, Empty, Modal } from 'antd'
-import {
-  UserOutlined,
-  SearchOutlined,
-  CheckCircleOutlined,
-  CloseCircleOutlined,
-  LoadingOutlined,
-  ReloadOutlined,
-  CrownOutlined,
-} from '@ant-design/icons'
+import { Table, Tag, Input, Select, message, Empty, Modal, Button, Tooltip, Popconfirm } from 'antd'
+import { ArrowsClockwiseIcon, CheckCircleIcon, CheckIcon, CrownIcon, KeyIcon, MagnifyingGlassIcon, ProhibitIcon, SpinnerIcon, UserIcon, XCircleIcon } from '../../components/ui/icons'
 import type { ColumnsType } from 'antd/es/table'
 import { userApi } from '../../api/userApi'
 import type { UserListItem, Role } from '../../api/types'
 import { useAuth } from '../../contexts/AuthContext'
+import PageHeader from '../../components/layout/PageHeader'
+import { parseUtc, timeAgo } from '../../utils/time'
 
 export default function UserManagementPage() {
-  const { hasPermission } = useAuth()
+  const { hasPermission, user: me } = useAuth()
 
   const [users, setUsers] = useState<UserListItem[]>([])
   const [roles, setRoles] = useState<Role[]>([])
@@ -131,7 +125,7 @@ export default function UserManagementPage() {
             className="w-8 h-8 rounded-full flex items-center justify-center"
             style={{ background: 'var(--color-void-700)' }}
           >
-            <UserOutlined style={{ color: 'var(--ink-muted)' }} />
+            <UserIcon style={{ color: 'var(--ink-muted)' }} />
           </div>
           <div>
             <Link
@@ -154,8 +148,8 @@ export default function UserManagementPage() {
       render: (_, record) => {
         if (!hasPermission('user:manage')) {
           return record.role ? (
-            <Tag color={record.role.name === 'admin' ? 'gold' : 'blue'}>
-              {record.role.name === 'admin' && <CrownOutlined className="mr-1" />}
+            <Tag color={record.role.name === 'admin' ? 'gold' : undefined}>
+              {record.role.name === 'admin' && <CrownIcon className="mr-1" />}
               {record.role.display_name}
             </Tag>
           ) : (
@@ -185,9 +179,9 @@ export default function UserManagementPage() {
       render: (_, record) => (
         <Tag
           color={record.is_active ? 'green' : 'red'}
-          icon={record.is_active ? <CheckCircleOutlined /> : <CloseCircleOutlined />}
+          icon={record.is_active ? <CheckCircleIcon /> : <XCircleIcon />}
         >
-          {record.is_active ? 'Active' : 'Disabled'}
+          {record.is_active ? 'Active' : 'Inactive'}
         </Tag>
       ),
     },
@@ -197,7 +191,7 @@ export default function UserManagementPage() {
       key: 'last_login',
       render: (time: string | null) =>
         time ? (
-          new Date(time).toLocaleString()
+          <Tooltip title={parseUtc(time).toLocaleString()}><span>{timeAgo(time)}</span></Tooltip>
         ) : (
           <span style={{ color: 'var(--ink-faint)' }}>Never</span>
         ),
@@ -206,33 +200,36 @@ export default function UserManagementPage() {
       title: 'Created',
       dataIndex: 'created_at',
       key: 'created_at',
-      render: (time: string) => new Date(time).toLocaleDateString(),
+      render: (time: string) => parseUtc(time).toLocaleDateString(),
     },
     {
       title: 'Actions',
       key: 'actions',
+      align: 'right',
       render: (_, record) => (
-        <div className="flex items-center gap-3">
-          {hasPermission('user:manage') && (
-            <button
-              onClick={() => handleStatusChange(record.id, !record.is_active)}
-              className={`text-sm ${
-                record.is_active
-                  ? 'text-alert-400 hover:text-alert-400'
-                  : 'text-matrix-400 hover:text-matrix-400'
-              }`}
-            >
-              {record.is_active ? 'Deactivate' : 'Activate'}
-            </button>
-          )}
+        <div className="flex justify-end gap-1.5">
           {hasPermission('user:reset_password') && (
-            <button
-              onClick={() => handleResetPassword(record.id, record.username)}
-              className="text-sm text-cyber-400 hover:text-cyber-300"
-            >
-              Reset password
-            </button>
+            <Tooltip title="Set a new password">
+              <Button aria-label={`Set a new password for ${record.username}`} icon={<KeyIcon />} onClick={() => handleResetPassword(record.id, record.username)} />
+            </Tooltip>
           )}
+          {hasPermission('user:manage') && record.id !== me?.id && (record.is_active ? (
+            <Popconfirm
+              title={`Deactivate ${record.username}?`}
+              description="They are signed out and can't sign in until reactivated."
+              okText="Deactivate"
+              okButtonProps={{ danger: true }}
+              onConfirm={() => handleStatusChange(record.id, false)}
+            >
+              <Tooltip title="Deactivate">
+                <Button aria-label={`Deactivate ${record.username}`} danger icon={<ProhibitIcon />} />
+              </Tooltip>
+            </Popconfirm>
+          ) : (
+            <Tooltip title="Activate">
+              <Button aria-label={`Activate ${record.username}`} icon={<CheckIcon />} onClick={() => handleStatusChange(record.id, true)} />
+            </Tooltip>
+          ))}
         </div>
       ),
     },
@@ -240,81 +237,64 @@ export default function UserManagementPage() {
 
   return (
     <div>
-      {/* Page header */}
-      <div
-        className="flex flex-wrap items-start justify-between gap-4 pb-4 mb-6"
-        style={{ borderBottom: '1px solid var(--seam)' }}
-      >
-        <div>
-          <h1 className="text-2xl font-semibold" style={{ fontFamily: 'var(--font-display)', color: 'var(--ink)' }}>
-            User management
-          </h1>
-          <p className="mt-1 text-sm" style={{ color: 'var(--ink-muted)' }}>
-            Manage users, roles, and permissions
-          </p>
-        </div>
-        <button onClick={loadUsers} className="btn-ghost flex items-center gap-2">
-          <ReloadOutlined />
-          Refresh
-        </button>
-      </div>
+      <PageHeader
+        title="People"
+        lead="Who can sign in, and with which role. New accounts wait here to be activated."
+        actions={
+          <Tooltip title="Reload">
+            <Button aria-label="Reload people" icon={<ArrowsClockwiseIcon />} onClick={loadUsers} />
+          </Tooltip>
+        }
+      />
 
-      {/* Filters */}
-      <div className="glass-card p-4 mb-6">
-        <div className="flex flex-wrap gap-4">
-          <Input
-            placeholder="Search users..."
-            prefix={<SearchOutlined style={{ color: 'var(--ink-faint)' }} />}
-            value={search}
-            onChange={(e) => {
-              setSearch(e.target.value)
-              setPage(1)
-            }}
-            style={{ width: 250 }}
-            allowClear
-          />
-
-          <Select
-            placeholder="Filter by status"
-            value={filterStatus}
-            onChange={(value) => {
-              setFilterStatus(value)
-              setPage(1)
-            }}
-            style={{ width: 160 }}
-            allowClear
-          >
-            <Select.Option value={true}>Active</Select.Option>
-            <Select.Option value={false}>Disabled</Select.Option>
-          </Select>
-
-          <Select
-            placeholder="Filter by role"
-            value={filterRole}
-            onChange={(value) => {
-              setFilterRole(value)
-              setPage(1)
-            }}
-            style={{ width: 160 }}
-            allowClear
-          >
-            {roles.map((role) => (
-              <Select.Option key={role.id} value={role.id}>
-                {role.display_name}
-              </Select.Option>
-            ))}
-          </Select>
-        </div>
+      <div className="flex flex-wrap gap-3 mb-4">
+        <Input
+          placeholder="Search by name or email"
+          aria-label="Search people"
+          prefix={<MagnifyingGlassIcon style={{ color: 'var(--ink-faint)' }} />}
+          value={search}
+          onChange={(e) => {
+            setSearch(e.target.value)
+            setPage(1)
+          }}
+          className="!w-full sm:!w-72"
+          allowClear
+        />
+        <Select
+          placeholder="Any status"
+          aria-label="Status"
+          value={filterStatus}
+          onChange={(value) => {
+            setFilterStatus(value)
+            setPage(1)
+          }}
+          style={{ width: 150 }}
+          allowClear
+          options={[{ value: true, label: 'Active' }, { value: false, label: 'Waiting or disabled' }]}
+        />
+        <Select
+          placeholder="Any role"
+          aria-label="Role"
+          value={filterRole}
+          onChange={(value) => {
+            setFilterRole(value)
+            setPage(1)
+          }}
+          style={{ width: 150 }}
+          allowClear
+          options={roles.map((role) => ({ value: role.id, label: role.display_name }))}
+        />
       </div>
 
       {/* Users table */}
       <Table
+        scroll={{ x: 760 }}
         dataSource={users}
         columns={columns}
         rowKey="id"
         loading={{
           spinning: isLoading,
-          indicator: <LoadingOutlined className="text-cyber-400" />,
+          indicator: <SpinnerIcon className="text-cyber-400" />,
         }}
         pagination={{
           current: page,
@@ -322,10 +302,10 @@ export default function UserManagementPage() {
           pageSize: pageSize,
           onChange: setPage,
           showSizeChanger: false,
-          showTotal: (total) => `${total} users total`,
+          showTotal: (total) => `${total} ${total === 1 ? 'user' : 'users'}`,
         }}
         locale={{
-          emptyText: <Empty description="No users found" />,
+          emptyText: <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="No one matches these filters" />,
         }}
       />
     </div>

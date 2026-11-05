@@ -1,23 +1,20 @@
 import { useState, useEffect, type ReactNode } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import { Progress, Button, Spin, message, Steps } from 'antd'
-import {
-  ArrowLeftOutlined,
-  StopOutlined,
-  RedoOutlined,
-  DownloadOutlined,
-} from '@ant-design/icons'
+import { ArrowClockwiseIcon, ArrowLeftIcon, DownloadSimpleIcon, ProhibitIcon } from '../components/ui/icons'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import LogViewer from '../components/LogViewer'
 import BuildResultPanel from '../components/build/BuildResultPanel'
 import FailureReport from '../components/build/FailureReport'
 import { useWebSocket } from '../hooks/useWebSocket'
 import { taskApi } from '../api/client'
-import type { TaskResponse, ProjectType } from '../api/types'
+import type { TaskResponse } from '../api/types'
 import { triggerUrlDownload } from '../utils/download'
 import { STATUS_META, isTerminal } from '../utils/statusMeta'
 import { getErrorDetail, isNotFound } from '../utils/errors'
 import { binaryName } from '../utils/buildConfig'
+import { PROJECT_TYPE_META } from '../utils/projectTypeMeta'
+import { parseUtc, timeAgo } from '../utils/time'
 
 // ── Build-stage stepper (set by nuitka_worker: preflight→compile→bundle→verify→done) ──
 const STAGE_ORDER = ['queued', 'preflight', 'compile', 'bundle', 'verify', 'done'] as const
@@ -28,12 +25,6 @@ const STAGE_ITEMS = [
   { title: 'Bundle', description: 'Copying dependencies and data' },
   { title: 'Verify', description: 'Smoke-testing the binary' },
 ]
-const PROJECT_TYPE_LABELS: Record<ProjectType, string> = {
-  backend_only: 'Backend',
-  frontend_only: 'Frontend',
-  fullstack: 'Full-stack',
-}
-
 const stageIndex = (stage: string) => {
   const i = STAGE_ORDER.indexOf(stage as (typeof STAGE_ORDER)[number])
   return i < 0 ? 0 : i
@@ -42,19 +33,6 @@ const stageIndex = (stage: string) => {
 // Human-readable duration for a seconds count.
 const fmtDuration = (secs: number): string =>
   secs >= 60 ? `${Math.floor(secs / 60)}m ${Math.round(secs % 60)}s` : `${secs}s`
-
-// Relative time in the GitHub-Actions register ("3 minutes ago").
-const timeAgo = (iso: string): string => {
-  const s = Math.max(0, (Date.now() - new Date(iso).getTime()) / 1000)
-  if (s < 60) return 'just now'
-  const m = Math.floor(s / 60)
-  if (m < 60) return `${m} minute${m === 1 ? '' : 's'} ago`
-  const h = Math.floor(m / 60)
-  if (h < 24) return `${h} hour${h === 1 ? '' : 's'} ago`
-  const d = Math.floor(h / 24)
-  if (d < 30) return `${d} day${d === 1 ? '' : 's'} ago`
-  return new Date(iso).toLocaleDateString()
-}
 
 // A single label / value row in the config sidebar.
 function DetailRow({ label, children, mono }: { label: string; children: ReactNode; mono?: boolean }) {
@@ -182,7 +160,7 @@ export default function TaskDetail() {
           className="p-2 rounded-lg mt-0.5 transition-colors"
           style={{ color: 'var(--ink-muted)' }}
         >
-          <ArrowLeftOutlined className="text-lg" />
+          <ArrowLeftIcon className="text-lg" />
         </button>
 
         <span
@@ -201,7 +179,7 @@ export default function TaskDetail() {
               {task.project_name}
             </h1>
             <span
-              className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-medium uppercase"
+              className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-medium"
               style={{ backgroundColor: config.bgColor, color: config.color }}
             >
               {config.label}
@@ -212,7 +190,7 @@ export default function TaskDetail() {
             className="flex flex-wrap items-center gap-x-2 gap-y-1 text-sm mt-1"
             style={{ color: 'var(--ink-faint)' }}
           >
-            <span>{PROJECT_TYPE_LABELS[task.config.project_type]}</span>
+            <span>{PROJECT_TYPE_META[task.config.project_type].label}</span>
             {task.config.docker_enabled && (
               <>
                 <span aria-hidden>·</span>
@@ -240,7 +218,7 @@ export default function TaskDetail() {
           {isActive ? (
             <Button
               danger
-              icon={<StopOutlined />}
+              icon={<ProhibitIcon />}
               onClick={() => cancelMutation.mutate(task.id)}
               loading={cancelMutation.isPending}
             >
@@ -249,7 +227,7 @@ export default function TaskDetail() {
           ) : (
             <>
               <Button
-                icon={<RedoOutlined />}
+                icon={<ArrowClockwiseIcon />}
                 onClick={() =>
                   navigate('/create', {
                     state: {
@@ -265,7 +243,7 @@ export default function TaskDetail() {
               {task.status === 'completed' && (
                 <Button
                   type="primary"
-                  icon={<DownloadOutlined />}
+                  icon={<DownloadSimpleIcon />}
                   loading={downloading}
                   onClick={async () => {
                     setDownloading(true)
@@ -329,7 +307,7 @@ export default function TaskDetail() {
               <div>
                 <div className="flex justify-between text-sm mb-2">
                   <span style={{ color: 'var(--ink-muted)' }}>Progress</span>
-                  <span className="font-mono text-cyber-400">{task.progress}%</span>
+                  <span className="font-mono text-teal-400">{task.progress}%</span>
                 </div>
                 <Progress percent={task.progress} showInfo={false} />
                 {task.status_msg && (
@@ -342,7 +320,7 @@ export default function TaskDetail() {
 
             <div className="space-y-2.5 text-sm">
               <DetailRow label="Project type">
-                {PROJECT_TYPE_LABELS[task.config.project_type]}
+                {PROJECT_TYPE_META[task.config.project_type].label}
               </DetailRow>
               {task.config.docker_enabled && <DetailRow label="Docker">Enabled</DetailRow>}
 
@@ -406,7 +384,7 @@ export default function TaskDetail() {
               )}
 
               <DetailRow label="Created">
-                <span className="text-xs">{new Date(task.created_at).toLocaleString()}</span>
+                <span className="text-xs">{parseUtc(task.created_at).toLocaleString()}</span>
               </DetailRow>
             </div>
           </div>
