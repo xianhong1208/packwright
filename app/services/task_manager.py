@@ -273,7 +273,7 @@ class TaskManager:
                 )
                 await self.append_log(
                     task_id,
-                    "警告:無法停止建置行程,它可能仍在背景執行。請通知管理員。",
+                    "Warning: could not stop the build process; it may still be running in the background. Tell an administrator.",
                 )
 
         await self.update_task(task_id, "status", TaskStatus.CANCELLED, db)

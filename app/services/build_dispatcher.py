@@ -228,7 +228,7 @@ async def _build_backend_only(task_id: str, config: BuildConfig, db: AsyncSessio
         await task_manager.update_task(task_id, "status_msg", "Build complete")
     else:
         await task_manager.update_task(task_id, "status", TaskStatus.FAILED, db)
-        await task_manager.update_task(task_id, "status_msg", "後端編譯失敗,請查看下方日誌")
+        await task_manager.update_task(task_id, "status_msg", "Backend compile failed — see the log below")
 
 
 async def _build_frontend_only(task_id: str, config: BuildConfig, db: AsyncSession) -> None:

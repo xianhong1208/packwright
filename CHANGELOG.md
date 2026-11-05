@@ -25,6 +25,8 @@ follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this proje
   button reads "Sign in with MCP Gate". `MCP_CENTER_URL` is still read when `MCP_GATE_URL` is unset;
   linked accounts are unaffected.
 - `.env.example` no longer claims a PostgreSQL connection is required (SQLite is the default).
+- Backend messages are in English, like the console: failure diagnoses and their suggested actions,
+  validation errors, build-log lines and the project-scan labels.
 
 ### Added
 - `/health` reports the version, and the console shows it; `pyproject.toml` is the only place a

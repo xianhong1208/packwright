@@ -231,7 +231,7 @@ class TestValueValidation:
         The alternative is an nginx syntax error surfacing minutes into a
         Docker build, with nothing pointing back at the form field.
         """
-        with pytest.raises(ValueError, match="不允許的字元"):
+        with pytest.raises(ValueError, match="not allowed"):
             _validate_nginx_value(value, "nginx_proxy_read_timeout")
 
     @pytest.mark.unit

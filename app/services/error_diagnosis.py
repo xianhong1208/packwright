@@ -134,15 +134,15 @@ def diagnose_build_failure(log_text: str) -> list[dict]:
             pkg = abi_match.group(1) if abi_match else ""
             evidence = abi_match.group(0) if abi_match else so_match.group(0)
             add(
-                "目標專案的編譯 Python 版本與依賴的 .so ABI 不符",
-                "將「Python 版本」改為「自動偵測」,或確認 Packwright 已建對應的 "
-                ".venv-pyXYZ(執行 scripts/setup_nuitka_venvs.sh)。",
+                "The Python used to compile does not match the ABI of the project's .so dependencies",
+                "Set \"Python version\" to \"Auto-detect\", or make sure Packwright has the matching "
+                ".venv-pyXYZ (run scripts/setup_nuitka_venvs.sh).",
                 evidence,
                 # The single most common diagnosed failure, and the fix is one
                 # field. Making the user re-enter the whole form to change it
                 # is how the same mistake gets submitted dozens of times.
                 action={
-                    "label": "改用自動偵測並重新建置",
+                    "label": "Rebuild with auto-detect",
                     "overrides": {"python_version": "auto"},
                 },
             )
@@ -165,9 +165,9 @@ def diagnose_build_failure(log_text: str) -> list[dict]:
         ):
             evidence = _line_containing(text_lower, text, "find_dotenv")
             add(
-                "python-dotenv 的 load_dotenv() 在 Nuitka 下爬呼叫堆疊失敗",
-                "專案的 load_dotenv() 改成傳明確路徑,例如 "
-                'load_dotenv(BASE_DIR / ".env")。',
+                "python-dotenv's load_dotenv() failed walking the call stack under Nuitka",
+                "Pass load_dotenv() an explicit path in the project, e.g. "
+                'load_dotenv(BASE_DIR / ".env").',
                 evidence,
             )
     except Exception:
@@ -185,9 +185,9 @@ def diagnose_build_failure(log_text: str) -> list[dict]:
         if found:
             evidence = _line_containing(text_lower, text, found)
             add(
-                "目標服務要綁的 port 已被佔用",
-                "這通常是舊實例還在跑,非產物問題(本系統已自動視為警告);"
-                "要完整驗證可先停掉佔用該 port 的服務。",
+                "The port the service binds is already in use",
+                "Usually an old instance is still running — not a problem with the artifact (this "
+                "is treated as a warning). For a full check, stop whatever holds the port first.",
                 evidence,
             )
     except Exception:
@@ -208,9 +208,9 @@ def diagnose_build_failure(log_text: str) -> list[dict]:
         if copy_match or cache_match or dir_match:
             m = copy_match or dir_match or cache_match
             add(
-                "Dockerfile 要 COPY 的目錄在 dist/ 不存在",
-                "檢查「資料目錄(data_dirs)」是否勾了專案裡不存在的目錄"
-                "(本系統已會自動跳過不存在的)。",
+                "A directory the Dockerfile COPYs does not exist in dist/",
+                "Check whether \"Data directories\" (data_dirs) lists a directory the project does "
+                "not have (missing ones are skipped automatically).",
                 m.group(0),
             )
     except Exception:
@@ -235,9 +235,9 @@ def diagnose_build_failure(log_text: str) -> list[dict]:
             if re.fullmatch(r"([A-Za-z0-9_]+)\._\1", mod):
                 continue
             add(
-                f"執行時找不到模組 {mod}",
-                f"該套件可能有動態/延遲 import,Nuitka 沒偵測到;"
-                f"在「強制納入套件」欄位加入 {mod}。",
+                f"Module {mod} not found at run time",
+                f"The package probably imports it dynamically or lazily, which Nuitka cannot see; "
+                f"add {mod} to \"Include packages\".",
                 m.group(0),
             )
             break
@@ -256,8 +256,8 @@ def diagnose_build_failure(log_text: str) -> list[dict]:
         if found:
             evidence = _line_containing(text_lower, text, found)
             add(
-                "選定的 Python 環境沒有安裝 Nuitka",
-                "執行 scripts/setup_nuitka_venvs.sh 建立對應版本的 venv。",
+                "Nuitka is not installed in the selected Python environment",
+                "Run scripts/setup_nuitka_venvs.sh to create the venv for that version.",
                 evidence,
             )
     except Exception:
@@ -283,9 +283,9 @@ def diagnose_build_failure(log_text: str) -> list[dict]:
                 needle = "vite build"
             evidence = _line_containing(text_lower, text, needle)
             add(
-                "前端建置失敗",
-                "確認 frontend 目錄、build 指令與 Node 版本;"
-                "查看下方前端 build log 的紅字。",
+                "Frontend build failed",
+                "Check the frontend directory, the build command and the Node version; "
+                "the red lines in the frontend build log below say what broke.",
                 evidence,
             )
     except Exception:
@@ -303,15 +303,15 @@ def diagnose_build_failure(log_text: str) -> list[dict]:
         if found:
             evidence = _line_containing(text_lower, text, found)
             add(
-                "編譯過程記憶體不足",
-                "降低「CPU 並行數(nuitka_jobs)」,或改用 External 打包模式。"
-                "並行數越高,同時開啟的 C 編譯器行程越多,記憶體用量幾乎是線性成長。",
+                "Out of memory while compiling",
+                "Lower \"CPU jobs\" (nuitka_jobs), or use the External pack mode. Each job is "
+                "another C compiler process, so memory use grows almost linearly with it.",
                 evidence,
                 # 2 keeps some parallelism while cutting peak memory hard. Going
                 # to 1 as a first move makes an already-slow build far slower for
                 # no extra chance of success.
                 action={
-                    "label": "把並行數降到 2 並重新建置",
+                    "label": "Rebuild with 2 CPU jobs",
                     "overrides": {"nuitka_jobs": 2},
                 },
             )
@@ -330,8 +330,9 @@ def diagnose_build_failure(log_text: str) -> list[dict]:
         if found:
             evidence = _line_containing(text_lower, text, found)
             add(
-                "磁碟空間不足",
-                "清理輸出目錄或 workspace,確認 dist/ 與 docker_images 所在磁碟有空間。",
+                "Out of disk space",
+                "Free up the output directory or workspace, and check the disks holding dist/ and "
+                "the Docker image exports.",
                 evidence,
             )
     except Exception:
@@ -350,9 +351,9 @@ def diagnose_build_failure(log_text: str) -> list[dict]:
         ):
             evidence = _line_containing(text_lower, text, "permission denied")
             add(
-                "存取 Python 環境時權限不足",
-                "確認 venv 由執行服務的同一使用者建立(非 root),"
-                "參考 setup_nuitka_venvs.sh。",
+                "Permission denied while accessing the Python environment",
+                "Make sure the venv was created by the same user that runs the service (not "
+                "root); see setup_nuitka_venvs.sh.",
                 evidence,
             )
     except Exception:
@@ -375,10 +376,10 @@ def diagnose_build_failure(log_text: str) -> list[dict]:
         found = next((n for n in needles if n in text_lower), None)
         if found and ("git" in text_lower or "clone" in text_lower):
             add(
-                "Git 認證失敗,無法取得這個 repository",
-                "If this is a private repo, add a valid access token for its host in the console (Settings -> Git credentials)"
-                "(token 會過期);公開 repo 請確認網址沒有打錯。"
-                "注意:網址裡不要自己帶帳號密碼,系統會自行注入。",
+                "Git authentication failed: the repository could not be fetched",
+                "For a private repo, add a valid access token for its host in Settings -> Git "
+                "credentials (tokens expire); for a public one, check the URL for typos. Do not "
+                "put a username or password in the URL — credentials are added automatically.",
                 _line_containing(text_lower, text, found),
             )
     except Exception:
@@ -398,9 +399,9 @@ def diagnose_build_failure(log_text: str) -> list[dict]:
         )
         if ref_match:
             add(
-                "指定的分支或標籤在遠端不存在",
-                "回到第一步重新選一次分支/標籤 —— 下拉選單是即時從遠端讀取的。"
-                "常見原因是分支已被刪除或改名。",
+                "The branch or tag does not exist on the remote",
+                "Go back to the first step and pick the branch/tag again — the list is read live "
+                "from the remote. Usually the branch was deleted or renamed.",
                 ref_match.group(0),
             )
     except Exception:
@@ -422,9 +423,9 @@ def diagnose_build_failure(log_text: str) -> list[dict]:
         )
         if entry_match:
             add(
-                "找不到進入點程式檔",
-                "檢查第二步的「進入點」欄位。它是相對於專案根目錄的路徑,"
-                "例如 main.py 或 src/app.py —— 不要填絕對路徑。",
+                "Entry point file not found",
+                "Check \"Entry point\" in the second step. It is relative to the project root, "
+                "e.g. main.py or src/app.py — not an absolute path.",
                 entry_match.group(0),
             )
     except Exception:
@@ -444,10 +445,10 @@ def diagnose_build_failure(log_text: str) -> list[dict]:
         )
         if dep_match:
             add(
-                "安裝專案依賴時失敗",
-                "這是專案自己的依賴問題,不是打包設定造成的。"
-                "先在專案目錄手動跑一次 uv sync 或 pip install -r requirements.txt,"
-                "確認能裝起來再重新打包。",
+                "Installing the project's dependencies failed",
+                "This is a problem with the project's own dependencies, not the build settings. "
+                "Run uv sync (or pip install -r requirements.txt) in the project yourself, and "
+                "rebuild once that succeeds.",
                 dep_match.group(0),
             )
     except Exception:
@@ -471,9 +472,9 @@ def diagnose_build_failure(log_text: str) -> list[dict]:
             or "yarn install" in text_lower
         ):
             add(
-                "前端依賴安裝失敗",
-                "多半是 package-lock.json / pnpm-lock.yaml 與 package.json 對不上。"
-                "在前端目錄重新產生 lock 檔並 commit,再重新打包。",
+                "Installing frontend dependencies failed",
+                "Usually package-lock.json / pnpm-lock.yaml no longer matches package.json. "
+                "Regenerate the lockfile in the frontend directory, commit it, and rebuild.",
                 npm_match.group(0),
             )
     except Exception:
@@ -494,9 +495,9 @@ def diagnose_build_failure(log_text: str) -> list[dict]:
         found = next((n for n in needles if n in text_lower), None)
         if found:
             add(
-                "連不上 Docker daemon",
-                "這是伺服器端的問題,不是你的設定。請聯絡管理員確認 docker 服務正在執行"
-                "、且執行本服務的使用者有權限使用它。",
+                "Cannot connect to the Docker daemon",
+                "This is a server-side problem, not your settings. Ask an administrator to check "
+                "that Docker is running and that the service's user may use it.",
                 _line_containing(text_lower, text, found),
             )
     except Exception:
@@ -521,15 +522,16 @@ def diagnose_build_failure(log_text: str) -> list[dict]:
             "504" in text_lower or "gateway" in text_lower or "upstream timed out" in text_lower
         ):
             add(
-                "被反向代理判定逾時而中斷(504)",
-                "這不是後端當掉 —— nginx 的 proxy_read_timeout 算的是「後端多久沒送出"
-                "任何資料」。像語音辨識這種算很久、期間完全靜默的請求最容易踩到:"
-                "nginx 放棄並回 504,你的後端卻還在跑,結果寫回一條沒人在聽的連線,"
-                "所以後端日誌看起來是成功的。"
-                "\n處理方式:(1) 把 Docker 設定的「後端最久可以不出聲多久」調到最壞情況的"
-                "兩倍;(2) 更可靠的是讓後端在等待期間定期送出資料(SSE 每 10 秒送一行"
-                "「: keepalive」),這樣計時器會被重置,而且鏈上每一層代理都同時滿足 —— "
-                "如果容器外還有一層反向代理(外層 nginx、負載平衡器),只改容器內的設定是沒有用的。",
+                "Cut off by the reverse proxy's timeout (504)",
+                "The backend did not crash — nginx's proxy_read_timeout counts how long the "
+                "backend has sent nothing. Long, silent requests such as speech-to-text hit it "
+                "most: nginx gives up and returns 504 while the backend keeps working and later "
+                "writes to a connection nobody is listening on, so its own log shows success."
+                "\nFix: (1) set the Docker setting for how long the backend may stay silent to "
+                "twice the worst case; (2) more robust: have the backend send data while it works "
+                "(an SSE \": keepalive\" line every 10 s), which resets the timer of every proxy in "
+                "the chain at once — if another reverse proxy (an outer nginx, a load balancer) "
+                "sits in front of the container, changing only the one inside does nothing.",
                 gw_match.group(0),
             )
     except Exception:
@@ -546,9 +548,9 @@ def diagnose_build_failure(log_text: str) -> list[dict]:
         found = next((n for n in needles if n in text_lower), None)
         if found:
             add(
-                "步驟執行超時而被中止",
-                "大型專案的 clone 或依賴安裝可能超過預設時限。"
-                "請告知管理員調整 GIT_CLONE_TIMEOUT / VENV_BOOTSTRAP_TIMEOUT。",
+                "A step timed out and was stopped",
+                "Cloning or installing dependencies of a large project can exceed the default "
+                "limits. Ask an administrator to raise GIT_CLONE_TIMEOUT / VENV_BOOTSTRAP_TIMEOUT.",
                 _line_containing(text_lower, text, found),
             )
     except Exception:
@@ -582,12 +584,12 @@ _ERROR_LINE_MARKERS = (
 
 # Stage names come from task["stage"]; phrase them the way the UI already does.
 _STAGE_HINTS = {
-    "queued": "任務還在排隊時就結束了",
-    "preflight": "在「預檢」階段失敗 —— 通常是路徑、Python 版本或依賴環境的問題",
-    "compile": "在「編譯」階段失敗 —— Nuitka 執行時出錯",
-    "bundle": "在「打包」階段失敗 —— 複製依賴或資料目錄時出錯",
-    "verify": "在「驗證」階段失敗 —— 產物編出來了,但試跑不通過",
-    "done": "在收尾階段失敗",
+    "queued": "The build ended while it was still queued",
+    "preflight": "Failed during preflight — usually a path, the Python version or the dependency environment",
+    "compile": "Failed while compiling — Nuitka reported an error",
+    "bundle": "Failed while bundling — copying dependencies or data directories went wrong",
+    "verify": "Failed verification — the binary was built but its test run failed",
+    "done": "Failed while finishing up",
 }
 
 
@@ -631,16 +633,16 @@ def build_failure_report(log_text: str, *, stage: str | None = None) -> dict:
 
     if not diagnoses:
         stage_hint = _STAGE_HINTS.get((stage or "").lower())
-        problem = stage_hint or "建置失敗,但系統無法自動判斷原因"
+        problem = stage_hint or "The build failed, and the cause could not be determined automatically"
         if error_lines:
             suggestion = (
-                "系統沒有比對到已知的失敗模式,以下是日誌中最後出現的錯誤訊息。"
-                "如果看不懂,把這幾行連同任務連結一起貼給管理員即可。"
+                "This does not match a known failure pattern; below are the last error lines in "
+                "the log. If they don't help, send them with a link to this build to an administrator."
             )
         else:
             suggestion = (
-                "日誌中沒有明顯的錯誤字樣。請開啟右側完整日誌從尾端往回看,"
-                "或把這個任務的連結貼給管理員協助判讀。"
+                "The log has no obvious error lines. Read the full log from the end backwards, "
+                "or send a link to this build to an administrator."
             )
         diagnoses = [
             {
