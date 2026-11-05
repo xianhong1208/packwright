@@ -1,5 +1,6 @@
 import type { ReactNode } from 'react'
-import { CheckOutlined } from '@ant-design/icons'
+import { CheckIcon } from '../ui/icons'
+import Mark from '../ui/Mark'
 
 /**
  * What a build goes through, in the words the build pages use. The sign-in
@@ -23,7 +24,7 @@ export default function AuthLayout({ title, lead, children }: { title: ReactNode
     <div className="auth">
       <main className="auth-side">
         <div className="auth-brand">
-          <span className="auth-mark" aria-hidden="true">P</span>
+          <span className="auth-mark" aria-hidden="true"><Mark size={21} /></span>
           Packwright
         </div>
         <div className="auth-body">
@@ -43,7 +44,7 @@ export default function AuthLayout({ title, lead, children }: { title: ReactNode
         <ol className="auth-track">
           {STAGES.map((s) => (
             <li key={s.name} className="auth-stage" data-state={s.state}>
-              <span className="auth-node" aria-hidden="true">{s.state === 'done' && <CheckOutlined />}</span>
+              <span className="auth-node" aria-hidden="true">{s.state === 'done' && <CheckIcon />}</span>
               <div>
                 <div className="auth-stage-name">{s.name}</div>
                 <div className="auth-stage-does">{s.does}</div>

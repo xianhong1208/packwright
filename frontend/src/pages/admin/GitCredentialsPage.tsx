@@ -15,7 +15,7 @@ import {
   Tooltip,
   Typography,
 } from 'antd'
-import { CloudServerOutlined, DeleteOutlined, EditOutlined, GithubOutlined, GitlabOutlined, PlusOutlined } from '@ant-design/icons'
+import { GithubLogoIcon, GitlabLogoIcon, HardDrivesIcon, PencilSimpleIcon, PlusIcon, TrashIcon } from '../../components/ui/icons'
 import PageHeader from '../../components/layout/PageHeader'
 import {
   gitCredentialsApi,
@@ -27,9 +27,9 @@ import { parseUtc } from '../../utils/time'
 const { Text } = Typography
 
 const PROVIDER_META: Record<GitProvider, { label: string; icon: React.ReactNode; defaultHost: string }> = {
-  github: { label: 'GitHub', icon: <GithubOutlined />, defaultHost: 'github.com' },
-  gitlab: { label: 'GitLab', icon: <GitlabOutlined />, defaultHost: 'gitlab.com' },
-  generic: { label: 'Other (self-hosted)', icon: <CloudServerOutlined />, defaultHost: '' },
+  github: { label: 'GitHub', icon: <GithubLogoIcon />, defaultHost: 'github.com' },
+  gitlab: { label: 'GitLab', icon: <GitlabLogoIcon />, defaultHost: 'gitlab.com' },
+  generic: { label: 'Other (self-hosted)', icon: <HardDrivesIcon />, defaultHost: '' },
 }
 
 // Managing Git credentials replaces the old server-side GITLAB_TOKEN env var:
@@ -156,7 +156,7 @@ export default function GitCredentialsPage() {
       render: (_: unknown, cred: GitCredential) => (
         <Space size="small">
           <Tooltip title="Edit">
-            <Button type="text" size="small" icon={<EditOutlined />} onClick={() => openEdit(cred)} />
+            <Button type="text" size="small" icon={<PencilSimpleIcon />} onClick={() => openEdit(cred)} />
           </Tooltip>
           <Popconfirm
             title="Delete this credential?"
@@ -166,7 +166,7 @@ export default function GitCredentialsPage() {
             cancelText="Cancel"
             onConfirm={() => deleteMutation.mutate(cred.id)}
           >
-            <Button type="text" size="small" danger icon={<DeleteOutlined />} aria-label="Delete" />
+            <Button type="text" size="small" danger icon={<TrashIcon />} aria-label="Delete" />
           </Popconfirm>
         </Space>
       ),
@@ -179,7 +179,7 @@ export default function GitCredentialsPage() {
         title="Git credentials"
         lead="Tokens for cloning private repositories. A build uses the one whose host matches its Git URL."
         actions={
-          <Button type="primary" icon={<PlusOutlined />} onClick={openCreate}>
+          <Button type="primary" icon={<PlusIcon />} onClick={openCreate}>
             Add credential
           </Button>
         }
@@ -197,7 +197,7 @@ export default function GitCredentialsPage() {
             image={Empty.PRESENTED_IMAGE_SIMPLE}
             description={<span style={{ color: 'var(--ink-muted)' }}>No credentials yet. Public repositories don't need one.</span>}
           >
-            <Button icon={<PlusOutlined />} onClick={openCreate}>Add credential</Button>
+            <Button icon={<PlusIcon />} onClick={openCreate}>Add credential</Button>
           </Empty>
         ) }}
       />

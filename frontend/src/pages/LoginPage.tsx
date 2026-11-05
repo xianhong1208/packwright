@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react'
 import { useNavigate, Link } from 'react-router-dom'
-import { LoadingOutlined, CheckCircleOutlined, SafetyCertificateOutlined } from '@ant-design/icons'
+import { CheckCircleIcon, SealCheckIcon, SpinnerIcon } from '../components/ui/icons'
 import AuthLayout from '../components/layout/AuthLayout'
 import { useAuth, checkFirstUser, tokenManager } from '../contexts/AuthContext'
 
@@ -212,7 +212,7 @@ export default function LoginPage() {
           {/* Pending approval message */}
           {pendingApproval && (
             <div className="p-3 rounded-lg bg-matrix-500/10 border border-matrix-500/30 text-matrix-400 text-sm flex items-start gap-2">
-              <CheckCircleOutlined className="mt-0.5 flex-shrink-0" />
+              <CheckCircleIcon className="mt-0.5 flex-shrink-0" />
               <span>Account created — an administrator must approve it before you can sign in.</span>
             </div>
           )}
@@ -232,7 +232,7 @@ export default function LoginPage() {
           >
             {isSubmitting ? (
               <>
-                <LoadingOutlined className="animate-spin" />
+                <SpinnerIcon />
                 {isRegisterMode ? 'Creating account…' : 'Signing in…'}
               </>
             ) : (
@@ -253,7 +253,7 @@ export default function LoginPage() {
               href="/auth/oauth/mcp/login"
               className="w-full flex items-center justify-center gap-2 py-2.5 rounded-lg border border-void-600 text-[var(--ink)] hover:border-cyber-500 hover:text-cyber-300 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyber-500/60"
             >
-              <SafetyCertificateOutlined />
+              <SealCheckIcon />
               Sign in with MCP Gate
             </a>
           </div>

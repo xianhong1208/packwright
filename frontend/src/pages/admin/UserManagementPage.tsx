@@ -1,18 +1,7 @@
 import { useState, useEffect } from 'react'
 import { Link } from 'react-router-dom'
 import { Table, Tag, Input, Select, message, Empty, Modal, Button, Tooltip, Popconfirm } from 'antd'
-import {
-  UserOutlined,
-  SearchOutlined,
-  CheckCircleOutlined,
-  CloseCircleOutlined,
-  LoadingOutlined,
-  ReloadOutlined,
-  CrownOutlined,
-  KeyOutlined,
-  StopOutlined,
-  CheckOutlined,
-} from '@ant-design/icons'
+import { ArrowsClockwiseIcon, CheckCircleIcon, CheckIcon, CrownIcon, KeyIcon, MagnifyingGlassIcon, ProhibitIcon, SpinnerIcon, UserIcon, XCircleIcon } from '../../components/ui/icons'
 import type { ColumnsType } from 'antd/es/table'
 import { userApi } from '../../api/userApi'
 import type { UserListItem, Role } from '../../api/types'
@@ -136,7 +125,7 @@ export default function UserManagementPage() {
             className="w-8 h-8 rounded-full flex items-center justify-center"
             style={{ background: 'var(--color-void-700)' }}
           >
-            <UserOutlined style={{ color: 'var(--ink-muted)' }} />
+            <UserIcon style={{ color: 'var(--ink-muted)' }} />
           </div>
           <div>
             <Link
@@ -160,7 +149,7 @@ export default function UserManagementPage() {
         if (!hasPermission('user:manage')) {
           return record.role ? (
             <Tag color={record.role.name === 'admin' ? 'gold' : undefined}>
-              {record.role.name === 'admin' && <CrownOutlined className="mr-1" />}
+              {record.role.name === 'admin' && <CrownIcon className="mr-1" />}
               {record.role.display_name}
             </Tag>
           ) : (
@@ -190,7 +179,7 @@ export default function UserManagementPage() {
       render: (_, record) => (
         <Tag
           color={record.is_active ? 'green' : 'red'}
-          icon={record.is_active ? <CheckCircleOutlined /> : <CloseCircleOutlined />}
+          icon={record.is_active ? <CheckCircleIcon /> : <XCircleIcon />}
         >
           {record.is_active ? 'Active' : 'Inactive'}
         </Tag>
@@ -221,7 +210,7 @@ export default function UserManagementPage() {
         <div className="flex justify-end gap-1.5">
           {hasPermission('user:reset_password') && (
             <Tooltip title="Set a new password">
-              <Button aria-label={`Set a new password for ${record.username}`} icon={<KeyOutlined />} onClick={() => handleResetPassword(record.id, record.username)} />
+              <Button aria-label={`Set a new password for ${record.username}`} icon={<KeyIcon />} onClick={() => handleResetPassword(record.id, record.username)} />
             </Tooltip>
           )}
           {hasPermission('user:manage') && record.id !== me?.id && (record.is_active ? (
@@ -233,12 +222,12 @@ export default function UserManagementPage() {
               onConfirm={() => handleStatusChange(record.id, false)}
             >
               <Tooltip title="Deactivate">
-                <Button aria-label={`Deactivate ${record.username}`} danger icon={<StopOutlined />} />
+                <Button aria-label={`Deactivate ${record.username}`} danger icon={<ProhibitIcon />} />
               </Tooltip>
             </Popconfirm>
           ) : (
             <Tooltip title="Activate">
-              <Button aria-label={`Activate ${record.username}`} icon={<CheckOutlined />} onClick={() => handleStatusChange(record.id, true)} />
+              <Button aria-label={`Activate ${record.username}`} icon={<CheckIcon />} onClick={() => handleStatusChange(record.id, true)} />
             </Tooltip>
           ))}
         </div>
@@ -253,7 +242,7 @@ export default function UserManagementPage() {
         lead="Who can sign in, and with which role. New accounts wait here to be activated."
         actions={
           <Tooltip title="Reload">
-            <Button aria-label="Reload people" icon={<ReloadOutlined />} onClick={loadUsers} />
+            <Button aria-label="Reload people" icon={<ArrowsClockwiseIcon />} onClick={loadUsers} />
           </Tooltip>
         }
       />
@@ -262,7 +251,7 @@ export default function UserManagementPage() {
         <Input
           placeholder="Search by name or email"
           aria-label="Search people"
-          prefix={<SearchOutlined style={{ color: 'var(--ink-faint)' }} />}
+          prefix={<MagnifyingGlassIcon style={{ color: 'var(--ink-faint)' }} />}
           value={search}
           onChange={(e) => {
             setSearch(e.target.value)
@@ -305,7 +294,7 @@ export default function UserManagementPage() {
         rowKey="id"
         loading={{
           spinning: isLoading,
-          indicator: <LoadingOutlined className="text-cyber-400" />,
+          indicator: <SpinnerIcon className="text-cyber-400" />,
         }}
         pagination={{
           current: page,

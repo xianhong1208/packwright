@@ -1,20 +1,9 @@
-import { Suspense, useEffect, useMemo, useState, type ReactNode } from 'react'
+import { Suspense, useEffect, useMemo, useState, type ComponentType } from 'react'
 import { Outlet, useLocation, useNavigate } from 'react-router-dom'
 import { Button, Drawer, Dropdown, Input, Modal, Spin, Tooltip } from 'antd'
-import {
-  ClockCircleOutlined,
-  DashboardOutlined,
-  HistoryOutlined,
-  HomeOutlined,
-  KeyOutlined,
-  LogoutOutlined,
-  MenuOutlined,
-  PlusOutlined,
-  SafetyOutlined,
-  SearchOutlined,
-  SettingOutlined,
-  TeamOutlined,
-} from '@ant-design/icons'
+import { ClockCounterClockwiseIcon, ClockIcon, GaugeIcon, GearIcon, HouseIcon, KeyIcon, ListIcon, MagnifyingGlassIcon, PlusIcon, ShieldCheckIcon, SignOutIcon, UsersIcon } from '../ui/icons'
+import type { IconProps } from '../ui/icons'
+import Mark from '../ui/Mark'
 import { useQuery } from '@tanstack/react-query'
 import { useAuth } from '../../contexts/AuthContext'
 import { useTaskStore } from '../../store/taskStore'
@@ -25,22 +14,22 @@ import { STATUS_META } from '../../utils/statusMeta'
 interface NavItem {
   path: string
   label: string
-  icon: ReactNode
+  Icon: ComponentType<IconProps>
   /** Any of these permissions shows the item; none listed = everyone. */
   permission?: string[]
   match?: (pathname: string) => boolean
 }
 
 const MAIN_NAV: NavItem[] = [
-  { path: '/', label: 'On the bench', icon: <HomeOutlined /> },
-  { path: '/create', label: 'New build', icon: <PlusOutlined /> },
-  { path: '/history', label: 'Builds', icon: <HistoryOutlined />, match: (p) => p.startsWith('/history') || p.startsWith('/task') },
-  { path: '/monitor', label: 'Machine', icon: <DashboardOutlined /> },
+  { path: '/', label: 'On the bench', Icon: HouseIcon },
+  { path: '/create', label: 'New build', Icon: PlusIcon },
+  { path: '/history', label: 'Builds', Icon: ClockCounterClockwiseIcon, match: (p) => p.startsWith('/history') || p.startsWith('/task') },
+  { path: '/monitor', label: 'Machine', Icon: GaugeIcon },
 ]
 const ADMIN_NAV: NavItem[] = [
-  { path: '/admin/users', label: 'People', icon: <TeamOutlined />, permission: ['user:view'], match: (p) => p.startsWith('/admin/users') },
-  { path: '/admin/roles', label: 'Roles', icon: <SafetyOutlined />, permission: ['role:view'] },
-  { path: '/settings/git-credentials', label: 'Git credentials', icon: <KeyOutlined />, permission: ['user:manage'] },
+  { path: '/admin/users', label: 'People', Icon: UsersIcon, permission: ['user:view'], match: (p) => p.startsWith('/admin/users') },
+  { path: '/admin/roles', label: 'Roles', Icon: ShieldCheckIcon, permission: ['role:view'] },
+  { path: '/settings/git-credentials', label: 'Git credentials', Icon: KeyIcon, permission: ['user:manage'] },
 ]
 
 const isActive = (item: NavItem, pathname: string) =>
@@ -107,7 +96,7 @@ export default function AppShell() {
         aria-current={isActive(item, pathname) ? 'page' : undefined}
         className={`rail-tool ${isActive(item, pathname) ? 'active' : ''}`}
       >
-        {item.icon}
+        <item.Icon weight={isActive(item, pathname) ? 'duotone' : 'regular'} />
         {item.path === '/' && running > 0 && <span className="rail-dot" aria-label={`${running} running`} />}
       </button>
     </Tooltip>
@@ -121,7 +110,7 @@ export default function AppShell() {
       aria-current={isActive(item, pathname) ? 'page' : undefined}
       className={`nav-item w-full ${isActive(item, pathname) ? 'active' : ''}`}
     >
-      <span className="text-lg">{item.icon}</span>
+      <span className="text-lg"><item.Icon weight={isActive(item, pathname) ? 'duotone' : 'regular'} /></span>
       <span className="flex-1 text-left">{item.label}</span>
       {item.path === '/' && running > 0 && <span className="text-xs text-teal-400">{running} running</span>}
     </button>
@@ -131,8 +120,8 @@ export default function AppShell() {
     items: [
       { key: 'who', label: <span className="text-[var(--ink-muted)]">{user?.username}, {user?.role?.display_name ?? 'User'}</span>, disabled: true },
       { type: 'divider' as const },
-      { key: 'security', icon: <SettingOutlined />, label: 'Security', onClick: () => go('/settings/security') },
-      { key: 'logout', icon: <LogoutOutlined />, label: 'Sign out', danger: true, onClick: handleLogout },
+      { key: 'security', icon: <GearIcon />, label: 'Security', onClick: () => go('/settings/security') },
+      { key: 'logout', icon: <SignOutIcon />, label: 'Sign out', danger: true, onClick: handleLogout },
     ],
   }
 
@@ -142,7 +131,7 @@ export default function AppShell() {
       <nav className="app-rail hidden lg:flex" aria-label="Main">
         <Tooltip title={serverVersion ? `Packwright ${serverVersion}` : 'Packwright'} placement="right">
           <button type="button" className="rail-logo" onClick={() => go('/')} aria-label="Packwright home">
-            P
+            <Mark size={24} />
           </button>
         </Tooltip>
         {MAIN_NAV.map(railButton)}
@@ -160,14 +149,14 @@ export default function AppShell() {
         {/* Top bar */}
         <header className="app-topbar">
           <button type="button" className="lg:hidden rail-tool" onClick={() => setDrawerOpen(true)} aria-label="Open navigation">
-            <MenuOutlined />
+            <ListIcon />
           </button>
           <button type="button" className="quick-jump" onClick={() => setPaletteOpen(true)}>
-            <SearchOutlined />
+            <MagnifyingGlassIcon />
             <span className="flex-1 text-left truncate">Find a build or a page</span>
             <kbd className="hidden sm:inline">Ctrl K</kbd>
           </button>
-          <Button type="primary" icon={<PlusOutlined />} onClick={() => go('/create')}>
+          <Button type="primary" icon={<PlusIcon />} onClick={() => go('/create')}>
             <span className="hidden sm:inline">New build</span>
           </Button>
         </header>
@@ -193,9 +182,9 @@ export default function AppShell() {
         <div className="space-y-1">{MAIN_NAV.map(drawerLink)}</div>
         {adminNav.length > 0 && <div className="mt-4 pt-4 border-t border-[var(--seam)] space-y-1">{adminNav.map(drawerLink)}</div>}
         <div className="mt-4 pt-4 border-t border-[var(--seam)] space-y-1">
-          {drawerLink({ path: '/settings/security', label: 'Security', icon: <SettingOutlined />, match: (p) => p === '/settings/security' })}
+          {drawerLink({ path: '/settings/security', label: 'Security', Icon: GearIcon, match: (p) => p === '/settings/security' })}
           <button type="button" onClick={handleLogout} className="nav-item w-full text-alert-400">
-            <span className="text-lg"><LogoutOutlined /></span>
+            <span className="text-lg"><SignOutIcon /></span>
             <span className="flex-1 text-left">Sign out {user?.username}</span>
           </button>
         </div>
@@ -206,7 +195,7 @@ export default function AppShell() {
       {/* Idle timeout warning */}
       <Modal
         open={showWarning}
-        title={<span className="flex items-center gap-2"><ClockCircleOutlined className="text-signal-400" />You are about to be signed out</span>}
+        title={<span className="flex items-center gap-2"><ClockIcon className="text-signal-400" />You are about to be signed out</span>}
         okText="Stay signed in"
         cancelText="Sign out now"
         onOk={resetTimer}
@@ -250,7 +239,7 @@ function QuickJump({
     const q = query.trim().toLowerCase()
     const pageHits = pages
       .filter((p) => !q || p.label.toLowerCase().includes(q))
-      .map((p) => ({ key: `page:${p.path}`, path: p.path, title: p.label, hint: 'Page', icon: p.icon }))
+      .map((p) => ({ key: `page:${p.path}`, path: p.path, title: p.label, hint: 'Page', icon: <p.Icon /> }))
     const seen = new Set<string>()
     const buildHits = builds
       .filter((b) => (!q || b.project_name.toLowerCase().includes(q)) && !seen.has(b.project_name) && seen.add(b.project_name))
@@ -276,7 +265,7 @@ function QuickJump({
       <Input
         autoFocus
         size="large"
-        prefix={<SearchOutlined />}
+        prefix={<MagnifyingGlassIcon />}
         placeholder="Type a build or page name"
         value={query}
         onChange={(e) => {

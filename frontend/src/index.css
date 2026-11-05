@@ -345,6 +345,15 @@ h1, h2, h3, h4, h5 { font-family: var(--font-display); letter-spacing: -0.015em;
 }
 
 @layer components {
+/* Phosphor icons (components/ui/icons): sit on the text baseline like antd's own. */
+.pw-icon {
+  display: inline-flex;
+  align-items: center;
+  line-height: 0;
+  vertical-align: -0.125em;
+}
+.pw-icon > svg { flex: none; }
+
 /* -------------------------------------------------------------------------
    Sign-in frame (components/layout/AuthLayout): the form on a narrow strip,
    the build track filling the rest. Phones get the strip only.
@@ -514,8 +523,8 @@ h1, h2, h3, h4, h5 { font-family: var(--font-display); letter-spacing: -0.015em;
 }
 .rail-logo {
   width: 40px; height: 40px; border-radius: 11px; border: 0; cursor: pointer; margin-bottom: 14px;
+  display: grid; place-items: center;
   background: var(--color-cyber-500); color: var(--color-void-950);
-  font: 700 20px/1 var(--font-display);
 }
 .rail-tool {
   position: relative; width: 44px; height: 44px; border-radius: 11px; border: 0; cursor: pointer;

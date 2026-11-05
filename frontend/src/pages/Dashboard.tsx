@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { Button, Empty, message, notification, Spin } from 'antd'
-import { PlusOutlined, WarningOutlined } from '@ant-design/icons'
+import { PlusIcon, WarningIcon } from '../components/ui/icons'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import api, { taskApi } from '../api/client'
 import type { BuildStats, HistoryItem, SystemStats, TaskResponse } from '../api/types'
@@ -88,7 +88,7 @@ export default function Dashboard() {
             description={<span style={{ color: 'var(--ink-muted)' }}>Nothing has been built yet.</span>}
             className="py-12"
           >
-            <Button type="primary" icon={<PlusOutlined />} onClick={() => navigate('/create')}>New build</Button>
+            <Button type="primary" icon={<PlusIcon />} onClick={() => navigate('/create')}>New build</Button>
           </Empty>
         ) : (
           <div className="bench">
@@ -266,7 +266,7 @@ function DegradedBanner({ stats }: { stats: BuildStats }) {
   return (
     <div className="glass-card p-4 mb-6" style={{ borderColor: 'var(--color-alert-500)', background: 'color-mix(in srgb, var(--color-alert-500) 7%, transparent)' }}>
       <div className="flex items-center gap-2 mb-1 font-semibold text-alert-400">
-        <WarningOutlined /> Python {env.degraded.join(', ')} cannot be compiled for right now
+        <WarningIcon /> Python {env.degraded.join(', ')} cannot be compiled for right now
       </div>
       <div className="text-sm" style={{ color: 'var(--ink-muted)' }}>
         Builds that pick it fall back to the service&apos;s Python {env.service_python}, and the result fails with

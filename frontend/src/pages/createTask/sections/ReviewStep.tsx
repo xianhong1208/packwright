@@ -1,4 +1,4 @@
-import { CodeOutlined, GlobalOutlined, AppstoreOutlined, CloudServerOutlined } from '@ant-design/icons'
+import { CodeIcon, GlobeIcon, HardDrivesIcon, SquaresFourIcon } from '../../../components/ui/icons'
 import { useCreateTask } from '../context'
 import { SectionHeader, SummaryRow } from '../ui'
 import type { ProjectType } from '../../../api/types'
@@ -22,7 +22,7 @@ export default function ReviewStep() {
 
       {/* Project Info Summary */}
       <div className="glass-card p-5 mb-4">
-        <SectionHeader icon={<AppstoreOutlined />} title="Project" />
+        <SectionHeader icon={<SquaresFourIcon />} title="Project" />
         <SummaryRow label="Name" value={form.getFieldValue('project_name')} />
         <SummaryRow label="Type" value={projectType ? PROJECT_TYPE_META[projectType as ProjectType]?.label ?? projectType : projectType} />
         {sourceType === 'git' ? (
@@ -52,7 +52,7 @@ export default function ReviewStep() {
       {/* Backend Summary */}
       {hasBackend && (
         <div className="glass-card p-5 mb-4">
-          <SectionHeader icon={<CodeOutlined />} title="Backend (Nuitka)" />
+          <SectionHeader icon={<CodeIcon />} title="Backend (Nuitka)" />
           <SummaryRow label="Python version" value={form.getFieldValue('python_version')} />
           <SummaryRow label="Entry point" value={form.getFieldValue('entry_point')} mono />
           <SummaryRow label="Binary name" value={form.getFieldValue('output_name') || (form.getFieldValue('entry_point') || 'main').replace(/\.py$/, '')} mono />
@@ -95,7 +95,7 @@ export default function ReviewStep() {
       {/* Frontend Summary */}
       {showFrontendSettings && (
         <div className="glass-card p-5 mb-4">
-          <SectionHeader icon={<GlobalOutlined />} title="Frontend" tone="matrix" />
+          <SectionHeader icon={<GlobeIcon />} title="Frontend" tone="matrix" />
           <SummaryRow label="Frontend directory" value={form.getFieldValue('frontend_dir') || '.'} mono />
           <SummaryRow label="Build tool" value={form.getFieldValue('frontend_build_tool') || 'npm'} />
           <SummaryRow label="Build command" value={`${form.getFieldValue('frontend_build_tool') || 'npm'} run ${form.getFieldValue('frontend_build_command') || 'build'}`} mono />
@@ -116,7 +116,7 @@ export default function ReviewStep() {
 
       {/* Docker Summary */}
       <div className="glass-card p-5 mb-4">
-        <SectionHeader icon={<CloudServerOutlined />} title="Docker" />
+        <SectionHeader icon={<HardDrivesIcon />} title="Docker" />
         <SummaryRow label="Docker enabled" value={dockerEnabled ? 'Yes' : 'No'} highlight={dockerEnabled} />
         {dockerEnabled && (
           <>

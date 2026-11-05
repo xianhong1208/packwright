@@ -17,6 +17,9 @@ follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this proje
 - **Sign-in has its own layout**: the form on a narrow strip, and beside it what a build goes through
   (Preflight, Compile, Bundle, Verify, Image). Registering and password recovery use the same frame; on
   phones it is the form alone.
+- **New icons and mark.** The console draws its icons from Phosphor instead of antd's built-in set
+  (`components/ui/icons.tsx` is the one place to import them from), and the logo and browser-tab icon
+  are a new P whose bowl closes like a box flap.
 - **`pack_mode` defaults to `external` in the API**, as the console already did; leaving it out used
   to select `full`, which compiles every dependency and takes hours. Stored builds keep their mode.
 - **Renamed Build Center to Packwright**: packages, console title, login page, docs, scripts, the

@@ -1,5 +1,5 @@
 import { Form, Input, Select, Button, Row, Col, AutoComplete } from 'antd'
-import { GlobalOutlined, DownloadOutlined, ScanOutlined } from '@ant-design/icons'
+import { DownloadSimpleIcon, GlobeIcon, ScanIcon } from '../../../components/ui/icons'
 
 import { useCreateTask } from '../context'
 import { SectionHeader } from '../ui'
@@ -25,13 +25,13 @@ export default function FrontendStep() {
       {showFrontendSettings && (
         <div className="glass-card p-5 mb-4">
           <SectionHeader
-            icon={<GlobalOutlined />}
+            icon={<GlobeIcon />}
             title="Frontend settings"
             tone="matrix"
             action={
               <Button
                 size="small"
-                icon={<ScanOutlined />}
+                icon={<ScanIcon />}
                 loading={sourceType === 'git' ? previewingFrontend : detectingConfig}
                 onClick={() => {
                   if (sourceType === 'git') { void handlePreviewGitFrontend() }
@@ -93,7 +93,7 @@ export default function FrontendStep() {
             <div className="flex gap-2">
               <Button
                 size="small"
-                icon={<ScanOutlined />}
+                icon={<ScanIcon />}
                 loading={sourceType === 'git' ? previewingFrontend : loadingEnvFiles}
                 onClick={() => {
                   if (sourceType === 'git') { void handlePreviewGitFrontend() }
@@ -104,7 +104,7 @@ export default function FrontendStep() {
               </Button>
               <Button
                 size="small"
-                icon={<DownloadOutlined />}
+                icon={<DownloadSimpleIcon />}
                 loading={loadingEnv}
                 onClick={handleLoadEnv}
               >

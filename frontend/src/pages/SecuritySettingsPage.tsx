@@ -1,18 +1,6 @@
 import { useState, useEffect } from 'react'
 import { Button, message, Modal, Table, Tag, Empty, Popconfirm, Tooltip } from 'antd'
-import {
-  LockOutlined,
-  QuestionCircleOutlined,
-  HistoryOutlined,
-  DesktopOutlined,
-  LoadingOutlined,
-  CheckCircleOutlined,
-  CloseCircleOutlined,
-  MobileOutlined,
-  TabletOutlined,
-  DeleteOutlined,
-  ExclamationCircleOutlined,
-} from '@ant-design/icons'
+import { CheckCircleIcon, ClockCounterClockwiseIcon, DesktopIcon, DeviceMobileIcon, DeviceTabletIcon, LockIcon, QuestionIcon, SpinnerIcon, TrashIcon, WarningCircleIcon, XCircleIcon } from '../components/ui/icons'
 import { authApi } from '../api/authApi'
 import type { LoginHistoryItem, Session } from '../api/types'
 import { useAuth } from '../contexts/AuthContext'
@@ -186,7 +174,7 @@ export default function SecuritySettingsPage() {
   const handleLogoutAllDevices = () => {
     Modal.confirm({
       title: 'Sign out of all devices?',
-      icon: <ExclamationCircleOutlined />,
+      icon: <WarningCircleIcon />,
       content: 'This revokes every active session, including this one, and you will need to sign in again.',
       okText: 'Sign out all',
       okType: 'danger',
@@ -200,11 +188,11 @@ export default function SecuritySettingsPage() {
   const getDeviceIcon = (deviceType: string | null | undefined) => {
     switch (deviceType) {
       case 'mobile':
-        return <MobileOutlined />
+        return <DeviceMobileIcon />
       case 'tablet':
-        return <TabletOutlined />
+        return <DeviceTabletIcon />
       default:
-        return <DesktopOutlined />
+        return <DesktopIcon />
     }
   }
 
@@ -223,11 +211,11 @@ export default function SecuritySettingsPage() {
       key: 'success',
       render: (success: boolean) =>
         success ? (
-          <Tag color="green" icon={<CheckCircleOutlined />}>
+          <Tag color="green" icon={<CheckCircleIcon />}>
             Signed in
           </Tag>
         ) : (
-          <Tag color="red" icon={<CloseCircleOutlined />}>
+          <Tag color="red" icon={<XCircleIcon />}>
             Failed
           </Tag>
         ),
@@ -257,7 +245,7 @@ export default function SecuritySettingsPage() {
       <div className="space-y-6">
         <div className="grid gap-6 lg:grid-cols-2 items-start">
         {/* Change password */}
-        <SectionCard icon={<LockOutlined />} title="Change password">
+        <SectionCard icon={<LockIcon />} title="Change password">
           <form onSubmit={handleChangePassword} className="max-w-md space-y-4">
             <div>
               <label htmlFor="security-current-password" className="block text-sm text-[var(--ink-muted)] mb-2">Current password</label>
@@ -300,7 +288,7 @@ export default function SecuritySettingsPage() {
               disabled={isChangingPassword}
               className="btn-cyber flex items-center gap-2 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyber-300"
             >
-              {isChangingPassword && <LoadingOutlined className="animate-spin" />}
+              {isChangingPassword && <SpinnerIcon />}
               Change password
             </button>
           </form>
@@ -308,14 +296,14 @@ export default function SecuritySettingsPage() {
 
         {/* Security question */}
         <SectionCard
-          icon={<QuestionCircleOutlined />}
+          icon={<QuestionIcon />}
           title="Security question"
           description="Used to verify your identity when you reset your password."
         >
           <div className="max-w-md space-y-4">
             {user?.has_security_question && (
               <div className="p-3 rounded-lg bg-matrix-500/10 border border-matrix-500/30 text-matrix-400 text-sm">
-                <CheckCircleOutlined className="mr-2" />
+                <CheckCircleIcon className="mr-2" />
                 You have a security question set. You can update it below.
               </div>
             )}
@@ -353,7 +341,7 @@ export default function SecuritySettingsPage() {
                 disabled={isSettingQuestion}
                 className="btn-cyber flex items-center gap-2 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyber-300"
               >
-                {isSettingQuestion && <LoadingOutlined className="animate-spin" />}
+                {isSettingQuestion && <SpinnerIcon />}
                 {user?.has_security_question ? 'Update security question' : 'Set security question'}
               </button>
             </form>
@@ -364,7 +352,7 @@ export default function SecuritySettingsPage() {
 
         {/* Active sessions */}
         <SectionCard
-          icon={<DesktopOutlined />}
+          icon={<DesktopIcon />}
           title="Active sessions"
           description="Manage the sessions signed in across your devices."
         >
@@ -380,7 +368,7 @@ export default function SecuritySettingsPage() {
 
             {isLoadingSessions ? (
               <div className="flex justify-center py-8">
-                <LoadingOutlined className="text-2xl text-cyber-400" />
+                <SpinnerIcon className="text-2xl text-cyber-400" />
               </div>
             ) : sessions.length === 0 ? (
               <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="No active sessions" />
@@ -389,7 +377,7 @@ export default function SecuritySettingsPage() {
                 <ul className="session-list" aria-label="Signed-in sessions">
                   {visibleSessions.map((session) => (
                     <li key={session.id} className={`session-row ${session.is_current ? 'current' : ''}`}>
-                      <DesktopOutlined className="text-lg flex-none" style={{ color: 'var(--ink-faint)' }} />
+                      <DesktopIcon className="text-lg flex-none" style={{ color: 'var(--ink-faint)' }} />
                       <div className="min-w-0 flex-1">
                         <div className="flex flex-wrap items-center gap-2">
                           <span className="font-semibold" style={{ color: 'var(--ink)' }} title={session.device_info ?? undefined}>
@@ -410,7 +398,7 @@ export default function SecuritySettingsPage() {
                           okText="Sign out"
                           cancelText="Cancel"
                         >
-                          <Button size="small" aria-label={`Sign out ${describeDevice(session.device_info)}`} icon={<DeleteOutlined />} />
+                          <Button size="small" aria-label={`Sign out ${describeDevice(session.device_info)}`} icon={<TrashIcon />} />
                         </Popconfirm>
                       )}
                     </li>
@@ -427,7 +415,7 @@ export default function SecuritySettingsPage() {
         </SectionCard>
 
         {/* Login history */}
-        <SectionCard icon={<HistoryOutlined />} title="Login history">
+        <SectionCard icon={<ClockCounterClockwiseIcon />} title="Login history">
           <Table
             dataSource={loginHistory}
             columns={historyColumns}
