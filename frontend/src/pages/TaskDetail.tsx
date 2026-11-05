@@ -1,25 +1,22 @@
 import { useState, useEffect, type ReactNode } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
-import { Progress, Button, Spin, message, Steps, Tooltip } from 'antd'
+import { Progress, Button, Spin, message, Steps } from 'antd'
 import {
   ArrowLeftOutlined,
   StopOutlined,
-  CheckCircleOutlined,
-  CloseCircleOutlined,
   RedoOutlined,
   DownloadOutlined,
-  WarningOutlined,
-  FileZipOutlined,
 } from '@ant-design/icons'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import LogViewer from '../components/LogViewer'
+import BuildResultPanel from '../components/build/BuildResultPanel'
+import FailureReport from '../components/build/FailureReport'
 import { useWebSocket } from '../hooks/useWebSocket'
 import { taskApi } from '../api/client'
 import type { TaskResponse, ProjectType } from '../api/types'
 import { triggerUrlDownload } from '../utils/download'
-import { STATUS_META, VERIFY_META, isTerminal } from '../utils/statusMeta'
+import { STATUS_META, isTerminal } from '../utils/statusMeta'
 import { getErrorDetail, isNotFound } from '../utils/errors'
-import { extractErrorLines } from '../utils/diagnose'
 import { binaryName } from '../utils/buildConfig'
 
 // ── Build-stage stepper (set by nuitka_worker: preflight→compile→bundle→verify→done) ──
@@ -31,18 +28,6 @@ const STAGE_ITEMS = [
   { title: 'Bundle', description: 'Copying dependencies and data' },
   { title: 'Verify', description: 'Smoke-testing the binary' },
 ]
-// Plain-language names for the stage a failure happened in. Mirrors
-// STAGE_ITEMS above, but keyed so a value coming back from the server can be
-// rendered without matching it against an index.
-const STAGE_LABELS: Record<string, string> = {
-  queued: 'Queued (waiting for a build slot)',
-  preflight: 'Preflight (checking paths, the Python version and the dependency environment)',
-  compile: 'Compile (Nuitka running)',
-  bundle: 'Bundle (copying dependencies and data directories)',
-  verify: 'Verify (smoke-testing the built binary)',
-  done: 'Finishing up',
-}
-
 const PROJECT_TYPE_LABELS: Record<ProjectType, string> = {
   backend_only: 'Backend',
   frontend_only: 'Frontend',
@@ -316,229 +301,23 @@ export default function TaskDetail() {
         </div>
       )}
 
-      {/* Failure diagnosis callout — shown for FAILED tasks even when
-          result is null, so a failed build always explains itself. */}
+      {/* Failure diagnosis — shown for FAILED tasks even when result is null,
+          so a failed build always explains itself. */}
       {task.status === 'failed' && (
-        <div className="glass-card p-5 mb-6 border-l-2 border-alert-500 bg-alert-500/5">
-          <div className="flex items-center gap-2 mb-3">
-            <CloseCircleOutlined className="text-alert-400" />
-            <h3 className="text-base font-medium text-alert-400">Build failed</h3>
-          </div>
-          {task.status_msg && (
-            <p className="text-sm mb-3" style={{ color: 'var(--ink-muted)' }}>
-              {task.status_msg}
-            </p>
-          )}
-
-          {/* Name the stage before the details. Someone who cannot read a
-              stack trace can still act on "it failed while installing
-              dependencies" — and it tells them which settings to revisit. */}
-          {result?.failed_stage && (
-            <div className="text-xs mb-3" style={{ color: 'var(--ink-faint)' }}>
-              Failed stage:
-              <span className="text-alert-400 ml-1">
-                {STAGE_LABELS[result.failed_stage] ?? result.failed_stage}
-              </span>
-            </div>
-          )}
-
-          {result?.diagnosis && result.diagnosis.length > 0 ? (
-            <div className="space-y-3 mb-3">
-              {result.diagnosis.map((d, i) => (
-                <div key={i} className="rounded-lg p-3 bg-void-950">
-                  <div className="text-sm text-alert-400 font-medium mb-1">⚠ {d.problem}</div>
-                  <div className="text-sm text-cyber-200">Suggested fix: {d.suggestion}</div>
-                  {d.evidence && (
-                    <code
-                      className="block text-xs mt-1.5 font-mono break-all"
-                      style={{ color: 'var(--ink-faint)' }}
-                    >
-                      {d.evidence}
-                    </code>
-                  )}
-                  {/* The fix, when the platform can apply it — rebuilding with
-                      the corrected setting instead of making the user rebuild
-                      the whole form from memory. */}
-                  {d.action && (
-                    <Button
-                      size="small"
-                      type="primary"
-                      className="mt-2"
-                      onClick={() =>
-                        navigate('/create', {
-                          state: {
-                            rebuild: true,
-                            projectName: task.project_name,
-                            config: { ...task.config, ...d.action!.overrides },
-                          },
-                        })
-                      }
-                    >
-                      {d.action.label}
-                    </Button>
-                  )}
-                </div>
-              ))}
-            </div>
-          ) : (
-            <p className="text-xs mb-3" style={{ color: 'var(--ink-faint)' }}>
-              We couldn't identify the cause automatically. Check the key error lines below and the
-              full log on the right.
-            </p>
-          )}
-
-          {(() => {
-            // Server-selected lines when available (they persist past log
-            // eviction); fall back to scanning the live log, which is what a
-            // still-running or just-finished task has.
-            const errLines = result?.error_lines?.length
-              ? result.error_lines
-              : extractErrorLines(task.logs)
-            return errLines.length > 0 ? (
-              <div>
-                <div
-                  className="text-xs mb-1.5 uppercase tracking-wider"
-                  style={{ color: 'var(--ink-faint)' }}
-                >
-                  Key error lines
-                </div>
-                <div className="rounded-lg p-3 font-mono text-xs space-y-1 bg-void-950">
-                  {errLines.map((l, i) => (
-                    <div key={i} className="text-alert-400 break-all">
-                      {l}
-                    </div>
-                  ))}
-                </div>
-              </div>
-            ) : null
-          })()}
-        </div>
+        <FailureReport
+          result={result}
+          logs={task.logs}
+          statusMsg={task.status_msg}
+          logHint="the full log on the right"
+          onApplyFix={(overrides) =>
+            navigate('/create', {
+              state: { rebuild: true, projectName: task.project_name, config: { ...task.config, ...overrides } },
+            })
+          }
+        />
       )}
 
-      {/* Build result panel — verification / artifact / preflight */}
-      {result && (result.verify || result.artifact || result.preflight?.length || result.report_file) && (
-        <div className="glass-card p-5 mb-6">
-          <div className="flex items-center justify-between mb-4">
-            <h3 className="text-base font-medium" style={{ color: 'var(--ink)' }}>
-              Build result
-            </h3>
-            {result.verify && (
-              <span
-                className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium"
-                style={{
-                  backgroundColor: VERIFY_META[result.verify.status].bg,
-                  color: VERIFY_META[result.verify.status].color,
-                }}
-              >
-                {VERIFY_META[result.verify.status].icon}
-                {VERIFY_META[result.verify.status].label}
-              </span>
-            )}
-          </div>
-
-          {result.verify?.detail && (
-            <div
-              className="text-sm mb-4 px-3 py-2 rounded-lg"
-              style={{
-                background: VERIFY_META[result.verify.status].bg,
-                color: VERIFY_META[result.verify.status].color,
-                lineHeight: 1.6,
-              }}
-            >
-              {result.verify.detail}
-            </div>
-          )}
-
-          {result.artifact && (
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-4">
-              <div className="rounded-lg p-3 bg-void-950">
-                <div className="text-xs mb-1" style={{ color: 'var(--ink-faint)' }}>
-                  <FileZipOutlined className="mr-1" />
-                  Artifact size
-                </div>
-                <div className="text-lg font-semibold text-cyber-300">
-                  {result.artifact.size_human}
-                </div>
-              </div>
-              <div className="rounded-lg p-3 bg-void-950">
-                <div className="text-xs mb-1" style={{ color: 'var(--ink-faint)' }}>
-                  File count
-                </div>
-                <div className="text-lg font-semibold" style={{ color: 'var(--ink)' }}>
-                  {result.artifact.file_count}
-                </div>
-              </div>
-              {result.artifact.sha256 && (
-                <div className="rounded-lg p-3 col-span-2 bg-void-950">
-                  <div className="text-xs mb-1" style={{ color: 'var(--ink-faint)' }}>
-                    SHA-256
-                  </div>
-                  <Tooltip title="Click to copy the full hash">
-                    <code
-                      className="text-xs font-mono break-all cursor-pointer hover:text-cyber-300"
-                      style={{ color: 'var(--ink-muted)' }}
-                      onClick={() => {
-                        navigator.clipboard?.writeText(result.artifact?.sha256 || '')
-                        message.success('SHA-256 copied to clipboard.')
-                      }}
-                    >
-                      {result.artifact.sha256.slice(0, 32)}…
-                    </code>
-                  </Tooltip>
-                </div>
-              )}
-            </div>
-          )}
-
-          {result.preflight && result.preflight.length > 0 && (
-            <div>
-              <div
-                className="text-xs mb-2 uppercase tracking-wider"
-                style={{ color: 'var(--ink-faint)' }}
-              >
-                Preflight checks
-              </div>
-              <div className="space-y-1.5">
-                {result.preflight.map((c) => (
-                  <div key={c.label} className="flex items-start gap-2 text-sm">
-                    <span
-                      className={
-                        c.passed ? 'text-matrix-400' : c.critical ? 'text-alert-400' : 'text-signal-400'
-                      }
-                      style={{ marginTop: 2 }}
-                    >
-                      {c.passed ? (
-                        <CheckCircleOutlined />
-                      ) : c.critical ? (
-                        <CloseCircleOutlined />
-                      ) : (
-                        <WarningOutlined />
-                      )}
-                    </span>
-                    <span className="w-28 flex-shrink-0" style={{ color: 'var(--ink)' }}>
-                      {c.label}
-                    </span>
-                    <span
-                      className="text-xs flex-1"
-                      style={{ color: 'var(--ink-faint)', lineHeight: 1.6 }}
-                    >
-                      {c.detail}
-                    </span>
-                  </div>
-                ))}
-              </div>
-            </div>
-          )}
-
-          {result.report_file && (
-            <div className="text-xs mt-4" style={{ color: 'var(--ink-faint)' }}>
-              A build report was generated:{' '}
-              <code style={{ color: 'var(--ink-muted)' }}>{result.report_file}</code> (included in the
-              download).
-            </div>
-          )}
-        </div>
-      )}
+      <BuildResultPanel result={result} />
 
       {/* Body — config sidebar + the live log stream as the focus. */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
