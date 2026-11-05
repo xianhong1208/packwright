@@ -129,7 +129,11 @@ cd frontend && npx vitest run        # frontend unit tests
 
 ## Security & trust model
 
-Packwright runs untrusted build commands by design, so account approval is the real security boundary: anyone who can create a task can run code as the service user. Git URL validation, local-path confinement, subprocess argv-only calls, token masking and rate limiting are defence in depth, not a sandbox. Run it on an isolated host, front it with HTTPS, and keep `TRUSTED_PROXY_IPS` empty unless a proxy actually rewrites `X-Forwarded-For`.
+Packwright runs untrusted build commands by design, so account approval is the real security boundary: anyone who can create a task can run code as the service user. Git URL validation, local-path confinement, subprocess argv-only calls, token masking and rate limiting are defence in depth, not a sandbox. Run it on an isolated host, front it with HTTPS, and keep `TRUSTED_PROXY_IPS` empty unless a proxy actually rewrites `X-Forwarded-For`. [SECURITY.md](SECURITY.md) has the full trust model, known limitations and how to report a vulnerability.
+
+## Contributing
+
+Setup, the checks CI runs, branch and commit conventions, and the release steps are in [CONTRIBUTING.md](CONTRIBUTING.md). Changes are listed in [CHANGELOG.md](CHANGELOG.md).
 
 ## License
 
