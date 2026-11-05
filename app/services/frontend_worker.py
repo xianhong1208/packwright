@@ -10,6 +10,7 @@ from pathlib import Path
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.schemas.task import BuildConfig, FrontendBuildTool
+from app.services.source_guard import SourceGuard
 from app.services.task_manager import task_manager
 from app.services.terminal_output import TerminalLineBuffer
 
@@ -94,6 +95,26 @@ async def run_frontend_build(
     db: AsyncSession,
     frontend_path: Path | None = None,
 ) -> bool:
+    """Run the frontend build; the project's env file is put back on every path out."""
+    guard = SourceGuard(task_id)
+    try:
+        return await _run_frontend_build(task_id, config, db, frontend_path, guard)
+    finally:
+        await _restore_and_log(task_id, guard)
+
+
+async def _restore_and_log(task_id: str, guard: SourceGuard) -> None:
+    for line in await asyncio.to_thread(guard.restore):
+        await task_manager.append_log(task_id, line)
+
+
+async def _run_frontend_build(
+    task_id: str,
+    config: BuildConfig,
+    db: AsyncSession,
+    frontend_path: Path | None,
+    guard: SourceGuard,
+) -> bool:
     """Run frontend build (npm/yarn/pnpm/bun).
 
     Args:
@@ -161,17 +182,12 @@ async def run_frontend_build(
 
     await task_manager.append_log(task_id, f"Using build tool: {tool_cmd}")
 
-    # Step 0: Write env file if configured (backup original, restore after build)
-    env_file_path = None
-    env_backup_content = None  # None = file didn't exist, str = original content
+    # Step 0: Write env file if configured (the guard restores the original)
     if config.frontend_env_content.strip():
         env_filename = config.frontend_env_filename or ".env"
         env_file_path = fe_path / env_filename
         try:
-            if env_file_path.exists():
-                env_backup_content = env_file_path.read_text(encoding="utf-8")
-                await task_manager.append_log(task_id, f"Backed up original {env_filename}")
-            env_file_path.write_text(config.frontend_env_content, encoding="utf-8")
+            guard.write(env_file_path, config.frontend_env_content)
             await task_manager.append_log(task_id, f"Wrote {env_filename} for build: {env_file_path}")
 
             # Log env keys for verification (values hidden for security)
@@ -258,18 +274,6 @@ async def run_frontend_build(
         # Count files in output
         file_count = sum(1 for _ in output_path.rglob("*") if _.is_file())
         await task_manager.append_log(task_id, f"Build output: {output_path} ({file_count} files)")
-
-    # Restore original env file after build
-    if env_file_path:
-        try:
-            if env_backup_content is not None:
-                env_file_path.write_text(env_backup_content, encoding="utf-8")
-                await task_manager.append_log(task_id, f"Restored original {env_file_path.name}")
-            else:
-                env_file_path.unlink(missing_ok=True)
-                await task_manager.append_log(task_id, f"Cleaned up {env_file_path.name}")
-        except Exception:
-            pass
 
     return True
 
