@@ -1,126 +1,55 @@
 import { useQuery } from '@tanstack/react-query'
 import { useState } from 'react'
-import { Spin, Button } from 'antd'
-import { ReloadOutlined, ExclamationCircleOutlined } from '@ant-design/icons'
+import { Spin, Button, Tooltip } from 'antd'
+import { ArrowUpIcon, ArrowsClockwiseIcon, WarningCircleIcon } from '../components/ui/icons'
 import api from '../api/client'
 import { getErrorDetail } from '../utils/errors'
+import type { SystemStats } from '../api/types'
 import { advanceSamples, EMPTY_SAMPLES, type Samples } from './monitoringSamples'
-
-
-interface SystemStats {
-  cpu: {
-    percent: number
-    percent_per_core: number[]
-    count_physical: number
-    count_logical: number
-    frequency_current: number | null
-    frequency_max: number | null
-  }
-  memory: {
-    total: number
-    available: number
-    used: number
-    percent: number
-  }
-  swap: {
-    total: number
-    used: number
-    percent: number
-  }
-  disk: {
-    total: number
-    used: number
-    free: number
-    percent: number
-  }
-  network: {
-    bytes_sent: number
-    bytes_recv: number
-  }
-  gpus: Array<{
-    id: number
-    name: string
-    load: number
-    memory_used: number
-    memory_total: number
-    memory_percent: number
-    temperature: number
-  }>
-}
+import { heatColor } from './dashboard/bench'
+import PageHeader from '../components/layout/PageHeader'
 
 const formatBytes = (bytes: number): string => {
-  if (bytes === 0) return '0B'
+  if (bytes <= 0) return '0 B'
   const k = 1024
   const sizes = ['B', 'KB', 'MB', 'GB', 'TB']
-  const i = Math.floor(Math.log(bytes) / Math.log(k))
-  return `${(bytes / Math.pow(k, i)).toFixed(1)}${sizes[i]}`
+  const i = Math.min(sizes.length - 1, Math.floor(Math.log(bytes) / Math.log(k)))
+  return `${(bytes / Math.pow(k, i)).toFixed(i === 0 ? 0 : 1)} ${sizes[i]}`
 }
 
-const barColor = (pct: number): string => {
-  if (pct >= 90) return '#ec5f5f'  // coral
-  if (pct >= 70) return '#e6a53a'  // amber
-  return '#33c489'                 // mint
-}
+const meterColor = (pct: number): string =>
+  pct >= 90 ? 'var(--color-alert-400)' : pct >= 75 ? 'var(--color-signal-400)' : 'var(--ink-muted)'
 
-// A clean industry-style meter: label + rounded track + value.
-function Meter({ label, pct, value, color }: { label: string; pct: number; value?: string; color?: string }) {
-  const c = color ?? barColor(pct)
+function Meter({ pct }: { pct: number }) {
   return (
-    <div className="flex items-center gap-3">
-      <span className="truncate" style={{ width: 52, fontSize: 11, color: 'var(--ink-muted)', fontFamily: 'var(--font-mono)' }}>{label}</span>
-      <div style={{ flex: 1, height: 6, borderRadius: 999, background: 'var(--color-void-700)', overflow: 'hidden' }}>
-        <div style={{ height: '100%', width: `${Math.min(100, pct)}%`, background: c, borderRadius: 999, transition: 'width 0.3s ease' }} />
-      </div>
-      <span className="tabular-nums" style={{ minWidth: value ? 138 : 40, textAlign: 'right', fontSize: 11, color: 'var(--ink)', fontFamily: 'var(--font-mono)' }}>
-        {value ?? `${pct.toFixed(0)}%`}
-      </span>
+    <div className="meter" role="presentation">
+      <span style={{ width: `${Math.min(100, pct)}%`, background: meterColor(pct), transition: 'width 0.3s ease' }} />
     </div>
   )
 }
 
-// A KPI tile: big number + thin bar (+ optional sparkline).
-function StatTile({ label, pct, sub, spark, showBar = true }: { label: string; pct: number; sub: string; spark?: number[]; showBar?: boolean }) {
+/** One headline figure of the machine, with what it is out of. */
+function Tile({ label, value, of, pct, children }: { label: string; value: string; of?: string; pct?: number; children?: React.ReactNode }) {
   return (
-    <div className="stat-card">
-      <div className="uppercase tracking-wider" style={{ fontSize: 11, color: 'var(--ink-faint)', fontFamily: 'var(--font-display)' }}>{label}</div>
-      {showBar && (
-        <div className="mt-1" style={{ fontFamily: 'var(--font-display)', fontWeight: 700, fontSize: 30, color: 'var(--ink)', lineHeight: 1 }}>
-          {pct.toFixed(0)}<span style={{ fontSize: 16, color: 'var(--ink-faint)' }}>%</span>
-        </div>
-      )}
-      {showBar && (
-        <div className="mt-3" style={{ height: 6, borderRadius: 999, background: 'var(--color-void-700)', overflow: 'hidden' }}>
-          <div style={{ height: '100%', width: `${Math.min(100, pct)}%`, background: barColor(pct), borderRadius: 999, transition: 'width 0.3s ease' }} />
-        </div>
-      )}
-      {spark && <div className="mt-2"><Sparkline data={spark} color="#4c8df0" height={30} label={`${label} trend`} /></div>}
-      <div className="mt-2 truncate" style={{ fontSize: 11, color: 'var(--ink-muted)', fontFamily: 'var(--font-mono)' }}>{sub}</div>
+    <div className="glass-card p-5 min-w-0">
+      <div className="text-[15px] font-semibold" style={{ color: 'var(--ink-muted)' }}>{label}</div>
+      <div className="text-[34px] font-bold leading-tight mt-1" style={{ color: 'var(--ink)' }}>{value}</div>
+      {of && <div className="text-sm" style={{ color: 'var(--ink-faint)' }}>{of}</div>}
+      {pct !== undefined && <Meter pct={pct} />}
+      {children}
     </div>
   )
 }
 
-// Mini sparkline from history array
-function Sparkline({ data, color, height = 32, label }: { data: number[]; color: string; height?: number; label: string }) {
+function Sparkline({ data, height = 36, label }: { data: number[]; height?: number; label: string }) {
   if (data.length < 2) return null
-  const max = 100
   const w = 200
-  const points = data.map((v, i) => {
-    const x = (i / (data.length - 1)) * w
-    const y = height - (v / max) * height
-    return `${x},${y}`
-  })
-  const areaPoints = `0,${height} ${points.join(' ')} ${w},${height}`
+  const points = data.map((v, i) => `${(i / (data.length - 1)) * w},${height - (v / 100) * height}`)
   return (
-    <svg
-      role="img"
-      aria-label={label}
-      viewBox={`0 0 ${w} ${height}`}
-      style={{ width: '100%', height }}
-      preserveAspectRatio="none"
-    >
+    <svg role="img" aria-label={label} viewBox={`0 0 ${w} ${height}`} style={{ width: '100%', height }} preserveAspectRatio="none" className="mt-3">
       <title>{label}</title>
-      <polygon points={areaPoints} fill={color} opacity={0.15} />
-      <polyline points={points.join(' ')} fill="none" stroke={color} strokeWidth={1.5} />
+      <polygon points={`0,${height} ${points.join(' ')} ${w},${height}`} fill="var(--color-teal-500)" opacity={0.15} />
+      <polyline points={points.join(' ')} fill="none" stroke="var(--color-teal-400)" strokeWidth={1.5} />
     </svg>
   )
 }
@@ -128,16 +57,12 @@ function Sparkline({ data, color, height = 32, label }: { data: number[]; color:
 export default function MonitoringPage() {
   const { data: stats, dataUpdatedAt, isLoading, isError, error, refetch } = useQuery<SystemStats>({
     queryKey: ['systemStats'],
-    queryFn: async () => {
-      const response = await api.get('/monitoring/stats')
-      return response.data
-    },
+    queryFn: async () => (await api.get('/monitoring/stats')).data,
     refetchInterval: 2000,
   })
 
-  // Advance the rolling samples once per fetched snapshot. Updating state while
-  // rendering (keyed on dataUpdatedAt) is React's pattern for deriving state from
-  // a changing input; the old ref pushes inside useMemo double-counted samples.
+  // Advance the rolling samples once per fetched snapshot (deriving state from a
+  // changing input while rendering, keyed on dataUpdatedAt).
   const [samples, setSamples] = useState<Samples>(EMPTY_SAMPLES)
   if (stats && dataUpdatedAt > samples.at) {
     setSamples(advanceSamples(samples, {
@@ -146,146 +71,86 @@ export default function MonitoringPage() {
       bytesRecv: stats.network.bytes_recv,
     }, dataUpdatedAt))
   }
-  const overallHistory = samples.cpu
-  const netRate = samples.rate
 
-  // Error state: without this the page would spin forever if /monitoring/stats fails.
   if (isError && !stats) {
     return (
-      <div
-        className="flex flex-col items-center justify-center h-64 gap-3"
-        style={{
-          color: '#c8c8c8',
-          background: '#0a0e14',
-          borderRadius: 8,
-          border: '1px solid #1a1f2e',
-          padding: '24px 16px',
-          textAlign: 'center',
-        }}
-      >
-        <ExclamationCircleOutlined style={{ fontSize: 40, color: '#ef4444' }} aria-hidden="true" />
-        <div style={{ color: '#ef4444', fontWeight: 'bold' }}>Could not load system monitoring data</div>
-        <div style={{ color: '#888', maxWidth: 420 }}>{getErrorDetail(error)}</div>
-        <Button
-          icon={<ReloadOutlined />}
-          aria-label="Reload system monitoring data"
-          onClick={() => refetch()}
-        >
-          Retry
-        </Button>
+      <div className="glass-card flex flex-col items-center justify-center gap-3 py-16 px-4 text-center">
+        <WarningCircleIcon style={{ fontSize: 36, color: 'var(--color-alert-400)' }} aria-hidden="true" />
+        <div className="font-semibold text-alert-400">Could not read the machine's load</div>
+        <div className="max-w-md" style={{ color: 'var(--ink-muted)' }}>{getErrorDetail(error)}</div>
+        <Button icon={<ArrowsClockwiseIcon />} onClick={() => refetch()}>Try again</Button>
       </div>
     )
   }
 
   if (isLoading || !stats) {
-    return (
-      <div className="flex items-center justify-center h-64">
-        <Spin size="large" tip="Loading system monitoring data…" />
-      </div>
-    )
+    return <div className="flex items-center justify-center h-64"><Spin size="large" /></div>
   }
 
-  const uptimeLabel = (() => {
-    const totalSent = stats.network.bytes_sent
-    const totalRecv = stats.network.bytes_recv
-    return `Sent ${formatBytes(totalSent)} · Received ${formatBytes(totalRecv)}`
-  })()
+  const cores = stats.cpu.percent_per_core
+  const hot = cores.filter((p) => p >= 80).length
+  const busy = cores.filter((p) => p >= 5).length
+  const ghz = stats.cpu.frequency_current ? `, ${(stats.cpu.frequency_current / 1000).toFixed(1)} GHz` : ''
 
   return (
     <div>
-      {/* Page header */}
-      <div style={{ marginBottom: 20 }}>
-        <h1 style={{ fontSize: 24, fontWeight: 700, margin: 0, color: 'var(--ink)' }}>System monitoring</h1>
-        <p style={{ margin: '4px 0 0', color: 'var(--ink-muted)' }}>
-          Live CPU, memory, disk, GPU and network, refreshed every 2 seconds.
-        </p>
-      </div>
+      <PageHeader title="Machine" lead="Load on the build host, refreshed every 2 seconds." />
 
-      {/* KPI tiles */}
-      <div className="grid gap-4 mb-4" style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(210px, 1fr))' }}>
-        <StatTile label="CPU" pct={stats.cpu.percent} spark={overallHistory}
-          sub={`${stats.cpu.count_physical} cores · ${stats.cpu.count_logical} threads${stats.cpu.frequency_current ? ` · ${(stats.cpu.frequency_current / 1000).toFixed(1)} GHz` : ''}`} />
-        <StatTile label="Memory" pct={stats.memory.percent}
-          sub={`${formatBytes(stats.memory.used)} / ${formatBytes(stats.memory.total)}`} />
-        <StatTile label="Disk" pct={stats.disk.percent}
-          sub={`${formatBytes(stats.disk.used)} / ${formatBytes(stats.disk.total)}`} />
-        {stats.gpus.length > 0 ? (
-          <StatTile label="GPU" pct={stats.gpus[0].load} sub={stats.gpus[0].name} />
-        ) : (
-          <StatTile label="Network" pct={0} showBar={false}
-            sub={`↑ ${formatBytes(netRate.sent)}/s   ↓ ${formatBytes(netRate.recv)}/s`} />
-        )}
-      </div>
-
-      {/* CPU cores + Memory/Disk */}
-      <div className="grid gap-4" style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(360px, 1fr))' }}>
-        <section className="glass-card" style={{ padding: '16px 18px' }}>
-          <div className="mon-title">CPU cores</div>
-          <div className="mb-3">
-            <Sparkline data={overallHistory} color="#4c8df0" height={44}
-              label={`Overall CPU usage, currently ${stats.cpu.percent.toFixed(1)}%`} />
+      <div className="grid gap-4 mb-4 sm:grid-cols-2 xl:grid-cols-4">
+        <Tile label="Processor" value={`${Math.round(stats.cpu.percent)}% busy`} of={`${stats.cpu.count_logical} threads on ${stats.cpu.count_physical} cores${ghz}`}>
+          <Sparkline data={samples.cpu} label={`Processor load over the last minute, now ${stats.cpu.percent.toFixed(0)}%`} />
+        </Tile>
+        <Tile label="Memory" value={formatBytes(stats.memory.used)} of={`of ${formatBytes(stats.memory.total)}${stats.swap.total > 0 ? `, swap ${formatBytes(stats.swap.used)} of ${formatBytes(stats.swap.total)}` : ''}`} pct={stats.memory.percent} />
+        <Tile label="Disk" value={formatBytes(stats.disk.used)} of={`of ${formatBytes(stats.disk.total)}, ${formatBytes(stats.disk.free)} free`} pct={stats.disk.percent} />
+        <Tile label="Network" value={`${formatBytes(samples.rate.recv)}/s`} of="received now">
+          <div className="flex flex-col gap-1 mt-3 text-sm" style={{ color: 'var(--ink-muted)' }}>
+            <span className="inline-flex items-center gap-2"><ArrowUpIcon />{formatBytes(samples.rate.sent)}/s sent now</span>
+            <span>{formatBytes(stats.network.bytes_sent)} sent, {formatBytes(stats.network.bytes_recv)} received since boot</span>
           </div>
-          <div className="grid gap-x-6 gap-y-2" style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))' }}>
-            {stats.cpu.percent_per_core.map((pct, i) => (
-              <Meter key={i} label={`Core ${i}`} pct={pct} />
+        </Tile>
+      </div>
+
+      <section className="glass-card p-5 mb-4" aria-label="Cores">
+        <div className="flex flex-wrap items-baseline justify-between gap-2 mb-3">
+          <h2 className="text-[17px] font-semibold m-0" style={{ color: 'var(--ink)' }}>Cores</h2>
+          <span className="text-sm" style={{ color: 'var(--ink-muted)' }}>
+            {busy} of {cores.length} working{hot > 0 ? `, ${hot} near full load` : ''}
+          </span>
+        </div>
+        <div className="core-grid" role="img" aria-label={`Load of each of ${cores.length} cores: ${busy} working, ${hot} near full load`}>
+          {cores.map((pct, i) => (
+            <Tooltip key={i} title={`Core ${i}: ${Math.round(pct)}%`} mouseEnterDelay={0}>
+              <i style={{ background: heatColor(pct) }} />
+            </Tooltip>
+          ))}
+        </div>
+        <div className="flex flex-wrap gap-4 mt-3 text-[13px]" style={{ color: 'var(--ink-faint)' }} aria-hidden="true">
+          {[['Idle', 0], ['Light', 20], ['Busy', 50], ['Near full', 90]].map(([label, pct]) => (
+            <span key={label} className="inline-flex items-center gap-1.5">
+              <i className="inline-block w-3 h-3 rounded-[3px]" style={{ background: heatColor(pct as number) }} />{label}
+            </span>
+          ))}
+        </div>
+      </section>
+
+      {stats.gpus.length > 0 && (
+        <section className="glass-card p-5" aria-label="GPUs">
+          <h2 className="text-[17px] font-semibold m-0 mb-3" style={{ color: 'var(--ink)' }}>Graphics cards</h2>
+          <div className="grid gap-5 md:grid-cols-2">
+            {stats.gpus.map((gpu) => (
+              <div key={gpu.id}>
+                <div className="flex justify-between gap-2"><b>GPU {gpu.id}, {gpu.name}</b><span style={{ color: gpu.temperature > 80 ? 'var(--color-alert-400)' : 'var(--ink-muted)' }}>{gpu.temperature}°C</span></div>
+                <div className="flex justify-between text-sm mt-2" style={{ color: 'var(--ink-muted)' }}><span>Load</span><span>{Math.round(gpu.load)}%</span></div>
+                <Meter pct={gpu.load} />
+                <div className="flex justify-between text-sm mt-2" style={{ color: 'var(--ink-muted)' }}>
+                  <span>Memory</span><span>{formatBytes(gpu.memory_used * 1024 * 1024)} of {formatBytes(gpu.memory_total * 1024 * 1024)}</span>
+                </div>
+                <Meter pct={gpu.memory_percent} />
+              </div>
             ))}
           </div>
         </section>
-
-        <section className="glass-card" style={{ padding: '16px 18px' }}>
-          <div className="mon-title">Memory & storage</div>
-          <div className="flex flex-col gap-3">
-            <Meter label="RAM" pct={stats.memory.percent}
-              value={`${formatBytes(stats.memory.used)} / ${formatBytes(stats.memory.total)}`} />
-            {stats.swap.total > 0 && (
-              <Meter label="Swap" pct={stats.swap.percent}
-                value={`${formatBytes(stats.swap.used)} / ${formatBytes(stats.swap.total)}`} />
-            )}
-            <Meter label="Disk" pct={stats.disk.percent}
-              value={`${formatBytes(stats.disk.used)} / ${formatBytes(stats.disk.total)}`} />
-          </div>
-        </section>
-      </div>
-
-      {/* GPU */}
-      {stats.gpus.length > 0 && (
-        <section className="glass-card mt-4" style={{ padding: '16px 18px' }}>
-          <div className="mon-title">GPU</div>
-          <div className="flex flex-col gap-4">
-            {stats.gpus.map((gpu) => {
-              const tempPct = gpu.temperature > 80 ? 95 : gpu.temperature > 60 ? 75 : 40
-              return (
-                <div key={gpu.id}>
-                  <div className="flex items-center justify-between mb-2">
-                    <span style={{ color: 'var(--ink)', fontWeight: 600, fontFamily: 'var(--font-display)' }}>
-                      GPU {gpu.id} · {gpu.name}
-                    </span>
-                    <span className="tabular-nums" style={{ fontFamily: 'var(--font-mono)', fontSize: 12, color: barColor(tempPct) }}>
-                      {gpu.temperature}°C
-                    </span>
-                  </div>
-                  <div className="flex flex-col gap-2">
-                    <Meter label="Load" pct={gpu.load} />
-                    <Meter label="VRAM" pct={gpu.memory_percent}
-                      value={`${formatBytes(gpu.memory_used * 1024 * 1024)} / ${formatBytes(gpu.memory_total * 1024 * 1024)}`} />
-                  </div>
-                </div>
-              )
-            })}
-          </div>
-        </section>
       )}
-
-      {/* Network */}
-      <div className="glass-card mt-4 flex items-center justify-between flex-wrap gap-2"
-        style={{ padding: '12px 18px', fontFamily: 'var(--font-mono)', fontSize: 13, color: 'var(--ink-muted)' }}>
-        <span>
-          Network{' '}
-          <span style={{ color: '#33c489' }}>↑ {formatBytes(netRate.sent)}/s</span>{'  '}
-          <span style={{ color: '#4c8df0' }}>↓ {formatBytes(netRate.recv)}/s</span>
-        </span>
-        <span>{uptimeLabel}</span>
-      </div>
     </div>
   )
 }

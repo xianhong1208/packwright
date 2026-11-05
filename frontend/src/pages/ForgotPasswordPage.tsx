@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { useNavigate, Link } from 'react-router-dom'
-import { BuildOutlined, UserOutlined, QuestionCircleOutlined, LockOutlined, LoadingOutlined, ArrowLeftOutlined, CheckCircleOutlined } from '@ant-design/icons'
+import { ArrowLeftIcon, QuestionIcon, SpinnerIcon } from '../components/ui/icons'
+import AuthLayout from '../components/layout/AuthLayout'
 import { authApi } from '../api/authApi'
 
 type Step = 'username' | 'security_question' | 'reset_password' | 'success'
@@ -91,38 +92,27 @@ export default function ForgotPasswordPage() {
   }
 
   return (
-    <div className="min-h-screen flex items-center justify-center p-4">
-      <div className="glass-card w-full max-w-md p-8">
-        {/* Brand */}
-        <div className="text-center mb-8">
-          <div className="inline-flex items-center justify-center w-14 h-14 rounded-lg bg-cyber-500 mb-4">
-            <BuildOutlined className="text-3xl text-void-950" />
-          </div>
-          <h1 className="text-2xl font-semibold text-[var(--ink)]" style={{ fontFamily: 'var(--font-display)' }}>
-            {step === 'success' ? 'Password reset' : 'Forgot password'}
-          </h1>
-          <p className="mt-2 text-sm text-[var(--ink-muted)]">
-            {step === 'username' && 'Enter your username to recover your account'}
-            {step === 'security_question' && 'Answer your security question'}
-            {step === 'reset_password' && 'Create a new password'}
-            {step === 'success' && 'Your password has been reset'}
-          </p>
-        </div>
-
+    <AuthLayout
+      title={step === 'success' ? 'Password changed' : 'Reset your password'}
+      lead={
+        step === 'username' ? 'Enter your username. You will answer the security question you set.'
+          : step === 'security_question' ? 'Answer your security question.'
+            : step === 'reset_password' ? 'Choose a new password.'
+              : 'Sign in with your new password.'
+      }
+    >
         {/* Step 1: Username */}
         {step === 'username' && (
           <form onSubmit={handleUsernameSubmit} className="space-y-5">
             <div>
               <label htmlFor="forgot-username" className="block text-sm text-[var(--ink-muted)] mb-2">Username</label>
               <div className="relative">
-                <UserOutlined className="absolute left-3 top-1/2 -translate-y-1/2 text-[var(--ink-faint)] z-10" />
                 <input
                   id="forgot-username"
                   type="text"
                   value={username}
                   onChange={(e) => setUsername(e.target.value)}
                   className="input-field"
-                  style={{ paddingLeft: 40 }}
                   placeholder="Enter your username"
                   autoComplete="username"
                 />
@@ -140,7 +130,7 @@ export default function ForgotPasswordPage() {
               disabled={isSubmitting}
               className="btn-cyber w-full flex items-center justify-center gap-2 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyber-300"
             >
-              {isSubmitting ? <LoadingOutlined className="animate-spin" /> : null}
+              {isSubmitting ? <SpinnerIcon /> : null}
               Continue
             </button>
           </form>
@@ -151,7 +141,7 @@ export default function ForgotPasswordPage() {
           <form onSubmit={handleAnswerSubmit} className="space-y-5">
             <div className="p-4 rounded-lg bg-void-800/50 border border-void-700">
               <div className="flex items-start gap-3">
-                <QuestionCircleOutlined className="text-cyber-400 text-lg mt-0.5" />
+                <QuestionIcon className="text-cyber-400 text-lg mt-0.5" />
                 <p className="text-[var(--ink)]">{securityQuestion}</p>
               </div>
             </div>
@@ -180,7 +170,7 @@ export default function ForgotPasswordPage() {
               disabled={isSubmitting}
               className="btn-cyber w-full flex items-center justify-center gap-2 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyber-300"
             >
-              {isSubmitting ? <LoadingOutlined className="animate-spin" /> : null}
+              {isSubmitting ? <SpinnerIcon /> : null}
               Verify answer
             </button>
           </form>
@@ -192,14 +182,12 @@ export default function ForgotPasswordPage() {
             <div>
               <label htmlFor="forgot-new-password" className="block text-sm text-[var(--ink-muted)] mb-2">New password</label>
               <div className="relative">
-                <LockOutlined className="absolute left-3 top-1/2 -translate-y-1/2 text-[var(--ink-faint)] z-10" />
                 <input
                   id="forgot-new-password"
                   type="password"
                   value={newPassword}
                   onChange={(e) => setNewPassword(e.target.value)}
                   className="input-field"
-                  style={{ paddingLeft: 40 }}
                   placeholder="Enter a new password"
                   autoComplete="new-password"
                 />
@@ -209,14 +197,12 @@ export default function ForgotPasswordPage() {
             <div>
               <label htmlFor="forgot-confirm-password" className="block text-sm text-[var(--ink-muted)] mb-2">Confirm password</label>
               <div className="relative">
-                <LockOutlined className="absolute left-3 top-1/2 -translate-y-1/2 text-[var(--ink-faint)] z-10" />
                 <input
                   id="forgot-confirm-password"
                   type="password"
                   value={confirmPassword}
                   onChange={(e) => setConfirmPassword(e.target.value)}
                   className="input-field"
-                  style={{ paddingLeft: 40 }}
                   placeholder="Re-enter your new password"
                   autoComplete="new-password"
                 />
@@ -234,7 +220,7 @@ export default function ForgotPasswordPage() {
               disabled={isSubmitting}
               className="btn-cyber w-full flex items-center justify-center gap-2 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyber-300"
             >
-              {isSubmitting ? <LoadingOutlined className="animate-spin" /> : null}
+              {isSubmitting ? <SpinnerIcon /> : null}
               Reset password
             </button>
           </form>
@@ -242,13 +228,7 @@ export default function ForgotPasswordPage() {
 
         {/* Step 4: Success */}
         {step === 'success' && (
-          <div className="text-center space-y-6">
-            <div className="inline-flex items-center justify-center w-16 h-16 rounded-full bg-matrix-500/20 border border-matrix-500/30">
-              <CheckCircleOutlined className="text-3xl text-matrix-400" />
-            </div>
-            <p className="text-[var(--ink)]">
-              Your password has been reset. You can now sign in with your new password.
-            </p>
+          <div>
             <button
               onClick={() => navigate('/login')}
               className="btn-cyber w-full focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyber-300"
@@ -260,17 +240,16 @@ export default function ForgotPasswordPage() {
 
         {/* Back to login */}
         {step !== 'success' && (
-          <div className="mt-6 text-center">
+          <div className="mt-8">
             <Link
               to="/login"
               className="inline-flex items-center gap-2 text-sm text-[var(--ink-muted)] hover:text-cyber-400 transition-colors rounded focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyber-500/60"
             >
-              <ArrowLeftOutlined />
+              <ArrowLeftIcon />
               Back to sign in
             </Link>
           </div>
         )}
-      </div>
-    </div>
+    </AuthLayout>
   )
 }

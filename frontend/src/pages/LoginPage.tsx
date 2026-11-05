@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react'
 import { useNavigate, Link } from 'react-router-dom'
-import { BuildOutlined, UserOutlined, LockOutlined, LoadingOutlined, CheckCircleOutlined, SafetyCertificateOutlined } from '@ant-design/icons'
+import { CheckCircleIcon, SealCheckIcon, SpinnerIcon } from '../components/ui/icons'
+import AuthLayout from '../components/layout/AuthLayout'
 import { useAuth, checkFirstUser, tokenManager } from '../contexts/AuthContext'
 
 export default function LoginPage() {
@@ -119,42 +120,30 @@ export default function LoginPage() {
   const displayError = localError || error
 
   return (
-    <div className="min-h-screen flex items-center justify-center p-4">
-      <div className="glass-card w-full max-w-md p-8">
-        {/* Brand */}
-        <div className="text-center mb-8">
-          <div className="inline-flex items-center justify-center w-14 h-14 rounded-lg bg-cyber-500 mb-4">
-            <BuildOutlined className="text-3xl text-void-950" />
-          </div>
-          <h1 className="text-2xl font-semibold text-[var(--ink)]" style={{ fontFamily: 'var(--font-display)' }}>
-            Packwright
-          </h1>
-          <p className="mt-2 text-sm text-[var(--ink-muted)]">
-            {isFirstUser
-              ? 'Create your administrator account to get started'
-              : isRegisterMode
-                ? 'Create a new account'
-                : 'Sign in to your account'
-            }
-          </p>
-        </div>
-
+    <AuthLayout
+      title={isFirstUser ? 'Set up Packwright' : isRegisterMode ? 'Create an account' : 'Sign in'}
+      lead={
+        isFirstUser
+          ? 'This first account is the administrator.'
+          : isRegisterMode
+            ? 'An administrator activates new accounts before they can sign in.'
+            : undefined
+      }
+    >
         {/* Form */}
         <form onSubmit={handleSubmit} className="space-y-5">
           {/* Username */}
           <div>
-            <label htmlFor="login-username" className="block text-sm text-[var(--ink-muted)] mb-2" style={{ fontFamily: 'var(--font-display)' }}>
+            <label htmlFor="login-username" className="block text-sm text-[var(--ink-muted)] mb-2">
               Username
             </label>
             <div className="relative">
-              <UserOutlined className="absolute left-3 top-1/2 -translate-y-1/2 text-[var(--ink-faint)] z-10" />
               <input
                 id="login-username"
                 type="text"
                 value={username}
                 onChange={(e) => setUsername(e.target.value)}
                 className="input-field"
-                style={{ paddingLeft: 40 }}
                 placeholder="Enter your username"
                 autoComplete="username"
               />
@@ -163,18 +152,16 @@ export default function LoginPage() {
 
           {/* Password */}
           <div>
-            <label htmlFor="login-password" className="block text-sm text-[var(--ink-muted)] mb-2" style={{ fontFamily: 'var(--font-display)' }}>
+            <label htmlFor="login-password" className="block text-sm text-[var(--ink-muted)] mb-2">
               Password
             </label>
             <div className="relative">
-              <LockOutlined className="absolute left-3 top-1/2 -translate-y-1/2 text-[var(--ink-faint)] z-10" />
               <input
                 id="login-password"
                 type="password"
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
                 className="input-field"
-                style={{ paddingLeft: 40 }}
                 placeholder="Enter your password"
                 autoComplete={isRegisterMode ? 'new-password' : 'current-password'}
               />
@@ -184,19 +171,17 @@ export default function LoginPage() {
           {/* Confirm Password (Register mode only) */}
           {isRegisterMode && (
             <div>
-              <label htmlFor="login-confirm-password" className="block text-sm text-[var(--ink-muted)] mb-2" style={{ fontFamily: 'var(--font-display)' }}>
+              <label htmlFor="login-confirm-password" className="block text-sm text-[var(--ink-muted)] mb-2">
                 Confirm password
               </label>
               <div className="relative">
-                <LockOutlined className="absolute left-3 top-1/2 -translate-y-1/2 text-[var(--ink-faint)] z-10" />
                 <input
                   id="login-confirm-password"
                   type="password"
                   value={confirmPassword}
                   onChange={(e) => setConfirmPassword(e.target.value)}
                   className="input-field"
-                  style={{ paddingLeft: 40 }}
-                  placeholder="Re-enter your password"
+                    placeholder="Re-enter your password"
                   autoComplete="new-password"
                 />
               </div>
@@ -227,7 +212,7 @@ export default function LoginPage() {
           {/* Pending approval message */}
           {pendingApproval && (
             <div className="p-3 rounded-lg bg-matrix-500/10 border border-matrix-500/30 text-matrix-400 text-sm flex items-start gap-2">
-              <CheckCircleOutlined className="mt-0.5 flex-shrink-0" />
+              <CheckCircleIcon className="mt-0.5 flex-shrink-0" />
               <span>Account created — an administrator must approve it before you can sign in.</span>
             </div>
           )}
@@ -247,7 +232,7 @@ export default function LoginPage() {
           >
             {isSubmitting ? (
               <>
-                <LoadingOutlined className="animate-spin" />
+                <SpinnerIcon />
                 {isRegisterMode ? 'Creating account…' : 'Signing in…'}
               </>
             ) : (
@@ -261,14 +246,14 @@ export default function LoginPage() {
           <div className="mt-6">
             <div className="flex items-center gap-3 my-4">
               <div className="flex-1 h-px bg-void-700" />
-              <span className="text-xs uppercase tracking-wider text-[var(--ink-faint)]">or</span>
+              <span className="text-xs text-[var(--ink-faint)]">or</span>
               <div className="flex-1 h-px bg-void-700" />
             </div>
             <a
               href="/auth/oauth/mcp/login"
               className="w-full flex items-center justify-center gap-2 py-2.5 rounded-lg border border-void-600 text-[var(--ink)] hover:border-cyber-500 hover:text-cyber-300 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyber-500/60"
             >
-              <SafetyCertificateOutlined />
+              <SealCheckIcon />
               Sign in with MCP Gate
             </a>
           </div>
@@ -276,7 +261,8 @@ export default function LoginPage() {
 
         {/* Toggle mode */}
         {!isFirstUser && (
-          <div className="mt-6 text-center">
+          <div className="mt-8 text-sm" style={{ color: 'var(--ink-muted)' }}>
+            {isRegisterMode ? 'Already have an account? ' : 'No account yet? '}
             <button
               type="button"
               onClick={() => {
@@ -284,23 +270,12 @@ export default function LoginPage() {
                 setLocalError(null)
                 setPendingApproval(false)
               }}
-              className="text-sm text-[var(--ink-muted)] hover:text-cyber-400 transition-colors rounded focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyber-500/60"
+              className="text-cyber-400 hover:text-cyber-300 transition-colors rounded focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyber-500/60"
             >
-              {isRegisterMode
-                ? 'Already have an account? Sign in'
-                : "Don't have an account? Register"
-              }
+              {isRegisterMode ? 'Sign in' : 'Register'}
             </button>
           </div>
         )}
-
-        {/* Footer */}
-        <div className="mt-8 pt-6 border-t border-[var(--seam)] text-center">
-          <p className="text-xs text-[var(--ink-faint)]">
-            Packwright
-          </p>
-        </div>
-      </div>
-    </div>
+    </AuthLayout>
   )
 }

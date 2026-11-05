@@ -1,5 +1,5 @@
 import { Form, Input, Switch, Row, Col, InputNumber, Collapse } from 'antd'
-import { CloudServerOutlined, SettingOutlined } from '@ant-design/icons'
+import { GearIcon, HardDrivesIcon } from '../../../components/ui/icons'
 import { useCreateTask } from '../context'
 import { SectionHeader } from '../ui'
 
@@ -15,7 +15,7 @@ export default function DockerStep() {
       </p>
 
       <div className="glass-card flex items-center gap-6 p-6">
-        <CloudServerOutlined style={{ fontSize: 32, color: dockerEnabled ? 'var(--color-cyber-400)' : 'var(--ink-faint)' }} />
+        <HardDrivesIcon style={{ fontSize: 32, color: dockerEnabled ? 'var(--color-cyber-400)' : 'var(--ink-faint)' }} />
         <div className="flex-1">
           <div className="font-medium" style={{ color: 'var(--ink)' }}>Docker image output</div>
           <div className="text-sm mt-1" style={{ color: 'var(--ink-muted)' }}>
@@ -36,7 +36,7 @@ export default function DockerStep() {
       {/* Docker Settings — shown when enabled */}
       {dockerEnabled && (
         <div className="glass-card p-5 mt-6">
-          <SectionHeader icon={<CloudServerOutlined />} title="Docker settings" />
+          <SectionHeader icon={<HardDrivesIcon />} title="Docker settings" />
           <Row gutter={16}>
             <Col xs={24} md={8}>
               <Form.Item
@@ -80,7 +80,7 @@ export default function DockerStep() {
               </Row>
 
               <div className="mb-1 text-sm" style={{ color: 'var(--ink-muted)' }}>
-                <SettingOutlined className="mr-2" />Nginx settings
+                <GearIcon className="mr-2" />Nginx settings
               </div>
               <div className="text-xs mb-3" style={{ color: 'var(--ink-faint)', lineHeight: 1.6 }}>
                 A frontend-only Docker image is served by Nginx. These are the knobs people tweak most often — the defaults are fine.
@@ -132,7 +132,7 @@ export default function DockerStep() {
                           </tbody>
                         </table>
                         <div className="mt-2 text-signal-400">
-                          ⚠ If another reverse proxy sits in front of the container (an outer Nginx, a load balancer), that layer has its own timeout.
+                          Note: if another reverse proxy sits in front of the container (an outer Nginx, a load balancer), that layer has its own timeout.
                           Changing only this one does nothing — every layer in the chain applies, and the smallest wins.
                           If it still drops at around 60 seconds after a rebuild, it's the outer layer.
                         </div>
@@ -216,7 +216,7 @@ export default function DockerStep() {
               forceRender: true,
               label: (
                 <span className="text-sm" style={{ color: 'var(--ink-muted)' }}>
-                  <SettingOutlined className="mr-2" />Advanced: Node.js, custom RUN commands, environment variables
+                  <GearIcon className="mr-2" />Advanced: Node.js, custom RUN commands, environment variables
                 </span>
               ),
               children: (

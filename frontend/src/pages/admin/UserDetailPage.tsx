@@ -1,19 +1,11 @@
 import { useState, useEffect } from 'react'
 import { useParams, useNavigate, Link } from 'react-router-dom'
-import { Descriptions, Tag, Table, message, Modal, Select, Tabs, Empty, Spin } from 'antd'
-import {
-  UserOutlined,
-  ArrowLeftOutlined,
-  CheckCircleOutlined,
-  CloseCircleOutlined,
-  CrownOutlined,
-  LoadingOutlined,
-  HistoryOutlined,
-  SafetyCertificateOutlined,
-} from '@ant-design/icons'
+import { Descriptions, Tag, Table, message, Modal, Select, Tabs, Empty, Spin, Button, Popconfirm } from 'antd'
+import { ArrowLeftIcon, CheckCircleIcon, CheckIcon, ClockCounterClockwiseIcon, CrownIcon, KeyIcon, ProhibitIcon, SealCheckIcon, SpinnerIcon, UserIcon, XCircleIcon } from '../../components/ui/icons'
 import { userApi } from '../../api/userApi'
 import type { User, Role, LoginHistoryItem } from '../../api/types'
 import { useAuth } from '../../contexts/AuthContext'
+import { parseUtc } from '../../utils/time'
 
 export default function UserDetailPage() {
   const { userId } = useParams<{ userId: string }>()
@@ -130,7 +122,7 @@ export default function UserDetailPage() {
       title: 'Time',
       dataIndex: 'login_time',
       key: 'login_time',
-      render: (time: string) => new Date(time).toLocaleString(),
+      render: (time: string) => parseUtc(time).toLocaleString(),
     },
     {
       title: 'Status',
@@ -138,11 +130,11 @@ export default function UserDetailPage() {
       key: 'success',
       render: (success: boolean) =>
         success ? (
-          <Tag color="green" icon={<CheckCircleOutlined />}>
+          <Tag color="green" icon={<CheckCircleIcon />}>
             Success
           </Tag>
         ) : (
-          <Tag color="red" icon={<CloseCircleOutlined />}>
+          <Tag color="red" icon={<XCircleIcon />}>
             Failed
           </Tag>
         ),
@@ -175,7 +167,7 @@ export default function UserDetailPage() {
   if (isLoading) {
     return (
       <div className="flex justify-center items-center h-64">
-        <Spin indicator={<LoadingOutlined className="text-cyber-400 text-3xl" />} />
+        <Spin indicator={<SpinnerIcon className="text-cyber-400 text-3xl" />} />
       </div>
     )
   }
@@ -183,7 +175,7 @@ export default function UserDetailPage() {
   if (!user) {
     return (
       <div className="p-6">
-        <Empty description="User not found" />
+        <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="User not found" />
       </div>
     )
   }
@@ -195,7 +187,7 @@ export default function UserDetailPage() {
       key: 'details',
       label: (
         <span className="flex items-center gap-2">
-          <UserOutlined />
+          <UserIcon />
           Details
         </span>
       ),
@@ -221,8 +213,8 @@ export default function UserDetailPage() {
                 ))}
               </Select>
             ) : user.role ? (
-              <Tag color={user.role.name === 'admin' ? 'gold' : 'blue'}>
-                {user.role.name === 'admin' && <CrownOutlined className="mr-1" />}
+              <Tag color={user.role.name === 'admin' ? 'gold' : undefined}>
+                {user.role.name === 'admin' && <CrownIcon className="mr-1" />}
                 {user.role.display_name}
               </Tag>
             ) : (
@@ -232,14 +224,14 @@ export default function UserDetailPage() {
           <Descriptions.Item label="Status">
             <Tag
               color={user.is_active ? 'green' : 'red'}
-              icon={user.is_active ? <CheckCircleOutlined /> : <CloseCircleOutlined />}
+              icon={user.is_active ? <CheckCircleIcon /> : <XCircleIcon />}
             >
               {user.is_active ? 'Active' : 'Disabled'}
             </Tag>
           </Descriptions.Item>
           <Descriptions.Item label="Security question">
             {user.has_security_question ? (
-              <Tag color="green" icon={<CheckCircleOutlined />}>
+              <Tag color="green" icon={<CheckCircleIcon />}>
                 Set
               </Tag>
             ) : (
@@ -247,10 +239,10 @@ export default function UserDetailPage() {
             )}
           </Descriptions.Item>
           <Descriptions.Item label="Created">
-            {user.created_at ? new Date(user.created_at).toLocaleString() : '-'}
+            {user.created_at ? parseUtc(user.created_at).toLocaleString() : '-'}
           </Descriptions.Item>
           <Descriptions.Item label="Last login">
-            {user.last_login ? new Date(user.last_login).toLocaleString() : 'Never'}
+            {user.last_login ? parseUtc(user.last_login).toLocaleString() : 'Never'}
           </Descriptions.Item>
         </Descriptions>
       ),
@@ -259,7 +251,7 @@ export default function UserDetailPage() {
       key: 'login_history',
       label: (
         <span className="flex items-center gap-2">
-          <HistoryOutlined />
+          <ClockCounterClockwiseIcon />
           Login history
         </span>
       ),
@@ -277,7 +269,7 @@ export default function UserDetailPage() {
             showSizeChanger: false,
           }}
           locale={{
-            emptyText: <Empty description="No login history" />,
+            emptyText: <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="No login history" />,
           }}
         />
       ),
@@ -286,7 +278,7 @@ export default function UserDetailPage() {
       key: 'permissions',
       label: (
         <span className="flex items-center gap-2">
-          <SafetyCertificateOutlined />
+          <SealCheckIcon />
           Permissions
         </span>
       ),
@@ -296,7 +288,7 @@ export default function UserDetailPage() {
             <div>
               <p className="mb-4" style={{ color: 'var(--ink-muted)' }}>
                 Permissions inherited from this user's role:{' '}
-                <Tag color={user.role.name === 'admin' ? 'gold' : 'blue'}>
+                <Tag color={user.role.name === 'admin' ? 'gold' : undefined}>
                   {user.role.display_name}
                 </Tag>
               </p>
@@ -304,14 +296,14 @@ export default function UserDetailPage() {
                 {roles
                   .find((r) => r.id === user.role?.id)
                   ?.permissions.map((p) => (
-                    <Tag key={p.id} color="cyan">
+                    <Tag key={p.id}>
                       {p.code}
                     </Tag>
                   ))}
               </div>
             </div>
           ) : (
-            <Empty description="No role assigned — this user has no permissions" />
+            <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="No role assigned — this user has no permissions" />
           )}
         </div>
       ),
@@ -319,16 +311,16 @@ export default function UserDetailPage() {
   ]
 
   return (
-    <div className="max-w-4xl mx-auto">
+    <div className="max-w-4xl">
       {/* Header */}
-      <div className="pb-4 mb-6" style={{ borderBottom: '1px solid var(--seam)' }}>
+      <div className="mb-6">
         <Link
           to="/admin/users"
           className="inline-flex items-center gap-2 hover:!text-cyber-300 transition-colors mb-4"
           style={{ color: 'var(--ink-muted)' }}
         >
-          <ArrowLeftOutlined />
-          Back to users
+          <ArrowLeftIcon />
+          Back to people
         </Link>
 
         <div className="flex flex-wrap items-center justify-between gap-4">
@@ -337,31 +329,32 @@ export default function UserDetailPage() {
               className="w-16 h-16 rounded-full flex items-center justify-center"
               style={{ background: 'var(--color-void-700)' }}
             >
-              <UserOutlined className="text-2xl" style={{ color: 'var(--ink-muted)' }} />
+              <UserIcon className="text-2xl" style={{ color: 'var(--ink-muted)' }} />
             </div>
             <div>
-              <h1 className="text-2xl font-semibold" style={{ fontFamily: 'var(--font-display)', color: 'var(--ink)' }}>
-                {user.username}
-              </h1>
-              <p style={{ color: 'var(--ink-muted)' }}>{user.email || 'No email'}</p>
+              <h1 className="page-title">{user.username}</h1>
+              <p className="page-lead">{user.email || 'No email'}</p>
             </div>
           </div>
 
           {/* Actions */}
-          <div className="flex items-center gap-3">
-            {hasPermission('user:manage') && !isSelf && (
-              <button
-                onClick={() => handleStatusChange(!user.is_active)}
-                className={user.is_active ? 'btn-danger' : 'btn-ghost'}
-              >
-                {user.is_active ? 'Deactivate' : 'Activate'}
-              </button>
-            )}
+          <div className="flex flex-wrap items-center gap-2">
             {hasPermission('user:reset_password') && (
-              <button onClick={handleResetPassword} className="btn-cyber">
-                Reset password
-              </button>
+              <Button icon={<KeyIcon />} onClick={handleResetPassword}>Set a new password</Button>
             )}
+            {hasPermission('user:manage') && !isSelf && (user.is_active ? (
+              <Popconfirm
+                title={`Deactivate ${user.username}?`}
+                description="They are signed out and can't sign in until reactivated."
+                okText="Deactivate"
+                okButtonProps={{ danger: true }}
+                onConfirm={() => handleStatusChange(false)}
+              >
+                <Button danger icon={<ProhibitIcon />}>Deactivate</Button>
+              </Popconfirm>
+            ) : (
+              <Button icon={<CheckIcon />} onClick={() => handleStatusChange(true)}>Activate</Button>
+            ))}
           </div>
         </div>
       </div>

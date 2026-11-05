@@ -124,7 +124,7 @@ describe('New build wizard', () => {
 
   it('rebuild prefills the stored config and resubmits it', async () => {
     renderWizard(rebuildOf({ project_type: 'backend_only', entry_point: 'src/app.py', pack_mode: 'full', nuitka_jobs: 4 }))
-    expect(await screen.findByText('Rebuild task')).toBeInTheDocument()
+    expect(await screen.findByRole('heading', { name: 'Rebuild' })).toBeInTheDocument()
 
     const start = await goToReview()
     await act(async () => {

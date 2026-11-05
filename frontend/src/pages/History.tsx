@@ -1,39 +1,39 @@
-import { useState } from 'react'
-import { useNavigate } from 'react-router-dom'
-import { Typography, Table, Button, Space, Tooltip, message, Select, Empty } from 'antd'
-import {
-  DownloadOutlined,
-  RedoOutlined,
-  CloudServerOutlined,
-  DesktopOutlined,
-  AppstoreOutlined,
-  DockerOutlined,
-  RocketOutlined,
-} from '@ant-design/icons'
+import { useMemo, useState } from 'react'
+import { Link, useNavigate } from 'react-router-dom'
+import { Button, Empty, Input, Pagination, Select, Spin, Tooltip, message } from 'antd'
+import { ArrowClockwiseIcon, CubeIcon, DownloadSimpleIcon, MagnifyingGlassIcon, PlusIcon } from '../components/ui/icons'
 import { useQuery } from '@tanstack/react-query'
-import type { ColumnsType } from 'antd/es/table'
 import { taskApi } from '../api/client'
-import type { HistoryItem, TaskStatus, ProjectType } from '../api/types'
+import type { HistoryItem } from '../api/types'
 import { triggerDownload, triggerUrlDownload } from '../utils/download'
 import { useAuth } from '../contexts/AuthContext'
 import { STATUS_META } from '../utils/statusMeta'
 import { getErrorDetail } from '../utils/errors'
+import { PROJECT_TYPE_META } from '../utils/projectTypeMeta'
+import { outcomeLine } from './dashboard/bench'
+import { parseUtc, timeAgo } from '../utils/time'
+import PageHeader from '../components/layout/PageHeader'
+import { DEFAULT_FILTERS, filterBuilds, statusCounts, type BuildFilters, type StatusFilter } from './builds/filter'
 
-const { Title } = Typography
+const PAGE_SIZE = 20
 
-const projectTypeConfig: Record<ProjectType, { label: string; color: string; icon: React.ReactNode }> = {
-  backend_only: { label: 'Backend', color: 'blue', icon: <CloudServerOutlined /> },
-  frontend_only: { label: 'Frontend', color: 'green', icon: <DesktopOutlined /> },
-  fullstack: { label: 'Full stack', color: 'purple', icon: <AppstoreOutlined /> },
-}
+const STATUS_CHIPS: { key: StatusFilter; label: string }[] = [
+  { key: 'all', label: 'All' },
+  { key: 'running', label: 'Running' },
+  { key: 'completed', label: 'Passed' },
+  { key: 'failed', label: 'Failed' },
+  { key: 'cancelled', label: 'Cancelled' },
+]
 
 export default function History() {
   const navigate = useNavigate()
   const { hasPermission } = useAuth()
   const [downloadingId, setDownloadingId] = useState<string | null>(null)
+  const [filters, setFilters] = useState<BuildFilters>(DEFAULT_FILTERS)
+  const [page, setPage] = useState(1)
 
-  // Only view_all holders can scope the list to another user. For view_own
-  // users the backend forces their own rows, so the picker would be pointless.
+  // Only view_all holders can scope the list to another user; for view_own
+  // users the backend already returns their own builds only.
   const canFilterByUser = hasPermission('history:view_all')
   const [userFilter, setUserFilter] = useState<string | undefined>(undefined)
 
@@ -41,36 +41,32 @@ export default function History() {
     queryKey: ['history', userFilter ?? null],
     queryFn: () => taskApi.getHistory(userFilter ? { user_name: userFilter } : undefined),
   })
+  const { data: historyUsers } = useQuery({ queryKey: ['historyUsers'], queryFn: taskApi.listHistoryUsers, enabled: canFilterByUser })
 
-  // Username options for the filter dropdown (admins only).
-  const { data: historyUsers } = useQuery({
-    queryKey: ['historyUsers'],
-    queryFn: taskApi.listHistoryUsers,
-    enabled: canFilterByUser,
-  })
+  const shown = useMemo(() => filterBuilds(history ?? [], filters), [history, filters])
+  const counts = useMemo(() => statusCounts(history ?? [], filters), [history, filters])
+  const pageItems = shown.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE)
+  const filtering = filters.query !== '' || filters.status !== 'all' || filters.type !== 'all'
+
+  const update = (patch: Partial<BuildFilters>) => {
+    setFilters((f) => ({ ...f, ...patch }))
+    setPage(1)
+  }
 
   const handleExport = async () => {
     try {
       const blob = await taskApi.exportHistory(userFilter)
       triggerDownload(blob, userFilter ? `history-${userFilter}.csv` : 'history.csv')
-      message.success('History exported as CSV')
+      message.success('Exported as CSV')
     } catch (err) {
-      message.error(getErrorDetail(err, 'Could not export history'))
+      message.error(getErrorDetail(err, 'Could not export the builds'))
     }
   }
 
-  const handleRebuild = (record: HistoryItem) => {
-    if (!record.config) return
-    navigate('/create', {
-      state: {
-        rebuild: true,
-        projectName: record.project_name,
-        config: record.config,
-      },
-    })
-  }
+  const rebuild = (record: HistoryItem) =>
+    record.config && navigate('/create', { state: { rebuild: true, projectName: record.project_name, config: record.config } })
 
-  const handleDownload = async (record: HistoryItem) => {
+  const download = async (record: HistoryItem) => {
     setDownloadingId(record.task_id)
     try {
       triggerUrlDownload(await taskApi.getOutputDownloadUrl(record.task_id))
@@ -82,230 +78,147 @@ export default function History() {
     }
   }
 
-  const canDownload = (record: HistoryItem) =>
-    record.status === 'completed'
-
-  // Relative time in the GitHub Actions register ("3 minutes ago").
-  const timeAgo = (iso: string): string => {
-    const s = Math.max(0, (Date.now() - new Date(iso).getTime()) / 1000)
-    if (s < 60) return 'just now'
-    const m = Math.floor(s / 60)
-    if (m < 60) return `${m} min ago`
-    const h = Math.floor(m / 60)
-    if (h < 24) return `${h} h ago`
-    const d = Math.floor(h / 24)
-    if (d < 30) return `${d} d ago`
-    return new Date(iso).toLocaleDateString()
-  }
-
-  const formatDuration = (start: string, end: string | null): string => {
-    if (!end) return '-'
-    const ms = new Date(end).getTime() - new Date(start).getTime()
-    if (ms < 0) return '-'
-    const seconds = Math.floor(ms / 1000)
-    if (seconds < 60) return `${seconds}s`
-    const minutes = Math.floor(seconds / 60)
-    const remainSeconds = seconds % 60
-    if (minutes < 60) return `${minutes}m ${remainSeconds}s`
-    const hours = Math.floor(minutes / 60)
-    const remainMinutes = minutes % 60
-    return `${hours}h ${remainMinutes}m`
-  }
-
-  const columns: ColumnsType<HistoryItem> = [
-    {
-      // Status glyph leads the row, GitHub-Actions style.
-      title: '',
-      dataIndex: 'status',
-      key: 'status',
-      width: 44,
-      align: 'center',
-      render: (status: TaskStatus) => {
-        const m = STATUS_META[status]
-        return (
-          <Tooltip title={m.label}>
-            <span style={{ color: m.color, fontSize: 18, display: 'inline-flex' }}>{m.icon}</span>
-          </Tooltip>
-        )
-      },
-      filters: [
-        { text: 'Running', value: 'running' },
-        { text: 'Passed', value: 'completed' },
-        { text: 'Failed', value: 'failed' },
-        { text: 'Cancelled', value: 'cancelled' },
-      ],
-      onFilter: (value, record) => record.status === value,
-    },
-    {
-      // Run identity: project name + a muted meta line (type / docker / who ran it).
-      title: 'Build',
-      key: 'run',
-      render: (_, record) => {
-        const type = record.config?.project_type
-        const cfg = type ? projectTypeConfig[type] : null
-        return (
-          <div className="min-w-0">
-            <a
-              onClick={(e) => {
-                e.stopPropagation()
-                navigate(`/history/${record.task_id}`)
-              }}
-              style={{ color: 'var(--ink)', fontWeight: 600, cursor: 'pointer' }}
-              className="hover:!text-cyber-300"
-            >
-              {record.project_name}
-            </a>
-            <div className="flex items-center gap-2 mt-0.5 text-xs" style={{ color: 'var(--ink-faint)' }}>
-              {cfg && <span style={{ color: cfg.color }}>{cfg.label}</span>}
-              {record.config?.docker_enabled && (
-                <Tooltip title={record.config.docker_image_name || 'Docker enabled'}>
-                  <DockerOutlined style={{ color: '#4c8df0' }} aria-label="Docker enabled" />
-                </Tooltip>
-              )}
-              <span aria-hidden>·</span>
-              <span>{record.user_name}</span>
-            </div>
-          </div>
-        )
-      },
-      filters: [
-        { text: 'Backend', value: 'backend_only' },
-        { text: 'Frontend', value: 'frontend_only' },
-        { text: 'Full stack', value: 'fullstack' },
-      ],
-      onFilter: (value, record) => record.config?.project_type === value,
-    },
-    {
-      title: 'Started',
-      dataIndex: 'start_time',
-      key: 'start_time',
-      width: 130,
-      render: (time: string) => (
-        <Tooltip title={new Date(time).toLocaleString()}>
-          <span style={{ color: 'var(--ink-muted)' }}>{timeAgo(time)}</span>
-        </Tooltip>
-      ),
-      sorter: (a, b) => new Date(a.start_time).getTime() - new Date(b.start_time).getTime(),
-      defaultSortOrder: 'descend',
-    },
-    {
-      title: 'Duration',
-      key: 'duration',
-      width: 100,
-      render: (_, record) => (
-        <span style={{ fontFamily: 'var(--font-mono, monospace)', fontSize: '0.85em', color: 'var(--ink-muted)' }}>
-          {formatDuration(record.start_time, record.end_time)}
-        </span>
-      ),
-      sorter: (a, b) => {
-        const durationA = a.end_time ? new Date(a.end_time).getTime() - new Date(a.start_time).getTime() : 0
-        const durationB = b.end_time ? new Date(b.end_time).getTime() - new Date(b.start_time).getTime() : 0
-        return durationA - durationB
-      },
-    },
-    {
-      title: '',
-      key: 'actions',
-      width: 150,
-      align: 'right',
-      render: (_, record) => (
-        <Space size="small">
-          {record.config && (
-            <Button
-              size="small"
-              icon={<RedoOutlined />}
-              onClick={(e) => {
-                e.stopPropagation()
-                handleRebuild(record)
-              }}
-            >
-              Rebuild
-            </Button>
-          )}
-          {canDownload(record) && (
-            <Tooltip title="Download output">
-              <Button
-                size="small"
-                aria-label="Download output"
-                icon={<DownloadOutlined />}
-                loading={downloadingId === record.task_id}
-                onClick={(e) => {
-                  e.stopPropagation()
-                  handleDownload(record)
-                }}
-              />
-            </Tooltip>
-          )}
-        </Space>
-      ),
-    },
-  ]
-
   return (
     <div>
-      <Space
-        style={{
-          display: 'flex',
-          justifyContent: 'space-between',
-          marginBottom: 24,
-        }}
-      >
-        <Title level={3} style={{ margin: 0 }}>
-          Builds
-        </Title>
-        <Space>
+      <PageHeader
+        title="Builds"
+        lead={history ? `${history.length} ${history.length === 1 ? 'build' : 'builds'}${userFilter ? ` by ${userFilter}` : ''}.` : ' '}
+        actions={<>
           {canFilterByUser && (
             <Select
               allowClear
               showSearch
-              placeholder="Filter by user"
-              style={{ width: 220 }}
+              placeholder="Anyone"
+              style={{ width: 180 }}
               value={userFilter}
-              onChange={(v) => setUserFilter(v)}
+              onChange={(v) => { setUserFilter(v); setPage(1) }}
               options={(historyUsers ?? []).map((u) => ({ label: u, value: u }))}
-              filterOption={(input, option) =>
-                (option?.value as string)?.toLowerCase().includes(input.toLowerCase())
-              }
+              aria-label="Builds by"
             />
           )}
-          <Button
-            type="primary"
-            icon={<DownloadOutlined />}
-            onClick={handleExport}
-          >
-            Export CSV
-          </Button>
-        </Space>
-      </Space>
-
-      <Table
-        columns={columns}
-        dataSource={history}
-        rowKey="task_id"
-        loading={isLoading}
-        locale={{
-          emptyText: (
-            <Empty
-              description={<span style={{ color: 'var(--ink-muted)' }}>No builds yet</span>}
-              style={{ padding: 32 }}
-            >
-              <Button type="primary" icon={<RocketOutlined />} onClick={() => navigate('/create')}>
-                Start your first build
-              </Button>
-            </Empty>
-          ),
-        }}
-        pagination={{
-          pageSize: 20,
-          showSizeChanger: true,
-          showTotal: (total) => `${total} builds`,
-        }}
-        scroll={{ x: 1100 }}
-        onRow={(record) => ({
-          onClick: () => navigate(`/history/${record.task_id}`),
-          style: { cursor: 'pointer' },
-        })}
+          <Button icon={<DownloadSimpleIcon />} onClick={handleExport}>Export CSV</Button>
+        </>}
       />
+
+      <div className="flex flex-wrap items-center gap-3 mb-4">
+        <Input
+          allowClear
+          prefix={<MagnifyingGlassIcon />}
+          placeholder="Search by project or person"
+          value={filters.query}
+          onChange={(e) => update({ query: e.target.value })}
+          className="!w-full sm:!w-72"
+          aria-label="Search builds"
+        />
+        <div className="flex flex-wrap gap-1.5" role="group" aria-label="Status">
+          {STATUS_CHIPS.map((c) => (
+            <button
+              key={c.key}
+              type="button"
+              aria-pressed={filters.status === c.key}
+              onClick={() => update({ status: c.key })}
+              className="chip"
+            >
+              {c.label} <span className="chip-count">{counts[c.key]}</span>
+            </button>
+          ))}
+        </div>
+        <div className="flex gap-2 sm:ml-auto">
+          <Select
+            value={filters.type}
+            onChange={(v) => update({ type: v })}
+            style={{ width: 140 }}
+            aria-label="Project type"
+            options={[
+              { value: 'all', label: 'All types' },
+              { value: 'backend_only', label: 'Backend' },
+              { value: 'frontend_only', label: 'Frontend' },
+              { value: 'fullstack', label: 'Full stack' },
+            ]}
+          />
+          <Select
+            value={filters.sort}
+            onChange={(v) => update({ sort: v })}
+            style={{ width: 130 }}
+            aria-label="Order"
+            options={[
+              { value: 'newest', label: 'Newest' },
+              { value: 'oldest', label: 'Oldest' },
+              { value: 'longest', label: 'Longest' },
+            ]}
+          />
+        </div>
+      </div>
+
+      {isLoading ? (
+        <div className="py-20 text-center"><Spin size="large" /></div>
+      ) : shown.length === 0 ? (
+        <Empty
+          image={Empty.PRESENTED_IMAGE_SIMPLE}
+          className="py-12"
+          description={<span style={{ color: 'var(--ink-muted)' }}>{filtering ? 'No builds match these filters.' : 'Nothing has been built yet.'}</span>}
+        >
+          {filtering ? (
+            <Button onClick={() => update(DEFAULT_FILTERS)}>Clear filters</Button>
+          ) : (
+            <Button type="primary" icon={<PlusIcon />} onClick={() => navigate('/create')}>New build</Button>
+          )}
+        </Empty>
+      ) : (
+        <>
+          <ul className="build-list" aria-label="Builds">
+            {pageItems.map((record) => {
+              const meta = STATUS_META[record.status]
+              const type = record.config?.project_type ? PROJECT_TYPE_META[record.config.project_type] : null
+              const line = outcomeLine(record)
+              return (
+                <li key={record.task_id} className="build-row">
+                  <span className="build-status" style={{ color: meta.color }} title={meta.label} aria-label={meta.label}>{meta.icon}</span>
+                  <div className="min-w-0 flex-1">
+                    <Link to={`/history/${record.task_id}`} className="build-name">{record.project_name}</Link>
+                    <div className="build-meta">
+                      {type && <span className="inline-flex items-center gap-1">{type.icon}{type.label}</span>}
+                      {record.config?.docker_enabled && (
+                        <Tooltip title={record.config.docker_image_name || 'Docker image'}>
+                          <span className="inline-flex items-center gap-1"><CubeIcon />Docker</span>
+                        </Tooltip>
+                      )}
+                      <span>{record.user_name}</span>
+                      <Tooltip title={parseUtc(record.start_time).toLocaleString()}><span>{timeAgo(record.start_time)}</span></Tooltip>
+                    </div>
+                  </div>
+                  <div className="build-verdict" style={{ color: meta.color }}>
+                    {line.verdict}
+                    {record.status === 'failed' && line.detail && <div className="build-meta truncate max-w-[280px]">{line.detail}</div>}
+                  </div>
+                  <div className="flex gap-1.5 flex-none">
+                    {record.config && (
+                      <Tooltip title="Rebuild with these settings">
+                        <Button aria-label={`Rebuild ${record.project_name}`} icon={<ArrowClockwiseIcon />} onClick={() => rebuild(record)} />
+                      </Tooltip>
+                    )}
+                    {record.status === 'completed' && (
+                      <Tooltip title="Download output">
+                        <Button
+                          aria-label={`Download ${record.project_name}`}
+                          icon={<DownloadSimpleIcon />}
+                          loading={downloadingId === record.task_id}
+                          onClick={() => download(record)}
+                        />
+                      </Tooltip>
+                    )}
+                  </div>
+                </li>
+              )
+            })}
+          </ul>
+          {shown.length > PAGE_SIZE && (
+            <div className="flex justify-end mt-4">
+              <Pagination current={page} pageSize={PAGE_SIZE} total={shown.length} onChange={setPage} showSizeChanger={false} />
+            </div>
+          )}
+        </>
+      )}
     </div>
   )
 }

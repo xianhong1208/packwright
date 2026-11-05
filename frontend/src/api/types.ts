@@ -463,3 +463,45 @@ export interface BuildStats {
   diagnosis_coverage: number | null
   environment: BuildEnvironment
 }
+
+/** /api/monitoring/stats — a live snapshot of the build host. */
+export interface SystemStats {
+  cpu: {
+    percent: number
+    percent_per_core: number[]
+    count_physical: number
+    count_logical: number
+    frequency_current: number | null
+    frequency_max: number | null
+  }
+  memory: {
+    total: number
+    available: number
+    used: number
+    percent: number
+  }
+  swap: {
+    total: number
+    used: number
+    percent: number
+  }
+  disk: {
+    total: number
+    used: number
+    free: number
+    percent: number
+  }
+  network: {
+    bytes_sent: number
+    bytes_recv: number
+  }
+  gpus: Array<{
+    id: number
+    name: string
+    load: number
+    memory_used: number
+    memory_total: number
+    memory_percent: number
+    temperature: number
+  }>
+}

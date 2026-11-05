@@ -1,7 +1,6 @@
 import { useState, useEffect, useCallback, useMemo, useRef } from 'react'
 import { useNavigate, useLocation } from 'react-router-dom'
 import { Form, Button, message, notification, Tag, Tooltip } from 'antd'
-import { CodeOutlined, GlobalOutlined, AppstoreOutlined } from '@ant-design/icons'
 import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { taskApi } from '../../api/client'
 import type {
@@ -649,7 +648,7 @@ export function useCreateTaskModel() {
     if (!info) return null
     const roleTag =
       info.role === 'source' ? (
-        <Tag color="cyan" style={{ marginInlineEnd: 4 }}>Code</Tag>
+        <Tag style={{ marginInlineEnd: 4 }}>Code</Tag>
       ) : info.role === 'data' ? (
         <Tag color="green" style={{ marginInlineEnd: 4 }}>Data</Tag>
       ) : (
@@ -744,12 +743,6 @@ export function useCreateTaskModel() {
 
   const goBack = () => setCurrentStep((s) => Math.max(0, s - 1))
 
-  // ── Project type display helpers ──
-  const typeLabels: Record<string, { icon: React.ReactNode; text: string }> = {
-    backend_only: { icon: <CodeOutlined />, text: 'Backend' },
-    frontend_only: { icon: <GlobalOutlined />, text: 'Frontend' },
-    fullstack: { icon: <AppstoreOutlined />, text: 'Full stack' },
-  }
 
 
   return {
@@ -799,7 +792,6 @@ export function useCreateTaskModel() {
     isLastStep,
     validateAndNext,
     goBack,
-    typeLabels,
     form,
     currentStep,
     setCurrentStep,

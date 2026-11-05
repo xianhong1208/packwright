@@ -1,47 +1,19 @@
 import { useState, useEffect } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import { Spin, Button, Tag, Tooltip, Descriptions, message, Modal } from 'antd'
-import {
-  ArrowLeftOutlined,
-  RedoOutlined,
-  DownloadOutlined,
-  CloudServerOutlined,
-  DesktopOutlined,
-  AppstoreOutlined,
-  DockerOutlined,
-  CopyOutlined,
-  DeleteOutlined,
-  ExclamationCircleOutlined,
-} from '@ant-design/icons'
+import { ArrowClockwiseIcon, ArrowLeftIcon, CopyIcon, CubeIcon, DesktopIcon, DownloadSimpleIcon, HardDrivesIcon, TrashIcon, WarningCircleIcon } from '../components/ui/icons'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { taskApi } from '../api/client'
 import BuildResultPanel from '../components/build/BuildResultPanel'
 import FailureReport from '../components/build/FailureReport'
-import type { ProjectType } from '../api/types'
+import type {} from '../api/types'
 import { triggerUrlDownload } from '../utils/download'
 import { binaryName } from '../utils/buildConfig'
 import LogViewer from '../components/LogViewer'
 import { STATUS_META } from '../utils/statusMeta'
-import { getErrorDetail } from '../utils/errors'
-
-const projectTypeLabels: Record<ProjectType, { label: string; color: string; icon: React.ReactNode }> = {
-  backend_only: { label: 'Backend', color: 'blue', icon: <CloudServerOutlined /> },
-  frontend_only: { label: 'Frontend', color: 'green', icon: <DesktopOutlined /> },
-  fullstack: { label: 'Full-stack', color: 'purple', icon: <AppstoreOutlined /> },
-}
-
-// Relative time in the GitHub-Actions register ("3 minutes ago").
-const timeAgo = (iso: string): string => {
-  const s = Math.max(0, (Date.now() - new Date(iso).getTime()) / 1000)
-  if (s < 60) return 'just now'
-  const m = Math.floor(s / 60)
-  if (m < 60) return `${m} minute${m === 1 ? '' : 's'} ago`
-  const h = Math.floor(m / 60)
-  if (h < 24) return `${h} hour${h === 1 ? '' : 's'} ago`
-  const d = Math.floor(h / 24)
-  if (d < 30) return `${d} day${d === 1 ? '' : 's'} ago`
-  return new Date(iso).toLocaleDateString()
-}
+import { getErrorDetail, isNotFound } from '../utils/errors'
+import { PROJECT_TYPE_META } from '../utils/projectTypeMeta'
+import { parseUtc, timeAgo } from '../utils/time'
 
 export default function HistoryDetail() {
   const { taskId } = useParams<{ taskId: string }>()
@@ -64,6 +36,8 @@ export default function HistoryDetail() {
     queryKey: ['history-logs', taskId],
     queryFn: () => taskApi.getLogs(taskId!),
     enabled: !!taskId,
+    // 404 = the log has left memory, the normal state of an older record: no retries.
+    retry: (failures, err) => !isNotFound(err) && failures < 1,
   })
   const logs = logsData?.logs ?? []
 
@@ -79,7 +53,7 @@ export default function HistoryDetail() {
     if (!record) return
     Modal.confirm({
       title: 'Delete this workspace?',
-      icon: <ExclamationCircleOutlined style={{ color: '#f27d7d' }} />,
+      icon: <WarningCircleIcon style={{ color: 'var(--color-alert-400)' }} />,
       content: (
         <div>
           <p>
@@ -87,7 +61,7 @@ export default function HistoryDetail() {
           </p>
           {record.status === 'completed' && !record.config?.docker_enabled && (
             <p className="text-orange-400">
-              ⚠️ This is a non-Docker completed run — once deleted, its output <b>can no longer be
+              This is a non-Docker completed run — once deleted, its output <b>can no longer be
               downloaded</b>.
             </p>
           )}
@@ -138,11 +112,11 @@ export default function HistoryDetail() {
 
   const status = STATUS_META[record.status]
   const config = record.config
-  const projectType = config ? projectTypeLabels[config.project_type] : null
+  const projectType = config ? PROJECT_TYPE_META[config.project_type] : null
 
   const formatDuration = (start: string, end: string | null): string => {
     if (!end) return '-'
-    const ms = new Date(end).getTime() - new Date(start).getTime()
+    const ms = parseUtc(end).getTime() - parseUtc(start).getTime()
     if (ms < 0) return '-'
     const seconds = Math.floor(ms / 1000)
     if (seconds < 60) return `${seconds}s`
@@ -169,7 +143,7 @@ export default function HistoryDetail() {
           className="p-2 rounded-lg mt-0.5 transition-colors"
           style={{ color: 'var(--ink-muted)' }}
         >
-          <ArrowLeftOutlined className="text-lg" />
+          <ArrowLeftIcon className="text-lg" />
         </button>
 
         <span
@@ -188,7 +162,7 @@ export default function HistoryDetail() {
               {record.project_name}
             </h1>
             <span
-              className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-medium uppercase"
+              className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-medium"
               style={{ backgroundColor: status.bgColor, color: status.color }}
             >
               {status.label}
@@ -218,7 +192,7 @@ export default function HistoryDetail() {
                 onClick={() => copyToClipboard(record.task_id)}
               >
                 #{record.task_id.slice(0, 8)}
-                <CopyOutlined />
+                <CopyIcon />
               </span>
             </Tooltip>
           </div>
@@ -228,7 +202,7 @@ export default function HistoryDetail() {
         <div className="flex items-center gap-2 flex-shrink-0">
           {config && (
             <Button
-              icon={<RedoOutlined />}
+              icon={<ArrowClockwiseIcon />}
               onClick={() =>
                 navigate('/create', {
                   state: {
@@ -245,7 +219,7 @@ export default function HistoryDetail() {
           {record.status === 'completed' && (
             <Button
               type="primary"
-              icon={<DownloadOutlined />}
+              icon={<DownloadSimpleIcon />}
               loading={downloading}
               onClick={async () => {
                 setDownloading(true)
@@ -267,7 +241,7 @@ export default function HistoryDetail() {
             record.status !== 'pending' && (
               <Button
                 danger
-                icon={<DeleteOutlined />}
+                icon={<TrashIcon />}
                 loading={deletingWorkspace}
                 onClick={handleDeleteWorkspace}
               >
@@ -313,7 +287,7 @@ export default function HistoryDetail() {
               Started
             </div>
             <div style={{ color: 'var(--ink)' }}>
-              {new Date(record.start_time).toLocaleString()}
+              {parseUtc(record.start_time).toLocaleString()}
             </div>
           </div>
           <div>
@@ -321,14 +295,14 @@ export default function HistoryDetail() {
               Finished
             </div>
             <div style={{ color: 'var(--ink)' }}>
-              {record.end_time ? new Date(record.end_time).toLocaleString() : '-'}
+              {record.end_time ? parseUtc(record.end_time).toLocaleString() : '-'}
             </div>
           </div>
           <div>
             <div className="text-xs mb-0.5" style={{ color: 'var(--ink-faint)' }}>
               Duration
             </div>
-            <div className="font-mono text-cyber-400">
+            <div className="font-mono text-[var(--ink)]">
               {formatDuration(record.start_time, record.end_time)}
             </div>
           </div>
@@ -352,7 +326,7 @@ export default function HistoryDetail() {
 
         <div className="border-t pt-5" style={{ borderColor: 'var(--seam)' }}>
           <h3
-            className="text-sm font-medium uppercase tracking-wider mb-4"
+            className="text-sm font-medium mb-4"
             style={{ color: 'var(--ink-muted)' }}
           >
             Build configuration
@@ -363,18 +337,18 @@ export default function HistoryDetail() {
               {/* Type Tags */}
               <div className="flex items-center gap-3 flex-wrap">
                 {projectType && (
-                  <Tag icon={projectType.icon} color={projectType.color} style={{ fontSize: 14, padding: '2px 10px' }}>
+                  <Tag icon={projectType.icon} color={projectType.tag} style={{ fontSize: 14, padding: '2px 10px' }}>
                     {projectType.label}
                   </Tag>
                 )}
                 {config.docker_enabled && (
-                  <Tag icon={<DockerOutlined />} color="#2496ED" style={{ fontSize: 14, padding: '2px 10px' }}>
+                  <Tag icon={<CubeIcon />} color="#2496ED" style={{ fontSize: 14, padding: '2px 10px' }}>
                     Docker
                   </Tag>
                 )}
                 {/* Nuitka settings mean nothing for a frontend-only build. */}
                 {config.project_type !== 'frontend_only' && (
-                  <Tag color={config.pack_mode === 'full' ? 'orange' : 'cyan'} style={{ fontSize: 14, padding: '2px 10px' }}>
+                  <Tag style={{ fontSize: 14, padding: '2px 10px' }}>
                     Pack: {config.pack_mode === 'full' ? 'Full' : 'External'}
                   </Tag>
                 )}
@@ -395,10 +369,10 @@ export default function HistoryDetail() {
                 {config.source_type === 'git' ? (
                   <>
                     <Descriptions.Item label="Source" span={2}>
-                      <span className="text-cyber-300">Git URL</span>
+                      <span>Git URL</span>
                     </Descriptions.Item>
                     <Descriptions.Item label="Git URL" span={2}>
-                      <code style={{ fontSize: 12 }} className="text-cyber-300">{config.git_url}</code>
+                      <code style={{ fontSize: 12 }} className="text-[var(--ink)]">{config.git_url}</code>
                     </Descriptions.Item>
                     <Descriptions.Item
                       label={config.git_ref_type === 'tag' ? 'Tag' : 'Branch'}
@@ -414,7 +388,7 @@ export default function HistoryDetail() {
                   </>
                 ) : (
                   <Descriptions.Item label="Project path" span={2}>
-                    <code style={{ fontSize: 12 }} className="text-cyber-300">{config.project_path}</code>
+                    <code style={{ fontSize: 12 }} className="text-[var(--ink)]">{config.project_path}</code>
                   </Descriptions.Item>
                 )}
                 <Descriptions.Item label="Output dir">
@@ -425,8 +399,8 @@ export default function HistoryDetail() {
               {/* Backend Settings */}
               {(config.project_type === 'backend_only' || config.project_type === 'fullstack') && (
                 <div className="border-t pt-3" style={{ borderColor: 'var(--seam)' }}>
-                  <h4 className="text-xs font-medium text-cyber-500 uppercase tracking-wider mb-3">
-                    <CloudServerOutlined className="mr-1" /> Backend
+                  <h4 className="text-sm font-semibold text-[var(--ink-muted)] mb-3">
+                    <HardDrivesIcon className="mr-1" /> Backend
                   </h4>
                   <Descriptions
                     column={2}
@@ -434,7 +408,7 @@ export default function HistoryDetail() {
                     labelStyle={{ color: 'var(--ink-faint)', fontSize: 13 }}
                     contentStyle={{ color: 'var(--ink)', fontSize: 13 }}
                   >
-                    <Descriptions.Item label="Python version">v{config.python_version}</Descriptions.Item>
+                    <Descriptions.Item label="Python version">{config.python_version === 'auto' ? 'Auto-detect' : config.python_version}</Descriptions.Item>
                     <Descriptions.Item label="Entry point">
                       <code style={{ fontSize: 12 }}>{config.entry_point}</code>
                     </Descriptions.Item>
@@ -466,8 +440,8 @@ export default function HistoryDetail() {
               {/* Frontend Settings */}
               {(config.project_type === 'frontend_only' || config.project_type === 'fullstack') && (
                 <div className="border-t pt-3" style={{ borderColor: 'var(--seam)' }}>
-                  <h4 className="text-xs font-medium text-matrix-500 uppercase tracking-wider mb-3">
-                    <DesktopOutlined className="mr-1" /> Frontend
+                  <h4 className="text-xs font-medium text-matrix-500 mb-3">
+                    <DesktopIcon className="mr-1" /> Frontend
                   </h4>
                   <Descriptions
                     column={2}
@@ -511,10 +485,10 @@ export default function HistoryDetail() {
               {config.docker_enabled && (
                 <div className="border-t pt-3" style={{ borderColor: 'var(--seam)' }}>
                   <h4
-                    className="text-xs font-medium uppercase tracking-wider mb-3"
+                    className="text-xs font-medium mb-3"
                     style={{ color: 'var(--color-cyber-500)' }}
                   >
-                    <DockerOutlined className="mr-1" /> Docker
+                    <CubeIcon className="mr-1" /> Docker
                   </h4>
                   <Descriptions
                     column={2}

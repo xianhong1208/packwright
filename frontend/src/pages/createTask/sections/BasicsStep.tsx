@@ -1,14 +1,5 @@
 import { Form, Input, Select, Row, Col, Spin, AutoComplete, Radio } from 'antd'
-import {
-  FolderOutlined,
-  CodeOutlined,
-  GlobalOutlined,
-  AppstoreOutlined,
-  ScanOutlined,
-  BranchesOutlined,
-  TagOutlined,
-  LinkOutlined,
-} from '@ant-design/icons'
+import { CodeIcon, FolderIcon, GitBranchIcon, GlobeIcon, LinkIcon, ScanIcon, SquaresFourIcon, TagIcon } from '../../../components/ui/icons'
 
 import { useCreateTask } from '../context'
 import { SectionHeader } from '../ui'
@@ -51,13 +42,13 @@ export default function BasicsStep() {
       >
         <Select size="large">
           <Option value="backend_only">
-            <CodeOutlined className="mr-2" />Backend (Python)
+            <CodeIcon className="mr-2" />Backend (Python)
           </Option>
           <Option value="frontend_only">
-            <GlobalOutlined className="mr-2" />Frontend (React, Vue, and so on)
+            <GlobeIcon className="mr-2" />Frontend (React, Vue, and so on)
           </Option>
           <Option value="fullstack">
-            <AppstoreOutlined className="mr-2" />Full stack (frontend + backend)
+            <SquaresFourIcon className="mr-2" />Full stack (frontend + backend)
           </Option>
         </Select>
       </Form.Item>
@@ -72,10 +63,10 @@ export default function BasicsStep() {
         >
           <Radio.Group size="large" buttonStyle="solid">
             <Radio.Button value="local">
-              <FolderOutlined /> Local path
+              <FolderIcon /> Local path
             </Radio.Button>
             <Radio.Button value="git">
-              <LinkOutlined /> Git URL
+              <LinkIcon /> Git URL
             </Radio.Button>
           </Radio.Group>
         </Form.Item>
@@ -109,7 +100,7 @@ export default function BasicsStep() {
       {/* ── Git URL mode ── */}
       {sourceType === 'git' && (
         <div className="glass-card p-5 mb-4">
-          <SectionHeader icon={<LinkOutlined />} title="Git source" />
+          <SectionHeader icon={<LinkIcon />} title="Git source" />
           <div ref={gitUrlRef}>
             <Form.Item
               name="git_url"
@@ -146,10 +137,10 @@ export default function BasicsStep() {
                   }}
                 >
                   <Radio.Button value="branch">
-                    <BranchesOutlined /> Branch
+                    <GitBranchIcon /> Branch
                   </Radio.Button>
                   <Radio.Button value="tag">
-                    <TagOutlined /> Tag
+                    <TagIcon /> Tag
                   </Radio.Button>
                 </Radio.Group>
               </Form.Item>
@@ -208,17 +199,17 @@ export default function BasicsStep() {
                 </span>
               ) : currentPath.startsWith('git:') && directories.length > 0 ? (
                 <span className="text-matrix-400">
-                  <ScanOutlined className="mr-1" />
+                  <ScanIcon className="mr-1" />
                   Found {directories.length} directories. Pick the ones to bundle under Backend settings → Advanced below.
                 </span>
               ) : currentPath.startsWith('git:') && directories.length === 0 ? (
                 <span style={{ color: 'var(--ink-muted)' }}>
-                  <ScanOutlined className="mr-1" />
+                  <ScanIcon className="mr-1" />
                   No selectable subdirectories in the repo root.
                 </span>
               ) : (
                 <span style={{ color: 'var(--ink-faint)' }}>
-                  <ScanOutlined className="mr-1" />
+                  <ScanIcon className="mr-1" />
                   Once you pick a branch or tag, we scan for source and data directories to bundle, and read the pyproject dependency groups.
                 </span>
               )}
@@ -227,13 +218,13 @@ export default function BasicsStep() {
 
           {/* Git mode hint */}
           <div className="text-xs" style={{ color: 'var(--ink-faint)', lineHeight: 1.6 }}>
-            <ScanOutlined className="mr-1" />
+            <ScanIcon className="mr-1" />
             After the build starts, the server clones the repo into a per-task workspace{workspaceDir ? <> under <code style={{ color: 'var(--ink-muted)' }}>{workspaceDir}</code></> : null}.
             When it finishes, open the task detail page to see the repo-structure diagnostics.
             {hasBackend && (
               <>
                 <br />
-                <ScanOutlined className="mr-1" />
+                <ScanIcon className="mr-1" />
                 When <code style={{ color: 'var(--ink-muted)' }}>pyproject.toml</code>, <code style={{ color: 'var(--ink-muted)' }}>uv.lock</code>, or <code style={{ color: 'var(--ink-muted)' }}>requirements.txt</code> is present, it runs <code style={{ color: 'var(--ink-muted)' }}>uv sync --frozen</code> to build the <code style={{ color: 'var(--ink-muted)' }}>.venv</code>.
               </>
             )}

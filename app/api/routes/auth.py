@@ -529,15 +529,11 @@ async def get_login_history_endpoint(
 
 @router.get("/active-sessions", response_model=SessionList)
 async def get_active_sessions_endpoint(
-    request: Request,
     current_user: Annotated[CurrentUser, Depends(get_current_user)],
     db: AsyncSession = Depends(get_db),
 ):
     """Get current user's active sessions."""
     sessions = await get_active_sessions(db, current_user.id)
-
-    # Try to identify current session by IP
-    current_ip = get_client_ip(request)
 
     session_responses = []
     for s in sessions:
@@ -548,7 +544,7 @@ async def get_active_sessions_endpoint(
             is_remember_me=s.is_remember_me,
             device_info=s.device_info,
             ip_address=s.ip_address,
-            is_current=(s.ip_address == current_ip),
+            is_current=(s.id == current_user.session_id),
         )
         session_responses.append(response)
 

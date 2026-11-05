@@ -1,24 +1,21 @@
 import { useState, useEffect } from 'react'
-import { message, Modal, Table, Tag, Empty, Popconfirm } from 'antd'
-import {
-  LockOutlined,
-  QuestionCircleOutlined,
-  HistoryOutlined,
-  DesktopOutlined,
-  LoadingOutlined,
-  CheckCircleOutlined,
-  CloseCircleOutlined,
-  MobileOutlined,
-  TabletOutlined,
-  DeleteOutlined,
-  ExclamationCircleOutlined,
-} from '@ant-design/icons'
+import { Button, message, Modal, Table, Tag, Empty, Popconfirm, Tooltip } from 'antd'
+import { CheckCircleIcon, ClockCounterClockwiseIcon, DesktopIcon, DeviceMobileIcon, DeviceTabletIcon, LockIcon, QuestionIcon, SpinnerIcon, TrashIcon, WarningCircleIcon, XCircleIcon } from '../components/ui/icons'
 import { authApi } from '../api/authApi'
 import type { LoginHistoryItem, Session } from '../api/types'
 import { useAuth } from '../contexts/AuthContext'
+import { describeDevice } from '../utils/device'
+import { parseUtc, timeAgo } from '../utils/time'
+import PageHeader from '../components/layout/PageHeader'
+
+/** Sessions listed before "Show all": every sign-in (scripts too) leaves one. */
+const SESSIONS_SHOWN = 5
 
 // A grouped settings panel: a titled header row with an icon and optional
 // description, then the section body. Keeps every section visually consistent.
+/** Sign-ins shown per page; the newest few are what anyone checks. */
+const HISTORY_PAGE = 5
+
 function SectionCard({
   icon,
   title,
@@ -68,6 +65,11 @@ export default function SecuritySettingsPage() {
 
   // Active Sessions State
   const [sessions, setSessions] = useState<Session[]>([])
+  const [showAllSessions, setShowAllSessions] = useState(false)
+  const orderedSessions = [...sessions].sort(
+    (a, b) => Number(b.is_current) - Number(a.is_current) || Date.parse(b.created_at) - Date.parse(a.created_at),
+  )
+  const visibleSessions = showAllSessions ? orderedSessions : orderedSessions.slice(0, SESSIONS_SHOWN)
   const [isLoadingSessions, setIsLoadingSessions] = useState(false)
 
   useEffect(() => {
@@ -78,7 +80,7 @@ export default function SecuritySettingsPage() {
   const loadLoginHistory = async (page = 1) => {
     setIsLoadingHistory(true)
     try {
-      const limit = 10
+      const limit = HISTORY_PAGE
       const offset = (page - 1) * limit
       const data = await authApi.getLoginHistory(limit, offset)
       setLoginHistory(data.items)
@@ -172,7 +174,7 @@ export default function SecuritySettingsPage() {
   const handleLogoutAllDevices = () => {
     Modal.confirm({
       title: 'Sign out of all devices?',
-      icon: <ExclamationCircleOutlined />,
+      icon: <WarningCircleIcon />,
       content: 'This revokes every active session, including this one, and you will need to sign in again.',
       okText: 'Sign out all',
       okType: 'danger',
@@ -186,11 +188,11 @@ export default function SecuritySettingsPage() {
   const getDeviceIcon = (deviceType: string | null | undefined) => {
     switch (deviceType) {
       case 'mobile':
-        return <MobileOutlined />
+        return <DeviceMobileIcon />
       case 'tablet':
-        return <TabletOutlined />
+        return <DeviceTabletIcon />
       default:
-        return <DesktopOutlined />
+        return <DesktopIcon />
     }
   }
 
@@ -199,19 +201,21 @@ export default function SecuritySettingsPage() {
       title: 'Time',
       dataIndex: 'login_time',
       key: 'login_time',
-      render: (time: string) => new Date(time).toLocaleString(),
+      render: (time: string) => (
+        <Tooltip title={parseUtc(time).toLocaleString()}><span>{timeAgo(time)}</span></Tooltip>
+      ),
     },
     {
-      title: 'Status',
+      title: 'Result',
       dataIndex: 'success',
       key: 'success',
       render: (success: boolean) =>
         success ? (
-          <Tag color="green" icon={<CheckCircleOutlined />}>
-            Success
+          <Tag color="green" icon={<CheckCircleIcon />}>
+            Signed in
           </Tag>
         ) : (
-          <Tag color="red" icon={<CloseCircleOutlined />}>
+          <Tag color="red" icon={<XCircleIcon />}>
             Failed
           </Tag>
         ),
@@ -222,13 +226,12 @@ export default function SecuritySettingsPage() {
       render: (_: unknown, record: LoginHistoryItem) => (
         <span className="flex items-center gap-2">
           {getDeviceIcon(record.device_type)}
-          <span>{record.browser || 'Unknown'}</span>
-          {record.os && <span className="text-[var(--ink-faint)]">({record.os})</span>}
+          <span>{record.browser && record.browser !== 'Unknown' ? `${record.browser}${record.os && record.os !== 'Unknown' ? ` on ${record.os}` : ''}` : 'Script or unknown client'}</span>
         </span>
       ),
     },
     {
-      title: 'IP address',
+      title: 'Address',
       dataIndex: 'ip_address',
       key: 'ip_address',
       render: (ip: string | null) => ip || '-',
@@ -236,17 +239,13 @@ export default function SecuritySettingsPage() {
   ]
 
   return (
-    <div className="p-6 max-w-4xl mx-auto">
-      <div className="mb-6">
-        <h1 className="text-2xl font-semibold text-[var(--ink)]" style={{ fontFamily: 'var(--font-display)' }}>
-          Security settings
-        </h1>
-        <p className="mt-1 text-[var(--ink-muted)]">Manage your account security and active sessions</p>
-      </div>
+    <div className="max-w-5xl">
+      <PageHeader title="Security" lead="Your password, and every place you're signed in." />
 
       <div className="space-y-6">
+        <div className="grid gap-6 lg:grid-cols-2 items-start">
         {/* Change password */}
-        <SectionCard icon={<LockOutlined />} title="Change password">
+        <SectionCard icon={<LockIcon />} title="Change password">
           <form onSubmit={handleChangePassword} className="max-w-md space-y-4">
             <div>
               <label htmlFor="security-current-password" className="block text-sm text-[var(--ink-muted)] mb-2">Current password</label>
@@ -289,7 +288,7 @@ export default function SecuritySettingsPage() {
               disabled={isChangingPassword}
               className="btn-cyber flex items-center gap-2 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyber-300"
             >
-              {isChangingPassword && <LoadingOutlined className="animate-spin" />}
+              {isChangingPassword && <SpinnerIcon />}
               Change password
             </button>
           </form>
@@ -297,14 +296,14 @@ export default function SecuritySettingsPage() {
 
         {/* Security question */}
         <SectionCard
-          icon={<QuestionCircleOutlined />}
+          icon={<QuestionIcon />}
           title="Security question"
           description="Used to verify your identity when you reset your password."
         >
           <div className="max-w-md space-y-4">
             {user?.has_security_question && (
               <div className="p-3 rounded-lg bg-matrix-500/10 border border-matrix-500/30 text-matrix-400 text-sm">
-                <CheckCircleOutlined className="mr-2" />
+                <CheckCircleIcon className="mr-2" />
                 You have a security question set. You can update it below.
               </div>
             )}
@@ -342,36 +341,18 @@ export default function SecuritySettingsPage() {
                 disabled={isSettingQuestion}
                 className="btn-cyber flex items-center gap-2 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyber-300"
               >
-                {isSettingQuestion && <LoadingOutlined className="animate-spin" />}
+                {isSettingQuestion && <SpinnerIcon />}
                 {user?.has_security_question ? 'Update security question' : 'Set security question'}
               </button>
             </form>
           </div>
         </SectionCard>
 
-        {/* Login history */}
-        <SectionCard icon={<HistoryOutlined />} title="Login history">
-          <Table
-            dataSource={loginHistory}
-            columns={historyColumns}
-            rowKey="id"
-            loading={isLoadingHistory}
-            pagination={{
-              current: historyPage,
-              total: historyTotal,
-              pageSize: 10,
-              onChange: (page) => loadLoginHistory(page),
-              showSizeChanger: false,
-            }}
-            locale={{
-              emptyText: <Empty description="No login history yet" />,
-            }}
-          />
-        </SectionCard>
+        </div>
 
         {/* Active sessions */}
         <SectionCard
-          icon={<DesktopOutlined />}
+          icon={<DesktopIcon />}
           title="Active sessions"
           description="Manage the sessions signed in across your devices."
         >
@@ -387,72 +368,70 @@ export default function SecuritySettingsPage() {
 
             {isLoadingSessions ? (
               <div className="flex justify-center py-8">
-                <LoadingOutlined className="text-2xl text-cyber-400" />
+                <SpinnerIcon className="text-2xl text-cyber-400" />
               </div>
             ) : sessions.length === 0 ? (
-              <Empty description="No active sessions" />
+              <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="No active sessions" />
             ) : (
-              <div className="space-y-3">
-                {sessions.map((session) => (
-                  <div
-                    key={session.id}
-                    className={`p-4 rounded-lg border ${
-                      session.is_current
-                        ? 'bg-cyber-500/10 border-cyber-500/30'
-                        : 'bg-void-800/50 border-void-700'
-                    }`}
-                  >
-                    <div className="flex justify-between items-start">
-                      <div className="flex items-start gap-3">
-                        <div className="text-[var(--ink-muted)] mt-1">
-                          <DesktopOutlined className="text-lg" />
+              <>
+                <ul className="session-list" aria-label="Signed-in sessions">
+                  {visibleSessions.map((session) => (
+                    <li key={session.id} className={`session-row ${session.is_current ? 'current' : ''}`}>
+                      <DesktopIcon className="text-lg flex-none" style={{ color: 'var(--ink-faint)' }} />
+                      <div className="min-w-0 flex-1">
+                        <div className="flex flex-wrap items-center gap-2">
+                          <span className="font-semibold" style={{ color: 'var(--ink)' }} title={session.device_info ?? undefined}>
+                            {describeDevice(session.device_info)}
+                          </span>
+                          {session.is_current && <Tag color="green">This device</Tag>}
+                          {session.is_remember_me && <Tag>Remembered</Tag>}
                         </div>
-                        <div>
-                          <div className="flex items-center gap-2">
-                            <span className="text-[var(--ink)]">
-                              {session.device_info || 'Unknown device'}
-                            </span>
-                            {session.is_current && (
-                              <Tag color="cyan" className="text-xs">
-                                Current
-                              </Tag>
-                            )}
-                            {session.is_remember_me && (
-                              <Tag color="blue" className="text-xs">
-                                Remember me
-                              </Tag>
-                            )}
-                          </div>
-                          <p className="text-[var(--ink-faint)] text-sm mt-1">
-                            IP: {session.ip_address || 'Unknown'}
-                          </p>
-                          <p className="text-[var(--ink-faint)] text-sm">
-                            Created: {new Date(session.created_at).toLocaleString()}
-                          </p>
-                          <p className="text-[var(--ink-faint)] text-sm">
-                            Expires: {new Date(session.expires_at).toLocaleString()}
-                          </p>
+                        <div className="text-sm" style={{ color: 'var(--ink-faint)' }}>
+                          {session.ip_address || 'Unknown address'}, signed in {timeAgo(session.created_at)}, expires {parseUtc(session.expires_at).toLocaleDateString()}
                         </div>
                       </div>
                       {!session.is_current && (
                         <Popconfirm
-                          title="Revoke this session?"
-                          description="That device will be signed out."
+                          title="Sign this session out?"
+                          description="That device will have to sign in again."
                           onConfirm={() => handleRevokeSession(session.id)}
-                          okText="Revoke"
+                          okText="Sign out"
                           cancelText="Cancel"
                         >
-                          <button aria-label="Revoke this session" className="text-[var(--ink-muted)] hover:text-alert-400 transition-colors">
-                            <DeleteOutlined />
-                          </button>
+                          <Button size="small" aria-label={`Sign out ${describeDevice(session.device_info)}`} icon={<TrashIcon />} />
                         </Popconfirm>
                       )}
-                    </div>
-                  </div>
-                ))}
-              </div>
+                    </li>
+                  ))}
+                </ul>
+                {sessions.length > SESSIONS_SHOWN && (
+                  <button type="button" className="text-sm mt-1" style={{ color: 'var(--color-cyber-400)' }} onClick={() => setShowAllSessions((v) => !v)}>
+                    {showAllSessions ? 'Show fewer' : `Show all ${sessions.length} sessions`}
+                  </button>
+                )}
+              </>
             )}
           </div>
+        </SectionCard>
+
+        {/* Login history */}
+        <SectionCard icon={<ClockCounterClockwiseIcon />} title="Login history">
+          <Table
+            dataSource={loginHistory}
+            columns={historyColumns}
+            rowKey="id"
+            loading={isLoadingHistory}
+            pagination={{
+              current: historyPage,
+              total: historyTotal,
+              pageSize: HISTORY_PAGE,
+              onChange: (page) => loadLoginHistory(page),
+              showSizeChanger: false,
+            }}
+            locale={{
+              emptyText: <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="No login history yet" />,
+            }}
+          />
         </SectionCard>
       </div>
     </div>
