@@ -13,17 +13,14 @@ import site
 import sys
 import time
 from pathlib import Path
-from typing import TYPE_CHECKING, Any
+from typing import Any
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.services.paths import safe_join
 from app.config import get_settings
-from app.schemas.task import BuildConfig, PackMode, TaskStatus
+from app.schemas.task import BuildConfig, PackMode
 from app.services.task_manager import task_manager
-
-if TYPE_CHECKING:
-    from app.database import async_session
 
 settings = get_settings()
 logger = logging.getLogger(__name__)

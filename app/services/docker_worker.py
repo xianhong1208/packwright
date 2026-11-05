@@ -11,7 +11,7 @@ from textwrap import dedent
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.schemas.task import BuildConfig, TaskStatus, ProjectType, PackMode
+from app.schemas.task import BuildConfig, ProjectType, PackMode
 from app.services.task_manager import task_manager
 
 

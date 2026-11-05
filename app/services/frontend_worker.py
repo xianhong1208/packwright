@@ -9,7 +9,7 @@ from pathlib import Path
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.schemas.task import BuildConfig, TaskStatus, FrontendBuildTool
+from app.schemas.task import BuildConfig, FrontendBuildTool
 from app.services.task_manager import task_manager
 
 # Hard ceiling per install/build step so a hung npm/yarn (network stall, an

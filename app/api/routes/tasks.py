@@ -18,6 +18,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config import get_settings
 from app.database import get_db
+from pydantic import BaseModel as _PydBase
 from app.models.user import User
 from app.schemas.task import (
     BuildConfig,
@@ -76,7 +77,6 @@ EXCLUDED_DIRS = {
 # Allowed base paths for local-source file system access, from LOCAL_SOURCE_ROOTS.
 # Empty by default: local-source mode is off until an operator lists trusted roots.
 def _allowed_path_prefixes() -> tuple[str, ...]:
-    from app.config import get_settings
     return tuple(get_settings().local_source_root_list)
 
 
@@ -208,7 +208,6 @@ async def get_system_info(current_user: AuthUser) -> dict:
     """
     import sys
 
-    from app.config import get_settings
     from app.services.nuitka_worker import _APP_ROOT
 
     versions: list[str] = []
@@ -489,7 +488,6 @@ async def read_env_file(
 # browser history. All GitLab token handling happens inside git_service;
 # these routes only pass settings.gitlab_token through.
 
-from pydantic import BaseModel as _PydBase  # local alias: keep top imports tidy
 
 
 class GitRefsRequest(_PydBase):
@@ -525,7 +523,6 @@ async def git_list_refs(
     Runs `git ls-remote` server-side. The GitLab token (if configured) is
     injected into the URL only at subprocess call time and never returned.
     """
-    from app.config import get_settings
     from app.services import git_credentials, git_service
 
     settings = get_settings()
@@ -576,7 +573,6 @@ async def git_preview_frontend(
 
     The temporary clone is removed before this function returns.
     """
-    from app.config import get_settings
     from app.services import git_credentials, git_service
 
     settings = get_settings()
@@ -619,7 +615,6 @@ async def git_scan_tree(
     Used by the CreateTask form in git mode to populate the
     extra_dirs / data_dirs checkbox grids (parity with local mode).
     """
-    from app.config import get_settings
     from app.services import git_credentials, git_service
 
     settings = get_settings()

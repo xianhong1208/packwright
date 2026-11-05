@@ -1,10 +1,10 @@
 """Permission service for role-based access control."""
 
 from enum import Enum
-from functools import wraps
 from typing import Annotated
 
 from fastapi import Depends, HTTPException, status
+from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
@@ -265,8 +265,6 @@ class CurrentUser:
         codes = [p.value if isinstance(p, PermissionCode) else p for p in permissions]
         return any(has_permission(self.permissions, c) for c in codes)
 
-
-from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 
 security = HTTPBearer()
 

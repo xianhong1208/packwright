@@ -10,6 +10,7 @@ from sqlalchemy.orm import selectinload
 from app.database import get_db
 from app.models.user import User
 from app.models.role import Role
+from app.models.permission import Permission
 from app.models.login_history import LoginHistory
 from app.schemas.user import (
     UserListResponse,
@@ -20,7 +21,7 @@ from app.schemas.user import (
     LoginHistoryResponse,
     LoginHistoryList,
 )
-from app.schemas.role import RoleResponse, RoleCreate, RoleUpdate, PermissionResponse
+from app.schemas.role import RoleResponse, RoleCreate, RoleUpdate
 from app.services.audit import AuditAction, AuditStatus, ResourceType, log_action
 from app.services.auth import admin_reset_password, get_login_history
 from app.services.permission import (
@@ -420,8 +421,6 @@ async def list_permissions(
 
 
 # ===== Role Management (CRUD) =====
-
-from app.models.permission import Permission
 
 
 @router.post("/roles", response_model=RoleResponse)

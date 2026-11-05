@@ -19,5 +19,13 @@ export default defineConfig([
       ecmaVersion: 2020,
       globals: globals.browser,
     },
+    rules: {
+      // AuthContext deliberately keeps its hook and helpers next to the provider
+      // (dozens of imports use them); this only affects dev hot reload.
+      'react-refresh/only-export-components': [
+        'error',
+        { allowConstantExport: true, allowExportNames: ['useAuth', 'checkFirstUser', 'tokenManager'] },
+      ],
+    },
   },
 ])

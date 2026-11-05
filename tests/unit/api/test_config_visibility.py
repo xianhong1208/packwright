@@ -15,7 +15,6 @@ These tests pin that decision so it is not quietly reintroduced, and pin the
 tolerance that keeps one unreadable record from failing a whole page.
 """
 
-from datetime import datetime, timezone
 
 import pytest
 
