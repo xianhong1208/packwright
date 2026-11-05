@@ -79,8 +79,15 @@ def create_access_token(
     username: str,
     permissions: list[str] | None = None,
     role_name: str | None = None,
+    session_id: int | None = None,
 ) -> str:
-    """Create JWT access token with permissions."""
+    """Create JWT access token with permissions.
+
+    ``sid`` is the id of the refresh-token row the token was issued with, so the
+    sessions list can tell *which* sign-in the caller is. Matching on IP instead
+    marked every sign-in from the same address as "this device" — and the one
+    that really is this device could not be told apart to keep it.
+    """
     expire = datetime.now(timezone.utc) + timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
     payload = {
         "sub": str(user_id),
@@ -90,6 +97,8 @@ def create_access_token(
         "exp": expire,
         "type": "access",
     }
+    if session_id is not None:
+        payload["sid"] = session_id
     return jwt.encode(payload, SECRET_KEY, algorithm=ALGORITHM)
 
 
@@ -283,10 +292,6 @@ async def create_tokens(
     permissions = await get_user_permissions(db, user.id)
     role_name = user.role.name if user.role else None
 
-    # Create access token
-    access_token = create_access_token(user.id, user.username, permissions, role_name)
-
-    # Create refresh token
     refresh_token_value = create_refresh_token_value()
     expire_days = REFRESH_TOKEN_REMEMBER_ME_DAYS if remember_me else REFRESH_TOKEN_EXPIRE_DAYS
     expires_at = datetime.now(timezone.utc) + timedelta(days=expire_days)
@@ -300,6 +305,8 @@ async def create_tokens(
         ip_address=ip_address,
     )
     db.add(refresh_token)
+    await db.flush()  # assigns refresh_token.id, which the access token carries as sid
+    access_token = create_access_token(user.id, user.username, permissions, role_name, refresh_token.id)
     await db.commit()
 
     return access_token, refresh_token_value
@@ -336,7 +343,6 @@ async def refresh_access_token(
     # Create new tokens
     permissions = await get_user_permissions(db, user.id)
     role_name = user.role.name if user.role else None
-    new_access_token = create_access_token(user.id, user.username, permissions, role_name)
 
     # Create new refresh token
     new_refresh_token_value = create_refresh_token_value()
@@ -354,6 +360,10 @@ async def refresh_access_token(
         ip_address=refresh_token.ip_address,
     )
     db.add(new_refresh_token)
+    await db.flush()
+    new_access_token = create_access_token(
+        user.id, user.username, permissions, role_name, new_refresh_token.id
+    )
     await db.commit()
 
     return new_access_token, new_refresh_token_value
