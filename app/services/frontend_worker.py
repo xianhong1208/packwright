@@ -3,7 +3,6 @@
 import asyncio
 import hashlib
 import os
-import pty
 import re
 from pathlib import Path
 
@@ -12,7 +11,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.schemas.task import BuildConfig, FrontendBuildTool
 from app.services.source_guard import SourceGuard
 from app.services.task_manager import task_manager
-from app.services.terminal_output import TerminalLineBuffer
+from app.services.process_runner import run_step
 
 # Hard ceiling per install/build step so a hung npm/yarn (network stall, an
 # interactive prompt) never holds the build slot — and the whole queue — forever.
@@ -299,77 +298,12 @@ async def _run_command(
     input, which would have made it reasonable to copy this call pattern
     somewhere a shell is involved.
     """
-    master_fd, slave_fd = pty.openpty()
-
     try:
-        process = await asyncio.create_subprocess_exec(
-            *cmd,
-            stdout=slave_fd,
-            stderr=slave_fd,
-            stdin=slave_fd,
-            cwd=str(cwd),
+        result = await run_step(
+            task_id, cmd, cwd=cwd, timeout=timeout,
             env={**os.environ, "TERM": "xterm-256color", "CI": "true"},
         )
-        os.close(slave_fd)
-
-        loop = asyncio.get_running_loop()
-        deadline = loop.time() + timeout
-        # Non-blocking PTY reads on the event loop — no threads to leak. See the
-        # long note in nuitka_worker.run_nuitka_build for why the old
-        # run_in_executor(os.read) pattern deadlocked under concurrency.
-        os.set_blocking(master_fd, False)
-        terminal = TerminalLineBuffer()
-
-        def read_pty() -> bytes:
-            try:
-                return os.read(master_fd, 65536)
-            except OSError:  # incl. BlockingIOError: nothing to read right now
-                return b""
-
-        async def consume(lines: list[str]) -> None:
-            for text in lines:
-                await task_manager.append_log(task_id, text)
-
-        while True:
-            if process.returncode is not None:
-                # Drain remaining output
-                while data := read_pty():
-                    await consume(terminal.feed(data)[0])
-                await consume(terminal.flush())
-                break
-
-            # Overall-timeout guard — kill a hung command and fail the step.
-            if loop.time() > deadline:
-                await task_manager.append_log(
-                    task_id,
-                    f"Error: command timed out after {timeout:.0f}s and was killed: {' '.join(cmd)}",
-                )
-                try:
-                    process.kill()
-                except Exception:
-                    pass
-                try:
-                    os.close(master_fd)
-                except Exception:
-                    pass
-                await process.wait()
-                return False
-
-            data = read_pty()
-            if data:
-                await consume(terminal.feed(data)[0])
-            else:
-                await asyncio.sleep(0.1)
-
-        os.close(master_fd)
-        ret_code = await process.wait()
-
-        return ret_code == 0
-
-    except Exception as e:
+    except OSError as e:  # e.g. the tool vanished between the PATH check and here
         await task_manager.append_log(task_id, f"Error running command: {e}")
-        try:
-            os.close(master_fd)
-        except Exception:
-            pass
         return False
+    return result.ok
