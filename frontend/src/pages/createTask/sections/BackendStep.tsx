@@ -3,6 +3,7 @@ import { ArrowsClockwiseIcon, CodeIcon, FolderIcon, GearIcon, WarningIcon } from
 
 import { useCreateTask } from '../context'
 import { SectionHeader } from '../ui'
+import { depGroupHint, depGroupPlaceholder } from '../depGroups'
 
 const { Option } = Select
 
@@ -33,6 +34,7 @@ export default function BackendStep() {
     scanningTree,
     depGroups,
     loadingDepGroups,
+    depGroupsRead,
   } = useCreateTask()
   return (
     <>
@@ -169,21 +171,13 @@ export default function BackendStep() {
             }
             extra={
               <span className="text-xs" style={{ color: 'var(--ink-faint)' }}>
-                {depGroups.length > 0
-                  ? `Read ${depGroups.length} groups from pyproject.toml. Pick one.`
-                  : sourceType === 'git'
-                  ? 'Pick a branch or tag to read this repo’s pyproject.toml groups.'
-                  : 'Enter the project path to read the groups defined in pyproject.toml.'}
+                {depGroupHint({ count: depGroups.length, loading: loadingDepGroups, read: depGroupsRead, sourceType: sourceType === 'git' ? 'git' : 'local' })}
               </span>
             }
           >
             <Select
               allowClear
-              placeholder={
-                depGroups.length > 0
-                  ? 'Pick a dependency group'
-                  : 'No [dependency-groups] defined in this project’s pyproject.toml'
-              }
+              placeholder={depGroupPlaceholder({ count: depGroups.length, read: depGroupsRead })}
               style={{ width: '100%' }}
               loading={loadingDepGroups}
               disabled={depGroups.length === 0}

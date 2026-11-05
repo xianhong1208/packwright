@@ -14,6 +14,7 @@ import { useFormDraft } from '../../hooks/useFormDraft'
 import { ALL_STEPS, activeSteps, clampStepIndex, type StepDef, type StepKey } from './steps'
 import { assembleTaskCreate } from './buildConfig'
 import { findPythonMismatch, pickDefaultRef } from './pythonVersion'
+import type { DepGroupsRead } from './depGroups'
 
 export interface RebuildState {
   rebuild: boolean
@@ -151,6 +152,7 @@ export function useCreateTaskModel() {
   // (git mode). The picker is single-select and offers only these names.
   const [depGroups, setDepGroups] = useState<string[]>([])
   const [loadingDepGroups, setLoadingDepGroups] = useState(false)
+  const [depGroupsRead, setDepGroupsRead] = useState<DepGroupsRead>('unread')
 
   const hasBackend = projectType === 'backend_only' || projectType === 'fullstack'
   const showFrontendSettings = projectType === 'frontend_only' || projectType === 'fullstack'
@@ -222,12 +224,14 @@ export function useCreateTaskModel() {
   const fetchPyprojectGroups = useCallback(async (path: string) => {
     if (!path || !path.trim()) {
       setDepGroups([])
+      setDepGroupsRead('unread')
       return
     }
     setLoadingDepGroups(true)
     try {
       const result = await taskApi.listPyprojectGroups(path.trim())
       setDepGroups(result.groups)
+      setDepGroupsRead('read')
       // Drop a selected group that no longer exists in the new project.
       const current = form.getFieldValue('dependency_group') as string | undefined
       if (current && !result.groups.includes(current)) {
@@ -235,6 +239,7 @@ export function useCreateTaskModel() {
       }
     } catch {
       setDepGroups([])
+      setDepGroupsRead('failed')
     } finally {
       setLoadingDepGroups(false)
     }
@@ -469,11 +474,13 @@ export function useCreateTaskModel() {
       setSelectedDataDirs((prev) => prev.filter((d) => result.directories.includes(d)))
       // pyproject dependency-groups parsed from the remote repo (git-mode parity)
       setDepGroups(result.dependency_groups)
+      setDepGroupsRead('read')
       const currentGroup = form.getFieldValue('dependency_group') as string | undefined
       if (currentGroup && !result.dependency_groups.includes(currentGroup)) {
         form.setFieldValue('dependency_group', undefined)
       }
     } catch (err: unknown) {
+      setDepGroupsRead('failed')
       const e = err as { response?: { data?: { detail?: string } } }
       notification.error({
         message: 'Could not scan the repo structure',
@@ -618,6 +625,7 @@ export function useCreateTaskModel() {
     setGitEnvFilesContent({})
     setEnvFiles([])
     setDepGroups([])
+    setDepGroupsRead('unread')
     form.setFieldValue('dependency_group', undefined)
   }, [sourceType, form])
 
@@ -847,6 +855,7 @@ export function useCreateTaskModel() {
     setDepGroups,
     loadingDepGroups,
     setLoadingDepGroups,
+    depGroupsRead,
     workspaceDir,
     setWorkspaceDir,
     draftSavedAt,
