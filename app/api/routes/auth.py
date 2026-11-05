@@ -617,7 +617,7 @@ async def mcp_oauth_callback(
     error: str | None = None,
 ) -> RedirectResponse:
     """Finish the SSO flow: exchange the code, map the identity to a local account,
-    issue Build Center's own session, and hand the tokens back to the SPA."""
+    issue Packwright's own session, and hand the tokens back to the SPA."""
     settings = get_settings()
     frontend = settings.mcp_oauth_redirect_uri.rsplit("/auth/", 1)[0]  # app origin
 

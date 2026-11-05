@@ -1,7 +1,7 @@
 [project]
-name = "build-center"
+name = "packwright"
 version = "1.0.0"
-description = "Build Center - Full-stack build & packaging platform"
+description = "Packwright - Full-stack build & packaging platform"
 readme = "README.md"
 license = { text = "MIT" }
 requires-python = ">=3.13"

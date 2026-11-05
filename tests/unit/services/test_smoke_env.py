@@ -47,7 +47,7 @@ class TestSecretsAreNotForwarded:
 
         env = _build_smoke_env(None)
 
-        assert env == {"PATH": "/usr/bin", "BUILD_CENTER_SMOKE_TEST": "1"}
+        assert env == {"PATH": "/usr/bin", "PACKWRIGHT_SMOKE_TEST": "1", "BUILD_CENTER_SMOKE_TEST": "1"}
 
     @pytest.mark.unit
     def test_tc_smk_002_the_allowlist_carries_nothing_secret_shaped(self):
@@ -154,6 +154,7 @@ class TestTheBinaryCanStillStart:
         """
         host_env(PATH="/usr/bin")
 
-        env = _build_smoke_env({"BUILD_CENTER_SMOKE_TEST": "0"})
+        env = _build_smoke_env({"PACKWRIGHT_SMOKE_TEST": "0", "BUILD_CENTER_SMOKE_TEST": "0"})
 
+        assert env["PACKWRIGHT_SMOKE_TEST"] == "1"
         assert env["BUILD_CENTER_SMOKE_TEST"] == "1"

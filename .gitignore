@@ -38,3 +38,6 @@ build_center_backups/
 
 # Local SQLite database and runtime data
 /data/
+
+# Local notes for AI assistants: environment-specific, never published
+CLAUDE.md

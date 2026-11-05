@@ -19,7 +19,7 @@ PRIVATE_IP_URL = "https://192.168.1.20/group/project.git"
 
 # --- Patch target strings ---
 
-PATCH_BUILD_CENTER_ROOT = "app.services.nuitka_worker._BUILD_CENTER_ROOT"
+PATCH_APP_ROOT = "app.services.nuitka_worker._APP_ROOT"
 
 
 # --- Filesystem builders ---

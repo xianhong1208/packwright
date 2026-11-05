@@ -154,7 +154,7 @@ wheels = [
 ]
 
 [[package]]
-name = "build-center"
+name = "packwright"
 version = "1.0.0"
 source = { editable = "." }
 dependencies = [

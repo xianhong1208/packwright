@@ -19,7 +19,7 @@ from pydantic import ValidationError
 from app.api.routes.tasks import _validate_build_config_paths
 from app.schemas.task import BuildConfig, SourceType
 
-SAFE_ROOT = "/srv/build-center/projects/demo"
+SAFE_ROOT = "/srv/packwright/projects/demo"
 
 
 @pytest.fixture(autouse=True)
@@ -27,7 +27,7 @@ def _configure_local_roots(monkeypatch):
     """Local-source mode is enabled here by allowing SAFE_ROOT's tree."""
     monkeypatch.setattr(
         "app.api.routes.tasks._allowed_path_prefixes",
-        lambda: ("/srv/build-center/",),
+        lambda: ("/srv/packwright/",),
     )
 
 

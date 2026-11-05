@@ -1,4 +1,4 @@
-# Build Center 操作手冊
+# Packwright 操作手冊
 
 > 🚀 **第一次使用?先看 [快速上手指南 QUICKSTART.md](./QUICKSTART.md)** —— 5 分鐘上手,涵蓋建立任務、打包模式、完整打包流(預檢/驗證/成果)、nginx 設定與常見排錯。本手冊是完整參考。
 
@@ -28,7 +28,7 @@
 
 ## 系統簡介
 
-Build Center 是一個全端打包管理平台，支援：
+Packwright 是一個全端打包管理平台，支援：
 
 - **Backend Only** — 使用 Nuitka 將 Python 專案編譯為可執行檔
 - **Frontend Only** — 使用 npm / yarn / pnpm / bun 建置前端專案
@@ -39,7 +39,7 @@ Build Center 是一個全端打包管理平台，支援：
 
 系統包含使用者認證、角色權限管理 (RBAC)、即時 WebSocket 日誌、任務歷史記錄等功能。
 
-> ⚠️ **先讀 [安全性與信任模型](#安全性與信任模型)**。Build Center 會在伺服器上執行來自目標專案的程式碼，
+> ⚠️ **先讀 [安全性與信任模型](#安全性與信任模型)**。Packwright 會在伺服器上執行來自目標專案的程式碼，
 > 因此「誰拿得到 `task:create` 權限」等同於「誰能在這台機器上執行指令」。
 
 ---
@@ -63,8 +63,8 @@ Build Center 是一個全端打包管理平台，支援：
 
 ```bash
 cd /media/disk0/Tony
-# 假設已經有 build_center 目錄
-cd build_center
+# 假設已經有 packwright 目錄
+cd packwright
 ```
 
 ### 2. 設定環境變數
@@ -172,7 +172,7 @@ HOST=192.168.1.20 PORT=5018 uv run python main.py
  | |_) | |_| | | | (_| | | |__|  __/ | | | ||  __/ |
  |____/ \__,_|_|_|\__,_|  \____\___|_| |_|\__\___|_|
 
-  Build Center Service v1.0.0
+  Packwright Service v1.0.0
   Starting server at http://192.168.1.20:5018
 ```
 
@@ -510,7 +510,7 @@ Step 3: Docker Build
 
 ### 核心假設：`task:create` ≈ 這台機器的 shell
 
-Build Center 的工作就是**執行來自目標專案的程式碼**：
+Packwright 的工作就是**執行來自目標專案的程式碼**：
 
 - Git 模式會 clone 任意 repo，然後跑 `npm install` / `npm run build` —— 這會執行對方
   `package.json` 裡的 scripts
