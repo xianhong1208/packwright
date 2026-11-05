@@ -346,6 +346,136 @@ h1, h2, h3, h4, h5 { font-family: var(--font-display); letter-spacing: -0.015em;
 
 @layer components {
 /* -------------------------------------------------------------------------
+   Sign-in frame (components/layout/AuthLayout): the form on a narrow strip,
+   the build track filling the rest. Phones get the strip only.
+   ------------------------------------------------------------------------- */
+.auth {
+  min-height: 100vh;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  background: var(--color-void-950);
+}
+@media (min-width: 1024px) {
+  .auth { grid-template-columns: 480px minmax(0, 1fr); }
+}
+.auth-side {
+  display: flex;
+  flex-direction: column;
+  min-height: 100vh;
+  padding: 28px 16px;
+}
+@media (min-width: 640px) {
+  .auth-side { padding: 36px 56px; }
+}
+.auth-brand {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-weight: 700;
+  font-size: 17px;
+  color: var(--ink);
+}
+.auth-mark {
+  width: 34px; height: 34px; border-radius: 9px;
+  display: grid; place-items: center;
+  background: var(--color-cyber-500); color: var(--color-void-950);
+  font: 700 18px/1 var(--font-display);
+}
+.auth-body {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  width: 100%;
+  max-width: 368px;
+  padding: 48px 0;
+}
+.auth-foot {
+  margin: 0;
+  font-size: 13px;
+  color: var(--ink-faint);
+}
+.auth-bench {
+  display: none;
+  border-left: 1px solid var(--seam);
+  background: var(--color-void-900);
+  padding: 72px 8vw;
+  flex-direction: column;
+  justify-content: center;
+  gap: 48px;
+}
+@media (min-width: 1024px) {
+  .auth-bench { display: flex; }
+}
+.auth-claim {
+  margin: 0;
+  font-size: clamp(30px, 3.2vw, 46px);
+  line-height: 1.12;
+  font-weight: 700;
+  color: var(--ink);
+  max-width: 22ch;
+  text-wrap: balance;
+}
+.auth-track {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  max-width: 520px;
+}
+.auth-stage {
+  position: relative;
+  display: grid;
+  grid-template-columns: 28px minmax(0, 1fr);
+  gap: 16px;
+  padding-bottom: 22px;
+}
+.auth-stage:last-child { padding-bottom: 0; }
+/* the rail joining each node to the next */
+.auth-stage:not(:last-child)::before {
+  content: '';
+  position: absolute;
+  left: 13px; top: 28px; bottom: 0;
+  width: 2px;
+  background: var(--color-void-600);
+}
+.auth-stage[data-state='done']:not(:last-child)::before { background: color-mix(in srgb, var(--color-matrix-500) 55%, transparent); }
+.auth-node {
+  width: 28px; height: 28px; border-radius: 50%;
+  display: grid; place-items: center;
+  font-size: 13px;
+  border: 2px solid var(--color-void-600);
+  background: var(--color-void-900);
+  color: var(--color-void-950);
+}
+.auth-stage[data-state='done'] .auth-node { background: var(--color-matrix-500); border-color: var(--color-matrix-500); }
+.auth-stage[data-state='on'] .auth-node {
+  border-color: var(--color-teal-400);
+  box-shadow: inset 0 0 0 5px var(--color-void-900);
+  background: var(--color-teal-400);
+  animation: auth-pulse 2.4s ease-in-out infinite;
+}
+@keyframes auth-pulse {
+  0%, 100% { box-shadow: inset 0 0 0 5px var(--color-void-900), 0 0 0 0 color-mix(in srgb, var(--color-teal-400) 45%, transparent); }
+  50% { box-shadow: inset 0 0 0 5px var(--color-void-900), 0 0 0 7px color-mix(in srgb, var(--color-teal-400) 0%, transparent); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .auth-stage[data-state='on'] .auth-node { animation: none; }
+}
+.auth-stage-name {
+  font-weight: 600;
+  font-size: 16px;
+  line-height: 28px;
+  color: var(--ink);
+}
+.auth-stage[data-state='todo'] .auth-stage-name { color: var(--ink-muted); }
+.auth-stage[data-state='on'] .auth-stage-name { color: var(--color-teal-400); }
+.auth-stage-does {
+  font-size: 14px;
+  color: var(--ink-muted);
+  max-width: 52ch;
+}
+
+/* -------------------------------------------------------------------------
    Page heading — the same on every screen (components/layout/PageHeader).
    ------------------------------------------------------------------------- */
 .page-header {

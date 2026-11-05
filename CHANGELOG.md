@@ -14,6 +14,9 @@ follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this proje
   are the last 30 days and the machine's load. **Builds** is a searchable list with a count per status,
   **Machine** shows every core as one cell, and **Users** is now **People**. Deactivating someone asks
   first, and isn't offered on your own account (the server refused it anyway).
+- **Sign-in has its own layout**: the form on a narrow strip, and beside it what a build goes through
+  (Preflight, Compile, Bundle, Verify, Image). Registering and password recovery use the same frame; on
+  phones it is the form alone.
 - **`pack_mode` defaults to `external` in the API**, as the console already did; leaving it out used
   to select `full`, which compiles every dependency and takes hours. Stored builds keep their mode.
 - **Renamed Build Center to Packwright**: packages, console title, login page, docs, scripts, the
