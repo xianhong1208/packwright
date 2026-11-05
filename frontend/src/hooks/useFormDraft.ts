@@ -7,13 +7,24 @@ const SAVE_DEBOUNCE_MS = 800
 /**
  * Fields that must never reach localStorage.
  *
- * `frontend_env_content` is a paste of the project's real .env — in practice
- * it carries JWT signing keys, database passwords and third-party API keys.
+ * `frontend_env_content` is a paste of the project's real .env, and
+ * `docker_env_vars` the container's runtime environment — in practice both
+ * carry JWT signing keys, database passwords and third-party API keys.
  * localStorage is readable by any script on the origin and survives logout, so
  * a convenience feature would otherwise turn the browser into a durable copy
  * of other systems' credentials.
  */
-const NEVER_PERSIST = ['frontend_env_content'] as const
+const NEVER_PERSIST = ['frontend_env_content', 'docker_env_vars'] as const
+
+/** Drop the stored draft. Called on sign-out: a draft belongs to the user who
+ *  typed it, and the next person to sign in on this browser must not see it. */
+export function clearFormDraft(): void {
+  try {
+    localStorage.removeItem(DRAFT_STORAGE_KEY)
+  } catch {
+    /* storage unavailable: nothing to clear */
+  }
+}
 
 export interface FormDraft {
   /** Timestamp of the last successful save, for a "draft saved" indicator. */
@@ -78,6 +89,10 @@ export function useFormDraft(
       if (!raw) return
       const draft = JSON.parse(raw)
       if (draft && typeof draft === 'object') {
+        // Drafts saved before a field joined NEVER_PERSIST still hold it: strip
+        // it and rewrite the stored copy rather than restoring it.
+        for (const field of NEVER_PERSIST) delete draft[field]
+        localStorage.setItem(DRAFT_STORAGE_KEY, JSON.stringify(draft))
         form.setFieldsValue(draft)
         setSavedAt(Date.now())
       }
