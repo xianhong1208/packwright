@@ -96,6 +96,9 @@ class Settings(BaseSettings):
     # (see app/services/git_credentials.py) and stored encrypted; this is only used
     # when no matching credential exists, and may be left unset.
     gitlab_token: str | None = None
+    # The one host GITLAB_TOKEN may be sent to. Matching any host whose name
+    # *contains* "gitlab" sent the token to e.g. gitlab.attacker.example.
+    gitlab_token_host: str = "gitlab.com"
     # Where clones and build workspaces live. Override with GIT_WORKSPACE_DIR.
     git_workspace_dir: str = "./data/workspace"
     git_allowed_hosts: str = ""  # CSV; empty = allow any http/https host
