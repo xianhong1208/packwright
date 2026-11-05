@@ -118,7 +118,7 @@ Access tokens for private repositories are managed in the console (Settings → 
 - One token per host, for **GitHub**, **GitLab**, or a self-hosted instance (any host).
 - Tokens are encrypted at rest with `SETTINGS_ENCRYPTION_KEY` and never returned by the API — the UI shows only the last four characters.
 - When a build clones a URL, the token whose host matches is selected automatically and injected with the provider's expected form.
-- `GITLAB_TOKEN` in `.env` remains a fallback for GitLab-style hosts when no stored credential matches.
+- `GITLAB_TOKEN` in `.env` remains a fallback when no stored credential matches, sent only to the exact host in `GITLAB_TOKEN_HOST` (default `gitlab.com`; set it to your server's name for a self-hosted GitLab).
 
 ## Testing
 

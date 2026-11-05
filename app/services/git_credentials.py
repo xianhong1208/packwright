@@ -91,7 +91,7 @@ async def resolve_for_url(db: AsyncSession, url: str) -> tuple[str | None, str]:
     """Return (token, provider) for cloning `url`.
 
     Looks up a stored credential by the URL's host. Falls back to
-    settings.gitlab_token for GitLab-style hosts when nothing is stored. The
+    settings.gitlab_token only for exactly settings.gitlab_token_host. The
     token may be None (public repo / no credential); provider still guides how a
     token, if any, is injected into the URL.
     """
@@ -102,10 +102,11 @@ async def resolve_for_url(db: AsyncSession, url: str) -> tuple[str | None, str]:
         cred.last_used_at = datetime.now(timezone.utc)
         await db.commit()
         return decrypt_secret(cred.token_encrypted), cred.provider
-    # The env fallback is a GitLab token, so only offer it to actual GitLab hosts —
-    # never to a generic/unknown host, which would send the token to an arbitrary server.
-    if provider == "gitlab":
-        fallback = get_settings().gitlab_token
-        if fallback:
-            return fallback, provider
+    # The env fallback is one GitLab token for one GitLab server. Offer it to that
+    # host only: matching any host *named* like GitLab handed it to
+    # gitlab.attacker.example on its first 401, via /api/git/refs with no build
+    # and no history row.
+    settings = get_settings()
+    if settings.gitlab_token and host == (settings.gitlab_token_host or "").strip().lower():
+        return settings.gitlab_token, "gitlab"
     return None, provider
