@@ -7,6 +7,8 @@ follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this proje
 ## [Unreleased]
 
 ### Changed
+- **`pack_mode` defaults to `external` in the API**, as the console already did; leaving it out used
+  to select `full`, which compiles every dependency and takes hours. Stored builds keep their mode.
 - **Renamed Build Center to Packwright**: packages, console title, login page, docs, scripts, the
   systemd unit (`deploy/packwright.service`, `/opt/packwright`) and the repository
   (`xianhong1208/packwright`). Names that live in existing data keep the old spelling, so nothing
@@ -61,6 +63,10 @@ follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this proje
   production 5 → 0 (axios, react-router).
 
 ### Fixed
+- `scripts/backup_db.sh` backs up SQLite (the default) as well as PostgreSQL, and finds the database
+  the way the service does: it used to read only `DB_*`, so it dumped the wrong database when
+  `DATABASE_URL` was set and could not back up a default install at all. A failed backup leaves no
+  partial file and rotates nothing.
 - **A failed frontend build replaced the project's `.env` for good.** The configured env content
   was written over it, the original was kept only in memory, and a failed install or build returned
   before the restore. Files a local-source build changes (frontend env file, entry-point loader,

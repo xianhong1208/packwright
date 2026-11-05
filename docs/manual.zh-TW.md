@@ -479,12 +479,24 @@ data/
 資料庫裡有無法從程式碼重建的東西:建置紀錄(含每次的完整設定)、使用者與角色、稽核與登入紀錄。
 工作區與產物有 TTL,重跑建置就會回來;這些不會。
 
-- **PostgreSQL**:`scripts/backup_db.sh` 用 `pg_dump` 備份到 `BACKUP_DIR`(預設 `./data/backups`,
-  保留 `RETENTION_DAYS` 天),適合放進 cron。
-- **SQLite**:在服務執行中用 SQLite 的線上備份,不要直接複製正在寫入的檔案:
-  ```bash
-  uv run python -c "import sqlite3; s=sqlite3.connect('data/build_center.db'); d=sqlite3.connect('backup.db'); s.backup(d)"
-  ```
+`scripts/backup_db.sh` 會用服務本身的設定找到資料庫(`DATABASE_URL` → `DB_*` → 預設的 SQLite 檔),
+SQLite 與 PostgreSQL 都支援,適合放進 cron:
+
+```bash
+bash scripts/backup_db.sh                                   # 存到 ./data/backups,保留 30 天
+BACKUP_DIR=/mnt/nas/packwright RETENTION_DAYS=60 bash scripts/backup_db.sh
+```
+
+- **SQLite**:用 SQLite 的線上備份,服務執行中也能取得一致的快照,輸出 `<name>-<時間>.sqlite.gz`。
+- **PostgreSQL**:用 `pg_dump`(需安裝),輸出 `<資料庫>-<時間>.sql.gz`;密碼經環境變數傳遞,不會出現在命令列。
+- 只有備份成功後才會刪除超過 `RETENTION_DAYS` 的舊備份,失敗時以非零狀態結束。
+
+還原前先停止服務:
+
+```bash
+gunzip -c build_center-<時間>.sqlite.gz > data/build_center.db        # SQLite
+gunzip -c packwright-<時間>.sql.gz | psql -h HOST -U USER -d DBNAME    # PostgreSQL
+```
 
 備份檔含密碼雜湊與使用者貼進建置設定的環境變數,請限制存取權限。
 

@@ -135,8 +135,11 @@ class BuildConfig(BaseModel):
         description="Comma-separated list of data directories to include (static files, templates)",
     )
     pack_mode: PackMode = Field(
-        default=PackMode.FULL,
-        description="Nuitka packaging mode: full (all bundled) or external (libs/ separate)",
+        # External is what the console recommends and preselects; an API caller that
+        # leaves this out should get the same, not the mode that compiles for hours.
+        default=PackMode.EXTERNAL,
+        description="Nuitka packaging mode: external (third-party packages in libs/, the default) "
+        "or full (everything compiled into the binary; very slow)",
     )
     include_packages: str = Field(
         default="",
