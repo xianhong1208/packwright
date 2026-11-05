@@ -48,7 +48,7 @@ class TestNeverUnexplained:
         "it failed", and it is available even when the log is unreadable.
         """
         report = build_failure_report("unrecognized noise", stage="preflight")
-        assert "預檢" in report["diagnosis"][0]["problem"]
+        assert "preflight" in report["diagnosis"][0]["problem"]
         assert report["failed_stage"] == "preflight"
 
     @pytest.mark.unit
@@ -59,7 +59,7 @@ class TestNeverUnexplained:
         has to work for them too.
         """
         report = build_failure_report("error: something obscure broke")
-        assert "管理員" in report["diagnosis"][0]["suggestion"]
+        assert "administrator" in report["diagnosis"][0]["suggestion"]
 
     @pytest.mark.unit
     def test_tc_fail_004_matched_patterns_take_precedence_over_the_fallback(self):
@@ -69,7 +69,7 @@ class TestNeverUnexplained:
 
         problems = [d["problem"] for d in report["diagnosis"]]
         assert any("ABI" in p for p in problems)
-        assert not any("無法自動判斷" in p for p in problems)
+        assert not any("could not be determined" in p for p in problems)
 
 
 class TestExtractErrorLines:
@@ -131,24 +131,24 @@ class TestNewPatterns:
         """TC-FAIL-020: diagnose — a rejected git credential is explained."""
         log = "fatal: Authentication failed for 'https://gitlab.example.com/g/p.git'"
         problems = [d["problem"] for d in diagnose_build_failure(log)]
-        assert any("Git 認證失敗" in p for p in problems)
+        assert any("Git authentication failed" in p for p in problems)
 
     @pytest.mark.unit
     def test_tc_fail_021_missing_branch(self):
         """TC-FAIL-021: diagnose — a deleted or renamed branch is explained."""
         log = "fatal: Remote branch feature/gone not found in upstream origin"
         problems = [d["problem"] for d in diagnose_build_failure(log)]
-        assert any("分支或標籤" in p for p in problems)
+        assert any("branch or tag" in p for p in problems)
 
     @pytest.mark.unit
     def test_tc_fail_022_dependency_resolution(self):
         """TC-FAIL-022: diagnose — a dependency conflict is named as the project's own."""
         log = "error: No solution found when resolving dependencies for: torch>=2.0"
         diags = diagnose_build_failure(log)
-        assert any("依賴" in d["problem"] for d in diags)
+        assert any("dependencies" in d["problem"] for d in diags)
         # The point of this rule is telling the user it is not a packaging
         # setting they got wrong.
-        assert any("不是打包設定" in d["suggestion"] for d in diags)
+        assert any("not the build settings" in d["suggestion"] for d in diags)
 
     @pytest.mark.unit
     def test_tc_fail_023_docker_daemon_down(self):
@@ -156,7 +156,7 @@ class TestNewPatterns:
         log = "Cannot connect to the Docker daemon at unix:///var/run/docker.sock"
         diags = diagnose_build_failure(log)
         assert any("Docker daemon" in d["problem"] for d in diags)
-        assert any("管理員" in d["suggestion"] for d in diags)
+        assert any("administrator" in d["suggestion"] for d in diags)
 
     @pytest.mark.unit
     def test_tc_fail_024_npm_install_distinct_from_build(self):
@@ -167,7 +167,7 @@ class TestNewPatterns:
         """
         log = "npm ERR! code EUSAGE\nnpm ci can only install with an existing package-lock.json"
         problems = [d["problem"] for d in diagnose_build_failure(log)]
-        assert any("前端依賴安裝失敗" in p for p in problems)
+        assert any("Installing frontend dependencies failed" in p for p in problems)
 
     @pytest.mark.unit
     @pytest.mark.parametrize(
@@ -191,7 +191,7 @@ class TestNewPatterns:
         matched = next(d for d in diags if "504" in d["problem"])
         # Must name the real mechanism and the fix that survives extra proxy
         # layers, since the user often cannot change the outermost nginx.
-        assert "沒送出" in matched["suggestion"] or "靜默" in matched["suggestion"]
+        assert "has sent nothing" in matched["suggestion"] or "silent" in matched["suggestion"]
         assert "keepalive" in matched["suggestion"]
 
     @pytest.mark.unit
@@ -203,7 +203,7 @@ class TestNewPatterns:
         """
         diags = diagnose_build_failure("504 Gateway Time-out while reading response")
         problems = [d["problem"] for d in diags]
-        assert problems[0].startswith("被反向代理判定逾時")
+        assert problems[0].startswith("Cut off by the reverse proxy")
 
     @pytest.mark.unit
     def test_tc_fail_025_healthy_log_yields_nothing(self):
@@ -256,7 +256,7 @@ class TestDiagnosisActions:
         """
         diag = next(
             d for d in diagnose_build_failure("MemoryError during compilation")
-            if "記憶體" in d["problem"]
+            if "memory" in d["problem"]
         )
         assert diag["action"]["overrides"] == {"nuitka_jobs": 2}
 
