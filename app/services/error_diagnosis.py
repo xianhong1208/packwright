@@ -585,6 +585,8 @@ _ERROR_LINE_MARKERS = (
 # Stage names come from task["stage"]; phrase them the way the UI already does.
 _STAGE_HINTS = {
     "queued": "The build ended while it was still queued",
+    "frontend": "Failed while building the frontend — installing its dependencies or running its build command",
+    "docker": "Failed while building or exporting the Docker image",
     "preflight": "Failed during preflight — usually a path, the Python version or the dependency environment",
     "compile": "Failed while compiling — Nuitka reported an error",
     "bundle": "Failed while bundling — copying dependencies or data directories went wrong",
