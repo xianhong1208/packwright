@@ -455,7 +455,7 @@ def detect_project_python_version(project_path: Path) -> tuple[str | None, str]:
         note = (
             ""
             if len(ranked) == 1
-            else f"(此版 {top_count}/{total} 個 .so;少數其他版本為套件附帶,已忽略)"
+            else f" ({top_count}/{total} .so files; the few for other versions ship inside packages and were ignored)"
         )
         return version, f"from {example[top_tag]}{note}"
 
@@ -825,9 +825,9 @@ async def _smoke_test(
             return {
                 "status": "warn",
                 "detail": (
-                    "Binary 卡在 GPU/加速器初始化(torch/ROCm/CUDA),而打包機通常沒有 "
-                    "GPU — 疑似執行環境問題,非打包本身錯誤。請在有 GPU 的目標機上實際"
-                    f"執行驗證 (exit {ret}): {tail[-200:]}"
+                    "The binary stopped while initialising a GPU/accelerator (torch/ROCm/CUDA), "
+                    "and build hosts usually have no GPU — most likely the environment, not the "
+                    f"build. Verify it on a target machine with a GPU (exit {ret}): {tail[-200:]}"
                 ),
                 "exit_code": ret,
             }
@@ -850,9 +850,10 @@ async def _smoke_test(
             return {
                 "status": "warn",
                 "detail": (
-                    "Binary 啟動成功並跑到連線外部服務(資料庫/快取/佇列)才失敗 —— "
-                    "打包機的服務位址/帳密與部署機不同,屬執行環境問題,非打包本身錯誤。"
-                    f"請在目標機(服務可連得到)上實際驗證 (exit {ret}): {tail[-200:]}"
+                    "The binary started and only failed when connecting to an external service "
+                    "(database/cache/queue) — the build host's addresses and credentials differ from "
+                    "the deployment's, so this is the environment, not the build. Verify it on the "
+                    f"target machine, where the services are reachable (exit {ret}): {tail[-200:]}"
                 ),
                 "exit_code": ret,
             }
@@ -875,9 +876,10 @@ async def _smoke_test(
             return {
                 "status": "warn",
                 "detail": (
-                    "Binary 啟動成功,但因缺少必要的命令列參數而結束(smoke test 是不帶參數"
-                    "裸跑)—— 這證明程式與參數解析正常,屬呼叫方式差異,非打包錯誤。實際服務"
-                    f"請帶上正確參數(如 --config)啟動 (exit {ret}): {tail[-200:]}"
+                    "The binary started and exited because required command-line arguments were "
+                    "missing (the smoke test runs it with none) — so the program and its argument "
+                    "parsing work; this is how it was called, not the build. Run the real service "
+                    f"with its arguments (e.g. --config) (exit {ret}): {tail[-200:]}"
                 ),
                 "exit_code": ret,
             }
@@ -889,15 +891,17 @@ async def _smoke_test(
         license_hints = (
             "license file not found", "license error", "license not found",
             "invalid license", "license expired", "license_file",
+            # "授權檔" ("license file") matches Chinese-language programs' own output.
             "no license", "license.lic", "授權檔", "license required",
         )
         if any(h in low for h in license_hints):
             return {
                 "status": "warn",
                 "detail": (
-                    "Binary 啟動成功,但因找不到授權/必要資源檔(如 license.lic)而結束 —— "
-                    "該檔會在部署機上提供(或用 LICENSE_FILE 環境變數指定),打包機沒有屬正常,"
-                    f"非打包錯誤。請在部署機備妥該檔後驗證 (exit {ret}): {tail[-200:]}"
+                    "The binary started and exited because a license or required resource file "
+                    "(e.g. license.lic) was not found — that file is provided on the deployment "
+                    "machine (or via LICENSE_FILE), so its absence on the build host is expected, "
+                    f"not a build error. Verify it there once the file is in place (exit {ret}): {tail[-200:]}"
                 ),
                 "exit_code": ret,
             }
@@ -1007,10 +1011,10 @@ async def run_nuitka_build(task_id: str, config: BuildConfig, db: AsyncSession) 
                 })
                 await task_manager.set_result(task_id, dict(build_result), db)
                 raise RuntimeError(
-                    f"你選了 Python {requested},但這個專案的依賴是為 Python "
-                    f"{detected_version} 編譯的({detect_detail})。用 {requested} 編出來的"
-                    f"執行檔載入不了那些套件。請把「Python 版本」改成「自動偵測」,"
-                    f"或手動選 {detected_version}。"
+                    f"You chose Python {requested}, but this project's dependencies were built "
+                    f"for Python {detected_version} ({detect_detail}). A binary compiled with "
+                    f"{requested} cannot load them. Set \"Python version\" to \"Auto-detect\", "
+                    f"or choose {detected_version}."
                 )
 
         # Pick the toolchain venv for the resolved version.
@@ -1231,8 +1235,9 @@ async def run_nuitka_build(task_id: str, config: BuildConfig, db: AsyncSession) 
                         nuitka_cmd.append(f"--include-module={lib}")
                 await task_manager.append_log(
                     task_id,
-                    f"自動偵測 stdlib:依 libs/ 相依納入 {len(include_libs)} 個標準庫模組"
-                    f"(主程式用到的由 Nuitka 自動處理,共 {len(valid_libs)} 個可用)",
+                    f"Stdlib auto-detect: including {len(include_libs)} standard-library modules "
+                    f"needed by libs/ (Nuitka handles the ones the program imports itself; "
+                    f"{len(valid_libs)} available)",
                 )
             else:
                 for lib in valid_libs:
@@ -1242,7 +1247,7 @@ async def run_nuitka_build(task_id: str, config: BuildConfig, db: AsyncSession) 
                         nuitka_cmd.append(f"--include-module={lib}")
                 await task_manager.append_log(
                     task_id,
-                    f"未能掃描 site-packages,保守納入全部 {len(valid_libs)} 個標準庫模組",
+                    f"Could not scan site-packages; including all {len(valid_libs)} standard-library modules to be safe",
                 )
 
             # Blacklist ALL installed third-party packages from PROJECT's .venv
@@ -1285,7 +1290,7 @@ async def run_nuitka_build(task_id: str, config: BuildConfig, db: AsyncSession) 
         if skipped:
             await task_manager.append_log(
                 task_id,
-                f"略過 {len(skipped)} 個非法模組名(不符點號命名,不納入 nofollow): "
+                f"Skipped {len(skipped)} invalid module names (not dotted identifiers; left out of nofollow): "
                 + ", ".join(sorted(skipped)[:10]),
             )
         for pkg in blacklist:

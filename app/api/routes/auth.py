@@ -208,7 +208,7 @@ async def login(
         )
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
-            detail="帳號尚未啟用，請等待管理員審核",
+            detail="This account is not active yet. An administrator has to approve it.",
         )
 
     # Create tokens

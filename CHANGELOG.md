@@ -25,6 +25,8 @@ follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this proje
   button reads "Sign in with MCP Gate". `MCP_CENTER_URL` is still read when `MCP_GATE_URL` is unset;
   linked accounts are unaffected.
 - `.env.example` no longer claims a PostgreSQL connection is required (SQLite is the default).
+- Backend messages are in English, like the console: failure diagnoses and their suggested actions,
+  validation errors, build-log lines and the project-scan labels.
 
 ### Added
 - `/health` reports the version, and the console shows it; `pyproject.toml` is the only place a
@@ -78,6 +80,8 @@ follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this proje
   binary name shows the name derived from the entry point instead of an empty row.
 - A build's link (`/task/<id>`) opened onto a spinner once the build had left memory (after a
   restart or eviction); it now redirects to the stored record under Builds.
+- A failed frontend or Docker build was explained as having "ended while it was still queued": only
+  the Nuitka worker recorded a build stage. Those steps now record theirs, with matching messages.
 - When the service ran as a non-root user, a project whose venv links its python into a directory
   that user cannot enter (root's uv store) crashed the build's preflight: Python 3.13's
   `Path.exists()` raises `PermissionError` there instead of returning False.

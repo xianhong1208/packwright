@@ -92,3 +92,22 @@ class TestRecordDuration:
         tm.merge_result.side_effect = RuntimeError("db gone")
         await build_dispatcher._record_duration("t1", 5.0)
         tm.append_log.assert_awaited_once()
+
+
+class TestFailureStage:
+    @pytest.mark.unit
+    @pytest.mark.asyncio
+    async def test_tc_brs_020_frontend_step_names_its_stage(self, tmp_path, mocker, tm):
+        """TC-BRS-020: a failing frontend build is explained as a frontend failure.
+
+        Only the Nuitka worker set a stage, so a frontend failure kept 'queued' and its
+        report said the build "ended while it was still queued"."""
+        from app.services.error_diagnosis import build_failure_report
+
+        mocker.patch("app.services.frontend_worker.run_frontend_build", mocker.AsyncMock(return_value=False))
+
+        await build_dispatcher._build_frontend_only("t1", _frontend_config(tmp_path), mocker.MagicMock())
+
+        tm.update_task.assert_any_await("t1", "stage", "frontend")
+        problem = build_failure_report("unrecognized noise", stage="frontend")["diagnosis"][0]["problem"]
+        assert "frontend" in problem.lower() and "queued" not in problem

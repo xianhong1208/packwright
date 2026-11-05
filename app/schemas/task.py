@@ -195,9 +195,9 @@ class BuildConfig(BaseModel):
             return "build"
         if not re.match(r"^[A-Za-z0-9_][A-Za-z0-9_:.-]*$", v):
             raise ValueError(
-                "建置指令只能是 package.json 裡的 script 名稱"
-                "(英數、底線、冒號、點、減號),例如 build 或 build:prod。"
-                "需要組合多個指令請寫進 package.json 的 scripts。"
+                "The build command must be a script name from package.json (letters, digits, "
+                "underscore, colon, dot, hyphen), e.g. build or build:prod. To combine several "
+                "commands, add a script to package.json."
             )
         return v
 
@@ -221,7 +221,7 @@ class BuildConfig(BaseModel):
             return v
         if any(c in v for c in "\n\r\t") or v.startswith("/"):
             raise ValueError(
-                "目錄名稱不可包含換行或絕對路徑 —— 它會被寫進 Dockerfile 的 COPY 指令。"
+                "The directory name cannot contain a newline or be an absolute path — it is written into the Dockerfile's COPY instruction."
             )
         return v
 
@@ -251,8 +251,9 @@ class BuildConfig(BaseModel):
         )
         if combined == ".." or combined.startswith(".." + os.sep) or os.path.isabs(combined):
             raise ValueError(
-                f"前端輸出目錄 '{self.frontend_output_dir}' 會落在專案之外"
-                f"(解析後為 '{combined}')。它會被 COPY 進映像檔、也會被清空,必須留在專案內。"
+                f"The frontend output directory '{self.frontend_output_dir}' falls outside the "
+                f"project (it resolves to '{combined}'). It is copied into the image and emptied "
+                f"before each build, so it must stay inside the project."
             )
         return self
 
@@ -415,7 +416,7 @@ class DiagnosisAction(BaseModel):
     one of these is just that flow with `overrides` merged on top.
     """
 
-    label: str = Field(description="Button text, e.g. '改用自動偵測並重建'")
+    label: str = Field(description="Button text, e.g. 'Rebuild with auto-detect'")
     overrides: dict = Field(
         default_factory=dict,
         description="BuildConfig fields to change before rebuilding",
