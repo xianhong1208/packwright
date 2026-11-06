@@ -27,6 +27,12 @@ follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this proje
   (`shop-1.2.0.tar.gz`), tags the Docker image (`shop:1.2.0`, with the `org.opencontainers.image.version`
   label and `PACKWRIGHT_BUILD_VERSION`), and is written into a `VERSION` file beside the output and
   inside the program, next to its main module. Building a version that already passed asks first.
+- **Notifications.** A project's settings have a *Notifications* tab: Discord, Slack or any URL that
+  takes JSON, each sent when a build fails, passes or both. A failure says what went wrong (the
+  diagnosis), a pass who built it and how long it took; with `PUBLIC_URL` set the message links to the
+  build. Webhook URLs are stored encrypted and only their host and last characters are shown; *Send test*
+  checks one, and the tab shows whether the last message arrived. Messages go out after the build,
+  outside its build slot, so a dead webhook never holds up builds. No mail server is needed.
 - **Quick build.** New build now opens on one screen that needs only a source: a folder on the server or
   a Git repository and branch. Packwright reads the project (a Python entry point or pyproject.toml, a
   package.json and where it is) and shows what it found row by row: backend, frontend or full stack, the

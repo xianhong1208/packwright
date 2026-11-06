@@ -10,6 +10,7 @@ Packwright was called *Build Center* up to v1.0.0. Names that live in existing d
 
 - **Four build modes.** Backend-only (Nuitka), frontend-only (any Node package manager), full-stack (frontend bundled into the Nuitka build as data), and Docker output (the build packaged into an image and exported as `.tar.gz`).
 - **Projects and versions.** Every build is filed under a project (the same name and source). A project's page lists its versions and builds a new one in one dialog; the version is read from the Git tag, pyproject.toml or package.json, names the download, tags the Docker image and is written into a `VERSION` file. Projects are shared by everyone who may build.
+- **Notifications.** A project can send how its builds end to Discord, Slack or any URL that takes JSON: failed builds with the diagnosis, passed ones with how long they took. No mail server needed; webhook URLs are stored encrypted and never shown again.
 - **Quick build.** Point it at a folder or a Git URL and it reads the project: backend, frontend or full stack, the entry point, where `package.json` is, the Python version and dependency groups. One click starts the build; every setting is still there under *All settings*.
 - **Local path or Git URL sources.** Git mode clones the repo, bootstraps a `.venv` with `uv sync`, builds, and cleans the workspace afterward. SSRF-hardened URL validation, argv-only subprocess calls, and per-host clone timeouts.
 - **Git credentials managed in the console.** Add GitHub, GitLab and self-hosted tokens in the UI; they are stored encrypted and chosen automatically by the clone URL's host — no secrets in `.env`.
@@ -91,6 +92,7 @@ Everything is environment-driven, and nothing is required. `.env.example` lists 
 | `LOCAL_SOURCE_ROOTS` | *(empty)* | CSV of absolute prefixes a local-source build may read; empty disables local mode. |
 | `UV_BIN` / `PRE_BUILD_PATH` | auto | uv binary and subprocess PATH; auto-detected when empty. |
 | `MAX_CONCURRENT_BUILDS` | `3` | Simultaneous builds; the rest wait in the queue. |
+| `PUBLIC_URL` | *(empty)* | The address people open Packwright at; build notifications link to the build with it. |
 | `TRUSTED_PROXY_IPS` | *(empty)* | Proxy IPs whose `X-Forwarded-For` may be trusted; empty is safest. |
 
 ## Storage & data

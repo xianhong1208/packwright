@@ -17,6 +17,37 @@ def client():
         yield c
 
 
+@pytest.fixture(autouse=True)
+def fresh_rate_limits(request):
+    """Every test that talks to the app starts with empty rate-limit windows.
+
+    The whole suite runs from one address within a minute, so it outgrew the
+    global 60 requests a minute and later tests got 429 for what earlier ones
+    sent. The limits themselves stay as configured; the limiter has its own
+    tests in tests/unit/middleware.
+    """
+    if "client" not in request.fixturenames:
+        return
+    from app.middleware.rate_limiter import RateLimitMiddleware
+
+    layer = request.getfixturevalue("client").app.middleware_stack
+    while layer is not None and not isinstance(layer, RateLimitMiddleware):
+        layer = getattr(layer, "app", None)
+    if layer is not None:
+        for counts in (layer._minute_counts, layer._hour_counts, layer._path_counts):
+            counts.clear()
+
+
+@pytest.fixture
+def no_builds(mocker):
+    """Builds are accepted and filed but never started: nothing is cloned or compiled."""
+    from app.api.routes import projects as projects_route
+    from app.api.routes import tasks as tasks_route
+
+    mocker.patch.object(tasks_route, "start_build_task", mocker.AsyncMock())
+    mocker.patch.object(projects_route, "start_build_task", mocker.AsyncMock())
+
+
 def login(client, username: str, password: str) -> dict:
     r = client.post("/auth/login", json={"username": username, "password": password})
     assert r.status_code == 200, r.text

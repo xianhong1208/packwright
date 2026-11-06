@@ -78,6 +78,30 @@ ccache caps its store at 5 GiB by default and evicts the oldest files itself. Ch
 `CCACHE_DIR=<dir>/ccache ccache -C`. `NUITKA_CCACHE_BINARY` points Nuitka at a ccache that is not
 on `PATH`.
 
+## Notifications
+
+A project's settings have a **Notifications** tab: Discord and Slack incoming webhooks, or any URL
+that accepts a JSON `POST`, each sent when a build of the project fails, passes, or both. Its
+creator and holders of `project:manage` change them; everyone who may build sees them. Webhook URLs
+are credentials, so they are stored encrypted with `SETTINGS_ENCRYPTION_KEY` and only their host and
+last characters are ever shown. Messages are sent after the build, outside its build slot; a
+destination that does not answer is retried once and its last result is shown on the tab.
+
+| Variable | Default | Description |
+|---|---|---|
+| `PUBLIC_URL` | *(empty)* | The address people open Packwright at, e.g. `https://packwright.example.com`. Messages link to the build's page with it; empty sends them without a link. |
+
+The plain webhook receives:
+
+```json
+{"event": "failed", "project": "shop", "version": "1.2.0", "build_id": "…", "status": "failed",
+ "triggered_by": "mei", "duration_seconds": 252.4,
+ "diagnosis": {"problem": "…", "suggestion": "…"}, "url": "https://…/history/…", "title": "shop 1.2.0 failed"}
+```
+
+`event` is `passed`, `failed` or `test` (the tab's *Send test*); `diagnosis` is `null` unless the
+build failed.
+
 ## Secrets
 
 | Variable | Default | Description |

@@ -13,6 +13,7 @@ import {
   ArrowRightIcon as ArrowRight,
   ArrowUpIcon as ArrowUp,
   ArrowsClockwiseIcon as ArrowsClockwise,
+  BellIcon as Bell,
   CaretDownIcon as CaretDown,
   CheckIcon as Check,
   CheckCircleIcon as CheckCircle,
@@ -26,6 +27,7 @@ import {
   DesktopIcon as Desktop,
   DeviceMobileIcon as DeviceMobile,
   DeviceTabletIcon as DeviceTablet,
+  DiscordLogoIcon as DiscordLogo,
   DownloadSimpleIcon as DownloadSimple,
   FileZipIcon as FileZip,
   FloppyDiskIcon as FloppyDisk,
@@ -46,6 +48,7 @@ import {
   MagnifyingGlassIcon as MagnifyingGlass,
   MinusCircleIcon as MinusCircle,
   PackageIcon as Package,
+  PaperPlaneTiltIcon as PaperPlaneTilt,
   PauseIcon as Pause,
   PencilSimpleIcon as PencilSimple,
   PlusIcon as Plus,
@@ -56,6 +59,7 @@ import {
   SealCheckIcon as SealCheck,
   ShieldCheckIcon as ShieldCheck,
   SignOutIcon as SignOut,
+  SlackLogoIcon as SlackLogo,
   SlidersIcon as Sliders,
   SquaresFourIcon as SquaresFour,
   TagIcon as Tag,
@@ -64,6 +68,7 @@ import {
   UsersIcon as Users,
   WarningIcon as Warning,
   WarningCircleIcon as WarningCircle,
+  WebhooksLogoIcon as WebhooksLogo,
   XCircleIcon as XCircle,
 } from '@phosphor-icons/react'
 
@@ -100,6 +105,7 @@ export const ArrowLineDownIcon = wrap(ArrowLineDown, 'ArrowLineDownIcon')
 export const ArrowRightIcon = wrap(ArrowRight, 'ArrowRightIcon')
 export const ArrowUpIcon = wrap(ArrowUp, 'ArrowUpIcon')
 export const ArrowsClockwiseIcon = wrap(ArrowsClockwise, 'ArrowsClockwiseIcon')
+export const BellIcon = wrap(Bell, 'BellIcon')
 export const CaretDownIcon = wrap(CaretDown, 'CaretDownIcon')
 export const CheckIcon = wrap(Check, 'CheckIcon')
 export const CheckCircleIcon = wrap(CheckCircle, 'CheckCircleIcon')
@@ -112,6 +118,7 @@ export const CubeIcon = wrap(Cube, 'CubeIcon')
 export const DesktopIcon = wrap(Desktop, 'DesktopIcon')
 export const DeviceMobileIcon = wrap(DeviceMobile, 'DeviceMobileIcon')
 export const DeviceTabletIcon = wrap(DeviceTablet, 'DeviceTabletIcon')
+export const DiscordLogoIcon = wrap(DiscordLogo, 'DiscordLogoIcon')
 export const DownloadSimpleIcon = wrap(DownloadSimple, 'DownloadSimpleIcon')
 export const FileZipIcon = wrap(FileZip, 'FileZipIcon')
 export const FloppyDiskIcon = wrap(FloppyDisk, 'FloppyDiskIcon')
@@ -132,6 +139,7 @@ export const LockIcon = wrap(Lock, 'LockIcon')
 export const MagnifyingGlassIcon = wrap(MagnifyingGlass, 'MagnifyingGlassIcon')
 export const MinusCircleIcon = wrap(MinusCircle, 'MinusCircleIcon')
 export const PackageIcon = wrap(Package, 'PackageIcon')
+export const PaperPlaneTiltIcon = wrap(PaperPlaneTilt, 'PaperPlaneTiltIcon')
 export const PauseIcon = wrap(Pause, 'PauseIcon')
 export const PencilSimpleIcon = wrap(PencilSimple, 'PencilSimpleIcon')
 export const PlusIcon = wrap(Plus, 'PlusIcon')
@@ -142,6 +150,7 @@ export const ScanIcon = wrap(Scan, 'ScanIcon')
 export const SealCheckIcon = wrap(SealCheck, 'SealCheckIcon')
 export const ShieldCheckIcon = wrap(ShieldCheck, 'ShieldCheckIcon')
 export const SignOutIcon = wrap(SignOut, 'SignOutIcon')
+export const SlackLogoIcon = wrap(SlackLogo, 'SlackLogoIcon')
 export const SlidersIcon = wrap(Sliders, 'SlidersIcon')
 export const SquaresFourIcon = wrap(SquaresFour, 'SquaresFourIcon')
 export const TagIcon = wrap(Tag, 'TagIcon')
@@ -150,6 +159,7 @@ export const UserIcon = wrap(User, 'UserIcon')
 export const UsersIcon = wrap(Users, 'UsersIcon')
 export const WarningIcon = wrap(Warning, 'WarningIcon')
 export const WarningCircleIcon = wrap(WarningCircle, 'WarningCircleIcon')
+export const WebhooksLogoIcon = wrap(WebhooksLogo, 'WebhooksLogoIcon')
 export const XCircleIcon = wrap(XCircle, 'XCircleIcon')
 /** The busy indicator: always turning. */
 export const SpinnerIcon = wrap(CircleNotch, 'SpinnerIcon', { spin: true })
