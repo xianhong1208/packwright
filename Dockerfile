@@ -8,7 +8,7 @@
 # anyone who can start a build can run code inside this container.
 
 # ---- Console (React) ---------------------------------------------------------
-FROM node:22-bookworm-slim AS console
+FROM node:25-bookworm-slim AS console
 WORKDIR /src/frontend
 COPY frontend/package.json frontend/package-lock.json ./
 RUN npm ci --no-audit --no-fund
@@ -20,7 +20,7 @@ RUN npm run build
 # ---- Tools copied in as single binaries --------------------------------------
 FROM ghcr.io/astral-sh/uv:0.9.24 AS uv
 FROM docker:27-cli AS dockercli
-FROM node:22-bookworm-slim AS node
+FROM node:25-bookworm-slim AS node
 
 # ---- Runtime -------------------------------------------------------------------
 FROM python:3.13-slim-bookworm
