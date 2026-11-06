@@ -1,10 +1,8 @@
 """System monitoring API routes."""
 
-import asyncio
 import sys
 from typing import Annotated
 
-import psutil
 from fastapi import APIRouter, Depends
 from datetime import date, datetime, timedelta, timezone
 from collections import defaultdict
@@ -13,6 +11,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.database import get_db
+from app.services.system_stats import get_sampler
 from app.models.task import Task
 from app.services.permission import (
     CurrentUser,
@@ -24,92 +23,13 @@ from app.services.permission import (
 router = APIRouter(prefix="/api/monitoring", tags=["monitoring"])
 
 
-def _get_gpu_info() -> list[dict]:
-    """Get GPU information using GPUtil if available."""
-    try:
-        import GPUtil
-        gpus = GPUtil.getGPUs()
-        return [
-            {
-                "id": gpu.id,
-                "name": gpu.name,
-                "load": round(gpu.load * 100, 1),
-                "memory_used": round(gpu.memoryUsed, 1),
-                "memory_total": round(gpu.memoryTotal, 1),
-                "memory_percent": round(gpu.memoryUsed / gpu.memoryTotal * 100, 1) if gpu.memoryTotal > 0 else 0,
-                "temperature": gpu.temperature,
-            }
-            for gpu in gpus
-        ]
-    except Exception:
-        return []
-
-
-def _collect_stats() -> dict:
-    """Blocking stats collection — cpu_percent(interval=0.1) sleeps and the
-    GPU probe shells out to nvidia-smi, so this must run off the event loop."""
-    # CPU
-    cpu_percent = psutil.cpu_percent(interval=0.1)
-    cpu_count = psutil.cpu_count()
-    cpu_count_logical = psutil.cpu_count(logical=True)
-    cpu_freq = psutil.cpu_freq()
-
-    # Per-CPU usage
-    cpu_percent_per_core = psutil.cpu_percent(interval=0.1, percpu=True)
-
-    # Memory
-    memory = psutil.virtual_memory()
-    swap = psutil.swap_memory()
-
-    # Disk
-    disk = psutil.disk_usage("/")
-
-    # Network (bytes since boot)
-    net_io = psutil.net_io_counters()
-
-    # GPU
-    gpus = _get_gpu_info()
-
-    return {
-        "cpu": {
-            "percent": cpu_percent,
-            "percent_per_core": cpu_percent_per_core,
-            "count_physical": cpu_count,
-            "count_logical": cpu_count_logical,
-            "frequency_current": round(cpu_freq.current, 0) if cpu_freq else None,
-            "frequency_max": round(cpu_freq.max, 0) if cpu_freq and cpu_freq.max else None,
-        },
-        "memory": {
-            "total": memory.total,
-            "available": memory.available,
-            "used": memory.used,
-            "percent": memory.percent,
-        },
-        "swap": {
-            "total": swap.total,
-            "used": swap.used,
-            "percent": swap.percent,
-        },
-        "disk": {
-            "total": disk.total,
-            "used": disk.used,
-            "free": disk.free,
-            "percent": disk.percent,
-        },
-        "network": {
-            "bytes_sent": net_io.bytes_sent,
-            "bytes_recv": net_io.bytes_recv,
-        },
-        "gpus": gpus,
-    }
-
-
 @router.get("/stats")
 async def get_system_stats(
     current_user: Annotated[CurrentUser, Depends(get_current_user)],
 ) -> dict:
-    """Get current system resource usage."""
-    return await asyncio.to_thread(_collect_stats)
+    """Current system resource usage: one snapshot shared by every viewer
+    (app/services/system_stats)."""
+    return await get_sampler().get()
 
 
 def _collect_build_environment() -> dict:

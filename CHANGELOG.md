@@ -23,6 +23,19 @@ follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this proje
   fills as it advances, for every project type (it used to be backend-only). All of them hold still
   when the system asks for reduced motion.
 
+### Changed
+- **Builds share the cores.** A build that leaves CPU jobs on Auto used one compile job per core even
+  when other builds were running, so three builds on a 128-core machine ran 384 compilers. Auto now uses
+  every core for a build that runs alone and an equal share (at least 4) when several run together; the
+  build log says which. A CPU jobs value set on the form is used as before.
+- **Machine load is collected once for everyone.** Each Machine and home page poll collected it from
+  scratch, sleeping 0.2 s and reading a file per core; one open Machine page cost the server about 13x
+  its idle CPU, and each extra viewer as much again. One snapshot is now shared for 1.5 s, the core
+  frequency is re-read every 10 s, and the GPU probe is skipped on machines without nvidia-smi.
+
+### Fixed
+- The Machine page reported the logical core count as the physical one ("128 threads on 128 cores").
+
 ## [1.1.0] — 2026-11-06
 
 ### Changed

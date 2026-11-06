@@ -206,7 +206,7 @@ export default function BackendStep() {
                       <Form.Item
                         name="nuitka_jobs"
                         label={<span style={{ color: 'var(--ink-muted)' }}>CPU parallelism</span>}
-                        tooltip="Number of parallel C-compile jobs. More is faster, but uses more memory."
+                        tooltip="Number of parallel C-compile jobs. More is faster, but uses more memory. Auto uses every core when this build runs alone, and shares them with the other builds running at the same time."
                       >
                         <Select>
                           <Option value={0}>Auto</Option>

@@ -254,7 +254,7 @@ Docker 環境變數除外),回來時還原;**Clear draft** 可以清掉。
 | Nuitka pack mode | **External**(建議):第三方套件放在執行檔旁的 `libs/`,編譯快;**Full**:全部編進執行檔,非常慢 |
 | Single-file binary | 輸出單一執行檔或資料夾 |
 | Dependency group | `[dependency-groups]` 中的一組(例如不同平台的 PyTorch) |
-| CPU jobs | 平行編譯的程序數,0 = 自動。記憶體用量幾乎跟它成正比 |
+| CPU jobs | 平行編譯的程序數。0 = 自動:單獨建置時用全部核心,同時有多個建置時平分核心(每個至少 4)。記憶體用量幾乎跟它成正比 |
 | Include packages | Nuitka 偵測不到的動態 import(例:`litellm, openai`) |
 | Include package data | 套件內建的非 `.py` 資料檔(例:`certifi`) |
 | Output directory | 輸出目錄,相對於專案(預設 `dist`) |
