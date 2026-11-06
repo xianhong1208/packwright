@@ -43,6 +43,13 @@ follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this proje
   fills as it advances, for every project type (it used to be backend-only). All of them hold still
   when the system asks for reduced motion.
 
+- **Compile cache.** With [ccache](https://ccache.dev/) installed on the build host, Nuitka reuses the C
+  files that did not change, and a rebuild can be several times faster (a Full-mode build of a small app:
+  123 s, then 21 s rebuilt from a fresh clone). Packwright now says whether that is happening: the
+  **Machine** page shows the compile cache on or off, how big it is and where it lives, and tells how to
+  turn it on; each build's log and result say how many C files came from the cache. `NUITKA_CACHE_DIR`
+  moves Nuitka's cache, with the ccache store, to another directory.
+
 ### Changed
 - **Users, Roles and Git credentials have a new layout.** The page is called Users again (it was People
   in 1.1.0). Accounts waiting to be let in are listed first, with an Activate button; the list tells a

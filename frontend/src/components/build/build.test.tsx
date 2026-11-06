@@ -36,6 +36,11 @@ describe('BuildResultPanel', () => {
     expect(screen.getByText('Binary exited cleanly')).toBeInTheDocument()
     expect(screen.getByText('SHA-256')).toBeInTheDocument()
   })
+
+  it('says how many C files came from the compile cache', () => {
+    render(<BuildResultPanel result={{ ...base, verify: { status: 'pass', detail: '', exit_code: 0 }, compile_cache: { hits: 80, compiled: 1 } }} />)
+    expect(screen.getByText('Compile cache: reused 80 of 81 C files.')).toBeInTheDocument()
+  })
 })
 
 describe('FailureReport', () => {
