@@ -2,6 +2,7 @@
 
 import ast
 import asyncio
+import contextlib
 import hashlib
 import importlib.util
 import json
@@ -9,6 +10,7 @@ import logging
 import os
 import re
 import shutil
+import signal
 import tempfile
 import site
 import sys
@@ -774,6 +776,16 @@ def _looks_like_gpu_failure(low: str) -> bool:
     )
 
 
+# How long a binary gets to start before it counts as a running service.
+_SMOKE_WINDOW = 10.0
+
+
+def _signal_group(pid: int, sig: int) -> None:
+    """Signal the smoke-tested binary's process group, if anything is left in it."""
+    with contextlib.suppress(ProcessLookupError, PermissionError):
+        os.killpg(pid, sig)
+
+
 async def _smoke_test(
     task_id: str,
     binary: Path,
@@ -804,12 +816,15 @@ async def _smoke_test(
             stderr=asyncio.subprocess.STDOUT,
             cwd=str(cwd),
             env=_build_smoke_env(extra_env),
+            # Its own process group, so stopping it stops what it started: a
+            # onefile binary is a launcher whose child is the real program.
+            start_new_session=True,
         )
     except OSError as e:
         return {"status": "fail", "detail": f"Failed to launch binary: {e}", "exit_code": None}
 
     try:
-        ret = await asyncio.wait_for(proc.wait(), timeout=10)
+        ret = await asyncio.wait_for(proc.wait(), timeout=_SMOKE_WINDOW)
         output = b""
         if proc.stdout:
             try:
@@ -936,17 +951,22 @@ async def _smoke_test(
             "exit_code": ret,
         }
     except asyncio.TimeoutError:
-        proc.terminate()
+        _signal_group(proc.pid, signal.SIGTERM)
         try:
             await asyncio.wait_for(proc.wait(), timeout=5)
         except asyncio.TimeoutError:
-            proc.kill()
+            _signal_group(proc.pid, signal.SIGKILL)
             await proc.wait()
         return {
             "status": "pass",
-            "detail": "Binary still running after 10s (long-running service) — startup OK",
+            "detail": f"Binary still running after {_SMOKE_WINDOW:g}s (long-running service) — startup OK",
             "exit_code": None,
         }
+    finally:
+        # Whatever the binary started goes with it. Stopping only the launcher
+        # left every service built here running on the build host, holding its
+        # port, until someone killed it by hand.
+        _signal_group(proc.pid, signal.SIGKILL)
 
 
 @dataclass
