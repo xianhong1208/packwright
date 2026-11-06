@@ -36,7 +36,7 @@ packages = ["app"]
 [dependency-groups]
 dev = [
     "pytest>=8.0.0",
-    "pytest-asyncio>=0.24.0",
+    "pytest-asyncio>=1.4.1.post1",
     "pytest-mock>=3.14.0",
     "ruff>=0.15.0",
 ]
