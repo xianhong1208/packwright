@@ -23,7 +23,10 @@ cleanup() {
     fi
     docker rm -f "$NAME" >/dev/null 2>&1 || true
     docker volume rm "$VOLUME" >/dev/null 2>&1 || true
-    rm -rf "$WORK"
+    # The builds wrote into the mounted folder as the container's uid 1000;
+    # remove those files as root inside a container, or rm here is refused.
+    docker run --rm --user 0 --entrypoint rm -v "$WORK:/work" "$IMAGE" -rf /work/projects >/dev/null 2>&1 || true
+    rm -rf "$WORK" 2>/dev/null || true
     exit $status
 }
 trap cleanup EXIT
