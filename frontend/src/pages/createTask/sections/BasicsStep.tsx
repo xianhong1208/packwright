@@ -21,6 +21,7 @@ export default function BasicsStep() {
     loadingRefs,
     scanningTree,
     workspaceDir,
+    versionSource,
   } = useCreateTask()
   return (
     <>
@@ -33,6 +34,16 @@ export default function BasicsStep() {
         rules={[{ required: true, message: 'Give the project a name' }]}
       >
         <Input placeholder="my-project" className="input-field" size="large" />
+      </Form.Item>
+
+      <Form.Item
+        name="version"
+        label={<span style={{ color: 'var(--ink-muted)' }}>Version</span>}
+        tooltip="Which version of the project this build is. It names the download, tags the Docker image and is written into a VERSION file. Builds with the same name and source are grouped under one project by version."
+        extra={versionSource ? `Read from ${versionSource}.` : 'Optional, e.g. 1.2.0.'}
+        rules={[{ pattern: /^[A-Za-z0-9][A-Za-z0-9._+-]{0,63}$/, message: 'Letters, digits, . - _ + only, e.g. 1.2.0 or v2.0.0-rc.1' }]}
+      >
+        <Input placeholder="1.2.0" className="input-field" size="large" aria-label="Version" />
       </Form.Item>
 
       <Form.Item

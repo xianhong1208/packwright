@@ -772,6 +772,43 @@ h1, h2, h3, h4, h5 { font-family: var(--font-display); letter-spacing: -0.015em;
 }
 
 /* -------------------------------------------------------------------------
+   Projects (pages/ProjectsPage, ProjectPage, projects/BuildVersionModal).
+   ------------------------------------------------------------------------- */
+.project-latest { flex: none; display: flex; align-items: center; gap: 10px; font-size: 14px; }
+.version-chip {
+  font-family: var(--font-mono); font-size: 12px;
+  padding: 2px 8px; border-radius: 6px;
+  background: var(--color-void-800); color: var(--ink); border: 1px solid var(--seam);
+}
+.version-row + .version-row { border-top: 1px solid var(--seam); }
+.version-label {
+  flex: none; min-width: 96px;
+  font-family: var(--font-mono); font-size: 15px; font-weight: 600; color: var(--ink);
+}
+.version-builds { list-style: none; margin: 0; padding: 0 18px 14px 128px; display: grid; gap: 6px; }
+.version-builds li { display: flex; flex-wrap: wrap; align-items: baseline; gap: 6px 14px; font-size: 14px; }
+.version-builds a { color: var(--color-cyber-400); }
+@media (max-width: 640px) {
+  .version-label { min-width: 0; }
+  .version-builds { padding-left: 18px; }
+}
+.project-defaults { margin: 0; display: grid; gap: 8px; }
+.project-defaults div { display: flex; justify-content: space-between; gap: 12px; font-size: 14px; }
+.project-defaults dt { color: var(--ink-muted); }
+.project-defaults dd { margin: 0; color: var(--ink); text-align: right; overflow-wrap: anywhere; }
+.modal-label { display: block; margin-bottom: 6px; font-size: 14px; color: var(--ink-muted); }
+.modal-help { display: block; margin-top: 6px; font-size: 13px; color: var(--ink-faint); }
+.notice {
+  display: flex; gap: 10px; align-items: flex-start;
+  padding: 10px 12px; border-radius: 10px; font-size: 14px;
+  border: 1px solid color-mix(in srgb, var(--color-signal-400) 40%, transparent);
+  background: color-mix(in srgb, var(--color-signal-400) 10%, transparent);
+  color: var(--ink);
+}
+.notice .pw-icon { color: var(--color-signal-400); margin-top: 2px; }
+.notice a { color: var(--color-cyber-400); }
+
+/* -------------------------------------------------------------------------
    Page heading — the same on every screen (components/layout/PageHeader).
    ------------------------------------------------------------------------- */
 .page-header {
