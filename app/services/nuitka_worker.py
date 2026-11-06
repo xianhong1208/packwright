@@ -9,6 +9,7 @@ import logging
 import os
 import re
 import shutil
+import tempfile
 import site
 import sys
 import time
@@ -995,6 +996,7 @@ def build_nuitka_command(
     lazy_packages: list[str],
     stdlib: StdlibSelection | None,
     installed_packages: list[str],
+    version_file: Path | None = None,
 ) -> NuitkaPlan:
     """The Nuitka command line for a build, and the log lines explaining it.
 
@@ -1141,6 +1143,12 @@ def build_nuitka_command(
                 log.append(f"Including package data: {pkg}")
 
     cmd.append(str(entry_point))
+    # The version, inside the program: it sits next to the main module at run
+    # time (os.path.dirname(__file__)), in one-file and folder builds alike.
+    if version_file is not None:
+        cmd.append(f"--include-data-files={version_file}=VERSION")
+        log.append("Embedding VERSION")
+
     return NuitkaPlan(cmd, report_file, log)
 
 
@@ -1360,6 +1368,11 @@ async def run_nuitka_build(task_id: str, config: BuildConfig, db: AsyncSession) 
                 f"({running} {'build' if running == 1 else 'builds'} running)",
             )
         external = config.pack_mode == PackMode.EXTERNAL
+        # A VERSION file to embed, written outside the project: the source tree is
+        # the user's, and SourceGuard restores what it touches.
+        version_dir = Path(tempfile.mkdtemp(prefix="packwright-version-")) if config.version else None
+        if version_dir is not None:
+            (version_dir / "VERSION").write_text(config.version + "\n", encoding="utf-8")
         plan = build_nuitka_command(
             config,
             nuitka_python=nuitka_python,
@@ -1372,6 +1385,7 @@ async def run_nuitka_build(task_id: str, config: BuildConfig, db: AsyncSession) 
             lazy_packages=detect_lazy_packages(project_path) if config.pack_mode == PackMode.FULL else [],
             stdlib=await select_stdlib(nuitka_python, project_path) if external else None,
             installed_packages=get_installed_packages(project_path / ".venv") if external else [],
+            version_file=version_dir / "VERSION" if version_dir is not None else None,
         )
         for line in plan.log:
             await task_manager.append_log(task_id, line)
@@ -1427,6 +1441,8 @@ async def run_nuitka_build(task_id: str, config: BuildConfig, db: AsyncSession) 
         # the Nuitka process at the top.
         step = await run_step(task_id, nuitka_cmd, cwd=project_path, env=nuitka_env, on_output=consume)
         ret_code = -1 if step.returncode is None else step.returncode
+        if version_dir is not None:
+            shutil.rmtree(version_dir, ignore_errors=True)
 
         # Restore original entry point file
         if guard.active:
@@ -1441,6 +1457,10 @@ async def run_nuitka_build(task_id: str, config: BuildConfig, db: AsyncSession) 
             dist_folder = output_dir / f"{entry_stem}.dist"
 
             await task_manager.set_stage(task_id, "bundle")
+            if config.version:
+                # Beside the output too, for whoever unpacks it.
+                (output_dir / "VERSION").write_text(config.version + "\n", encoding="utf-8")
+                await task_manager.append_log(task_id, f"Wrote VERSION ({config.version})")
 
             # Skip libs copy for FULL mode (all deps are bundled)
             if config.pack_mode == PackMode.FULL:

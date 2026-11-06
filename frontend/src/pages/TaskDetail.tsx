@@ -1,5 +1,5 @@
 import { useState, useEffect, type ReactNode } from 'react'
-import { useParams, useNavigate } from 'react-router-dom'
+import { useParams, useNavigate, Link } from 'react-router-dom'
 import { Progress, Button, Spin, message } from 'antd'
 import { ArrowClockwiseIcon, ArrowLeftIcon, DownloadSimpleIcon, ProhibitIcon } from '../components/ui/icons'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
@@ -165,8 +165,9 @@ export default function TaskDetail() {
               className="text-xl font-semibold"
               style={{ color: 'var(--ink)', fontFamily: 'var(--font-display)' }}
             >
-              {task.project_name}
+              {task.project_id ? <Link to={`/projects/${task.project_id}`} className="hover:underline">{task.project_name}</Link> : task.project_name}
             </h1>
+            {task.config?.version && <span className="version-chip">{task.config.version}</span>}
             <span
               className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-medium"
               style={{ backgroundColor: config.bgColor, color: config.color }}

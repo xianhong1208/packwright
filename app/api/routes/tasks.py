@@ -8,6 +8,7 @@ import os
 import re
 import tarfile
 import threading
+from datetime import datetime
 from pathlib import Path
 from typing import AsyncIterator, Annotated
 
@@ -665,6 +666,21 @@ async def create_task(
 
     request.user_name = current_user.username
 
+    # File the build under its project: the one asked for, or the project with
+    # this name and source (created on its first build).
+    from app.services.projects import file_build
+
+    if request.project_id is not None:
+        from app.models.project import Project
+
+        project = await db.get(Project, request.project_id)
+        if project is None:
+            raise HTTPException(status_code=404, detail="Project not found")
+    else:
+        project = await file_build(db, request.project_name, request.config, current_user.username)
+    request.project_id = project.id
+    request.project_name = project.name
+
     task = await task_manager.create_task(request, db)
 
     # Start build in background
@@ -772,6 +788,18 @@ async def get_task_logs(
     return {"task_id": task_id, "logs": logs}
 
 
+def _download_name(base: str, version: str | None) -> str:
+    """The downloaded archive's name: the output's name and the version it was built
+    as ("shop-1.2.0"), so two versions saved side by side are told apart. A name that
+    already carries the version (an image tagged with it) does not get it twice."""
+    name = re.sub(r"[^a-zA-Z0-9_.-]", "_", base)
+    if version:
+        safe = re.sub(r"[^a-zA-Z0-9_.-]", "_", version)
+        if safe not in name:
+            name = f"{name}-{safe}"
+    return name
+
+
 def _result_summary(raw_result: dict | None) -> BuildResult | None:
     """The part of a build's result a list row shows: output size, smoke test,
     failed stage and the first diagnosis.
@@ -837,6 +865,7 @@ async def get_history(
             output_dir=t.output_dir or "",
             config=_config_for(t.config),
             result=_result_summary(t.result),
+            project_id=t.project_id,
         )
         for t in tasks
     ]
@@ -856,6 +885,48 @@ async def list_history_users(
     literal ``users`` segment would be captured as a task_id.
     """
     return await task_manager.get_history_usernames(db)
+
+
+class SameVersionBuild(_PydBase):
+    """An earlier build of the version about to be built."""
+
+    task_id: str
+    status: TaskStatus
+    user_name: str
+    start_time: datetime
+
+
+@router.get("/history/versions", response_model=list[SameVersionBuild])
+async def builds_of_version(
+    db: DB,
+    current_user: AuthUser,
+    _: None = Depends(require_any_permission(PermissionCode.HISTORY_VIEW_OWN, PermissionCode.HISTORY_VIEW_ALL)),
+    project_name: str = Query(..., min_length=1),
+    version: str = Query(..., min_length=1),
+) -> list[SameVersionBuild]:
+    """Earlier builds of ``project_name`` at ``version``, newest first — New build
+    asks before building a version that already passed. Limited to the caller's
+    own builds unless they may see everyone's, like the history list.
+
+    NOTE: declared before ``/history/{task_id}``, which would capture ``versions``.
+    """
+    from sqlalchemy import select
+
+    from app.models.task import Task
+
+    query = (
+        select(Task)
+        .where(Task.project_name == project_name, Task.version == version.strip())
+        .order_by(Task.start_time.desc())
+        .limit(5)
+    )
+    if not current_user.has_permission(PermissionCode.HISTORY_VIEW_ALL):
+        query = query.where(Task.user_name == current_user.username)
+    rows = (await db.execute(query)).scalars().all()
+    return [
+        SameVersionBuild(task_id=t.task_id, status=TaskStatus(t.status), user_name=t.user_name, start_time=t.start_time)
+        for t in rows
+    ]
 
 
 @router.get("/history/export")
@@ -968,6 +1039,7 @@ async def get_history_item(
         output_dir=task.output_dir or "",
         config=_config_for(task.config),
         result=task.result,
+        project_id=task.project_id,
     )
 
 
@@ -1117,8 +1189,7 @@ def _serve_task_output(task) -> Response:
             raise HTTPException(status_code=404, detail="Docker image export not found")
 
         # Use docker_image_name for download filename, fallback to project name
-        dl_name = task.config.get("docker_image_name", "") or task.project_name
-        dl_name = re.sub(r"[^a-zA-Z0-9_.-]", "_", dl_name)
+        dl_name = _download_name(task.config.get("docker_image_name", "") or task.project_name, task.version)
         return FileResponse(
             path=image_file,
             media_type="application/gzip",
@@ -1142,8 +1213,7 @@ def _serve_task_output(task) -> Response:
     # chunks to the event loop through a small bounded queue (natural backpressure
     # — the worker parks when the queue is full, so we never buffer the whole
     # archive in RAM).
-    dl_name = task.config.get("output_name", "") or task.project_name
-    dl_name = re.sub(r"[^a-zA-Z0-9_.-]", "_", dl_name)
+    dl_name = _download_name(task.config.get("output_name", "") or task.project_name, task.version)
     src_dir = str(output_path)
     arcname = output_dir_name
 

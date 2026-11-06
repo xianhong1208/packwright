@@ -568,6 +568,7 @@ async def scan_tree(
         # Any failure — file absent, fetch error, parse error — degrades to an
         # empty group list rather than failing the whole scan.
         dependency_groups: list[str] = []
+        pyproject_text: str | None = None
         show_cmd = ["git", "show", "HEAD:pyproject.toml"]
         try:
             proc3 = await _spawn(
@@ -581,9 +582,8 @@ async def scan_tree(
                 proc3.communicate(), timeout=timeout
             )
             if proc3.returncode == 0:
-                dependency_groups = parse_dependency_groups(
-                    pyproject_bytes.decode("utf-8", "replace")
-                )
+                pyproject_text = pyproject_bytes.decode("utf-8", "replace")
+                dependency_groups = parse_dependency_groups(pyproject_text)
         except (asyncio.TimeoutError, FileNotFoundError, OSError):
             dependency_groups = []
 
@@ -617,10 +617,32 @@ async def scan_tree(
         except Exception:
             pass
 
+        # The version: the tag itself, pyproject.toml (read above), or package.json,
+        # which is only fetched when neither of the others says.
+        from app.services.project_version import detect_version
+
+        version = detect_version(pyproject_text, None, ref, ref_type)
+        package_json = next((c["path"] for c in checks if c["key"] == "package_json" and c["status"] == "ok"), None)
+        if version is None and package_json:
+            try:
+                proc5 = await _spawn(
+                    "git", "show", f"HEAD:{package_json}",
+                    stdout=asyncio.subprocess.PIPE,
+                    stderr=asyncio.subprocess.PIPE,
+                    env=_git_env(url, token, provider),
+                    cwd=str(target),
+                )
+                pkg_bytes, _ = await asyncio.wait_for(proc5.communicate(), timeout=timeout)
+                if proc5.returncode == 0:
+                    version = detect_version(None, pkg_bytes.decode("utf-8", "replace"))
+            except (asyncio.TimeoutError, FileNotFoundError, OSError):
+                pass
+
         return {
             "directories": sorted(names),
             "analysis": analysis,
             "dependency_groups": dependency_groups,
+            "version": version,
             # The same fingerprints a local path gets from /git/diagnose, so
             # New build can tell a backend from a frontend from a full stack.
             "checks": checks,
@@ -955,4 +977,21 @@ def diagnose_repo(path: Path) -> dict:
     path = Path(path)
     if not path.exists() or not path.is_dir():
         return {"checks": []}
-    return {"checks": check_repo_paths(lambda rel: (path / rel).exists())}
+    checks = check_repo_paths(lambda rel: (path / rel).exists())
+    return {"checks": checks, "version": _local_version(path, checks)}
+
+
+def _local_version(path: Path, checks: list[dict]) -> dict | None:
+    """The project's version from its pyproject.toml or package.json, if they say."""
+    from app.services.project_version import detect_version
+
+    def read(rel: str | None) -> str | None:
+        if not rel:
+            return None
+        try:
+            return (path / rel).read_text(encoding="utf-8")
+        except (OSError, UnicodeDecodeError):
+            return None
+
+    package_json = next((c["path"] for c in checks if c["key"] == "package_json" and c["status"] == "ok"), None)
+    return detect_version(read("pyproject.toml"), read(package_json))

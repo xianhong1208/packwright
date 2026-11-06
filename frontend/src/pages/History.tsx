@@ -176,6 +176,7 @@ export default function History() {
                   <span className="build-status" style={{ color: meta.color }} title={meta.label} aria-label={meta.label}>{meta.icon}</span>
                   <div className="min-w-0 flex-1">
                     <Link to={`/history/${record.task_id}`} className="build-name">{record.project_name}</Link>
+                    {record.config?.version && <span className="version-chip ml-2">{record.config.version}</span>}
                     <div className="build-meta">
                       {type && <span className="inline-flex items-center gap-1">{type.icon}{type.label}</span>}
                       {record.config?.docker_enabled && (

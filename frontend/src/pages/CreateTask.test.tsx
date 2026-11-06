@@ -23,7 +23,8 @@ const api = vi.hoisted(() => ({
   diagnoseRepo: vi.fn(),
   create: vi.fn(),
 }))
-vi.mock('../api/client', () => ({ taskApi: api }))
+const projects = vi.hoisted(() => ({ sameVersion: vi.fn() }))
+vi.mock('../api/client', () => ({ taskApi: api, projectApi: projects }))
 
 import CreateTask from './CreateTask'
 
@@ -82,6 +83,8 @@ beforeEach(() => {
   api.listEnvFiles.mockResolvedValue({ files: [] })
   api.create.mockResolvedValue({ id: 'new-task' })
   api.diagnoseRepo.mockResolvedValue({ checks: [] })
+  projects.sameVersion.mockReset()
+  projects.sameVersion.mockResolvedValue([])
 })
 
 describe('New build wizard', () => {
@@ -325,5 +328,40 @@ describe('Quick build', () => {
 
     const current = screen.getByRole('navigation', { name: 'Build steps' }).querySelector('[aria-current="step"]')
     expect(current?.textContent).toContain('Backend')
+  })
+
+  it('fills in the version the project states, and sends it', async () => {
+    api.diagnoseRepo.mockResolvedValue({ checks: [ok('entry_point', 'main.py')], version: { value: '1.4.0', source: 'pyproject.toml' } })
+    renderWizard()
+    await pointAt('/srv/projects/svc')
+
+    // The field shows at once; the version arrives with the project's fingerprints.
+    await waitFor(() => expect(screen.getByLabelText('Version')).toHaveValue('1.4.0'), { timeout: 3000 })
+    expect(screen.getByText('Read from pyproject.toml.')).toBeInTheDocument()
+    await act(async () => {
+      fireEvent.click(screen.getByRole('button', { name: /Start build/ }))
+    })
+    await waitFor(() => expect(api.create).toHaveBeenCalledTimes(1))
+    expect(api.create.mock.calls[0][0].config.version).toBe('1.4.0')
+  })
+
+  it('asks before building a version that already passed', async () => {
+    api.diagnoseRepo.mockResolvedValue({ checks: [ok('entry_point', 'main.py')], version: { value: '1.4.0', source: 'pyproject.toml' } })
+    projects.sameVersion.mockResolvedValue([{ task_id: 'old', status: 'completed', user_name: 'mei', start_time: '2026-11-05T00:00:00' }])
+    renderWizard()
+    await pointAt('/srv/projects/svc')
+    await waitFor(() => expect(screen.getByLabelText('Version')).toHaveValue('1.4.0'), { timeout: 3000 })
+
+    await act(async () => {
+      fireEvent.click(screen.getByRole('button', { name: /Start build/ }))
+    })
+    // antd's confirm renders the title for display and again for assistive tech.
+    expect((await screen.findAllByText('svc 1.4.0 already passed')).length).toBeGreaterThan(0)
+    expect(api.create).not.toHaveBeenCalled()
+
+    await act(async () => {
+      fireEvent.click(screen.getByRole('button', { name: 'Build again' }))
+    })
+    await waitFor(() => expect(api.create).toHaveBeenCalledTimes(1))
   })
 })

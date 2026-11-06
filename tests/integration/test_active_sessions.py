@@ -16,8 +16,8 @@ def _current_ids(client, access_token: str) -> list[int]:
 
 
 @pytest.mark.integration
-def test_tc_int_041_only_the_callers_own_sign_in_is_current(client):
-    """TC-INT-041: two sign-ins from the same address — each sees only itself as current.
+def test_tc_int_048_only_the_callers_own_sign_in_is_current(client):
+    """TC-INT-048: two sign-ins from the same address — each sees only itself as current.
 
     Matching on IP marked both, so neither could tell which one to keep when
     signing the other out.
@@ -33,8 +33,8 @@ def test_tc_int_041_only_the_callers_own_sign_in_is_current(client):
 
 
 @pytest.mark.integration
-def test_tc_int_042_a_refreshed_token_points_at_the_new_session(client):
-    """TC-INT-042: after rotation the new access token marks the new row, not the revoked one."""
+def test_tc_int_049_a_refreshed_token_points_at_the_new_session(client):
+    """TC-INT-049: after rotation the new access token marks the new row, not the revoked one."""
     tokens = login(client, *ADMIN)
     before = _current_ids(client, tokens["access_token"])
 
