@@ -339,7 +339,7 @@ class BuildConfig(BaseModel):
     nuitka_jobs: int = Field(
         default=0,
         ge=0,
-        description="Number of parallel C compilation jobs for Nuitka (0 = auto, let Nuitka decide)",
+        description="Parallel C compile jobs for Nuitka. 0 = auto: every core when the build runs alone, an equal share of the cores (at least 4) when other builds run at the same time",
     )
 
     # === Nuitka Optimization / Diagnostics ===
