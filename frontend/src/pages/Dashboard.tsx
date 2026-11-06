@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
-import { Button, Empty, message, notification, Spin } from 'antd'
+import { Button, message, notification, Spin } from 'antd'
 import { PlusIcon, WarningIcon } from '../components/ui/icons'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import api, { taskApi } from '../api/client'
@@ -13,6 +13,7 @@ import { STAGE_LABELS } from '../components/build/stages'
 import { benchDays, coreHeat, duration, heatColor, outcomeLine, stageTrack } from './dashboard/bench'
 import { parseUtc } from '../utils/time'
 import PageHeader from '../components/layout/PageHeader'
+import BuildFlow from '../components/build/BuildFlow'
 
 /**
  * On the bench: what is running now and what ran recently, as one timeline,
@@ -83,13 +84,12 @@ export default function Dashboard() {
         {historyLoading && running.length === 0 ? (
           <div className="py-20 text-center"><Spin size="large" /></div>
         ) : days.length === 0 ? (
-          <Empty
-            image={Empty.PRESENTED_IMAGE_SIMPLE}
-            description={<span style={{ color: 'var(--ink-muted)' }}>Nothing has been built yet.</span>}
-            className="py-12"
-          >
-            <Button type="primary" icon={<PlusIcon />} onClick={() => navigate('/create')}>New build</Button>
-          </Empty>
+          <section className="glass-card p-6 sm:p-8" aria-labelledby="first-build">
+            <h2 id="first-build" className="text-[20px] font-bold m-0" style={{ color: 'var(--ink)' }}>Nothing has been built yet</h2>
+            <p className="mt-1 mb-8" style={{ color: 'var(--ink-muted)' }}>This is what happens to your code when you build it.</p>
+            <BuildFlow />
+            <Button type="primary" size="large" className="mt-8" icon={<PlusIcon />} onClick={() => navigate('/create')}>Build something</Button>
+          </section>
         ) : (
           <div className="bench">
             {days.map((day) => (

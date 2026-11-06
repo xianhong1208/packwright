@@ -200,9 +200,26 @@ LOCAL_SOURCE_ROOTS=/srv/projects,/data/builds
 
 ---
 
-## New build 精靈
+## New build
 
-左側工具列或頂端的 **New build**。步驟依專案類型而定:
+左側工具列或頂端的 **New build**。
+
+### 快速建置
+
+一打開就是快速建置:只要填來源(伺服器上的資料夾,或 Git repo 網址加分支),系統會讀專案結構
+(本機用 `/api/git/diagnose`,Git 用 scan-tree 的檔案清單,兩者是同一套判斷):
+
+- 有 Python 進入點(`main.py`、`app/main.py`、`src/main.py`、`run.py`)或 `pyproject.toml` → 後端
+- 有 `package.json`(根目錄或 `frontend/`)→ 前端,前端目錄就是 `package.json` 所在處
+- 兩者都有 → 全端
+
+偵測結果會逐項出現在「What Packwright found」;類型認錯可以當場點選更正,認不出來時必須自己選一次
+才能開始(不會默默用預設值建置)。使用者自己改過的欄位不會被偵測結果覆蓋。按 **All settings** 進入
+完整精靈,已偵測的值都會帶過去;重新建置一律直接開完整精靈。
+
+### 完整精靈
+
+步驟依專案類型而定:
 
 | 專案類型 | 步驟 |
 |---|---|
