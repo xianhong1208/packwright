@@ -10,6 +10,7 @@ import type {
   RepoDiagnosis,
   GitPreviewFrontend,
   ProjectAnalysis,
+  GitScanTree,
 } from './types'
 
 // Token storage utilities (synced with AuthContext)
@@ -238,8 +239,8 @@ export const taskApi = {
     git_url: string,
     git_ref: string,
     git_ref_type: 'branch' | 'tag',
-  ): Promise<{ directories: string[]; dependency_groups: string[]; analysis?: ProjectAnalysis }> => {
-    const response = await api.post<{ directories: string[]; dependency_groups: string[]; analysis?: ProjectAnalysis }>(
+  ): Promise<GitScanTree> => {
+    const response = await api.post<GitScanTree>(
       '/git/scan-tree',
       {
         git_url,

@@ -766,8 +766,8 @@ class TestBuildNuitkaCommand:
         assert not any("missing" in a for a in plan.cmd)
 
     @pytest.mark.unit
-    def test_tc_nui_116_extra_files(self, tmp_path):
-        """TC-NUI-116: a .py file is one module (followed by its dotted name); any other
+    def test_tc_nui_117_extra_files(self, tmp_path):
+        """TC-NUI-117: a .py file is one module (followed by its dotted name); any other
         file is data, never followed and never given to --include-data-dir, which only
         takes directories."""
         (tmp_path / "tools").mkdir()
@@ -825,3 +825,21 @@ class TestBuildNuitkaCommand:
             for seed in ("1", "2", "3", "4")
         }
         assert len(outputs) == 1 and "alpha" in outputs.pop()
+
+
+@pytest.mark.unit
+@pytest.mark.parametrize(
+    ("cores", "running", "expected"),
+    [
+        (128, 1, 128),  # alone: every core, as before
+        (128, 2, 64),
+        (128, 3, 42),   # three together: 126 jobs, not 384
+        (8, 3, 4),      # never below the floor...
+        (2, 3, 2),      # ...unless the machine has fewer cores than that
+        (128, 0, 128),  # counted before the slot registers
+    ],
+)
+def test_tc_nui_118_auto_jobs_share_the_cores(cores, running, expected):
+    """TC-NUI-118: a build that did not set CPU jobs gets its share of the cores
+    among the builds running, not one job per core each."""
+    assert nuitka_worker.auto_jobs(cores, running) == expected

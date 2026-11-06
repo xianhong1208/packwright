@@ -200,9 +200,30 @@ LOCAL_SOURCE_ROOTS=/srv/projects,/data/builds
 
 ---
 
-## New build 精靈
+## New build
 
-左側工具列或頂端的 **New build**。步驟依專案類型而定:
+左側工具列或頂端的 **New build**。
+
+### 快速建置
+
+一打開就是快速建置:只要填來源(伺服器上的資料夾,或 Git repo 網址加分支),系統會讀專案結構
+(本機用 `/api/git/diagnose`,Git 用 scan-tree 的檔案清單,兩者是同一套判斷):
+
+- 有 Python 進入點(`main.py`、`app/main.py`、`src/main.py`、`run.py`)或 `pyproject.toml` → 後端
+- 有 `package.json`(根目錄或 `frontend/`)→ 前端,前端目錄就是 `package.json` 所在處
+- 兩者都有 → 全端
+
+偵測結果會逐項出現在「What Packwright found」;類型認錯可以當場點選更正,認不出來時必須自己選一次
+才能開始(不會默默用預設值建置)。使用者自己改過的欄位不會被偵測結果覆蓋。
+
+**Settings** 區塊:打包方式、單一檔案或資料夾、試跑、Docker image 可以當場改;其餘設定列出目前的值,
+**Change** 會開完整精靈並停在那個設定所在的步驟。來源讀不到(不在 `LOCAL_SOURCE_ROOTS`、不存在、Git
+存取失敗)時直接顯示伺服器給的原因,不會被當成「認不出專案」。按 **All settings** 進入
+完整精靈,已偵測的值都會帶過去;重新建置一律直接開完整精靈。
+
+### 完整精靈
+
+步驟依專案類型而定:
 
 | 專案類型 | 步驟 |
 |---|---|
@@ -233,7 +254,7 @@ Docker 環境變數除外),回來時還原;**Clear draft** 可以清掉。
 | Nuitka pack mode | **External**(建議):第三方套件放在執行檔旁的 `libs/`,編譯快;**Full**:全部編進執行檔,非常慢 |
 | Single-file binary | 輸出單一執行檔或資料夾 |
 | Dependency group | `[dependency-groups]` 中的一組(例如不同平台的 PyTorch) |
-| CPU jobs | 平行編譯的程序數,0 = 自動。記憶體用量幾乎跟它成正比 |
+| CPU jobs | 平行編譯的程序數。0 = 自動:單獨建置時用全部核心,同時有多個建置時平分核心(每個至少 4)。記憶體用量幾乎跟它成正比 |
 | Include packages | Nuitka 偵測不到的動態 import(例:`litellm, openai`) |
 | Include package data | 套件內建的非 `.py` 資料檔(例:`certifi`) |
 | Output directory | 輸出目錄,相對於專案(預設 `dist`) |
