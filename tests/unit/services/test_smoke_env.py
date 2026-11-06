@@ -171,8 +171,6 @@ class TestSmokeTestCleansUp:
     @pytest.mark.asyncio
     async def test_tc_smk_018_a_long_running_service_is_stopped_with_its_children(self, tmp_path, mocker):
         """TC-SMK-018: the launcher and the program it started are both gone afterwards."""
-        import os
-
         from app.services import nuitka_worker
 
         mocker.patch.object(nuitka_worker, "_build_smoke_env", return_value={"PATH": "/usr/bin:/bin"})
@@ -190,5 +188,25 @@ class TestSmokeTestCleansUp:
 
         assert result["status"] == "pass" and "still running" in result["detail"]
         pid = int(child_pid.read_text())
-        with pytest.raises(ProcessLookupError):
-            os.kill(pid, 0)  # the program the launcher started is gone too
+        assert _stopped_within(pid, seconds=3), "the program the launcher started is still running"
+
+
+def _stopped_within(pid: int, seconds: float) -> bool:
+    """Whether a process has stopped: gone, or dead and waiting to be reaped.
+
+    A killed child whose parent died too is a zombie until init reaps it; in a CI
+    container that can take a while, and os.kill(pid, 0) still finds it there.
+    """
+    import time
+    from pathlib import Path
+
+    deadline = time.monotonic() + seconds
+    while time.monotonic() < deadline:
+        try:
+            state = Path(f"/proc/{pid}/stat").read_text().rsplit(")", 1)[1].split()[0]
+        except (FileNotFoundError, ProcessLookupError):
+            return True
+        if state == "Z":
+            return True
+        time.sleep(0.05)
+    return False
