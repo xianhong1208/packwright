@@ -110,14 +110,18 @@ export function useCreateTaskModel(options: ModelOptions = {}) {
   // per-version Nuitka venvs) — falls back to a static list until loaded
   const [pythonVersions, setPythonVersions] = useState<string[]>(['3.14', '3.13', '3.12'])
 
-  // Watch form values for conditional rendering
-  const projectType = Form.useWatch('project_type', form) as ProjectType
-  const pythonVersion = Form.useWatch('python_version', form) as string
-  const entryPoint = Form.useWatch('entry_point', form) as string
-  const dockerEnabled = Form.useWatch('docker_enabled', form) as boolean
-  const sourceType = Form.useWatch('source_type', form) as SourceType | undefined
-  const gitUrl = Form.useWatch('git_url', form) as string | undefined
-  const gitRef = Form.useWatch('git_ref', form) as string | undefined
+  // Watch form values for conditional rendering. preserve: Quick build mounts a
+  // field only once it has something to show (project_type appears after the
+  // project is read), and without it useWatch reports an unmounted field as
+  // undefined: for one render the page said "Could not tell from the files"
+  // and hid the backend settings of a project it had just recognised.
+  const projectType = Form.useWatch('project_type', { form, preserve: true }) as ProjectType
+  const pythonVersion = Form.useWatch('python_version', { form, preserve: true }) as string
+  const entryPoint = Form.useWatch('entry_point', { form, preserve: true }) as string
+  const dockerEnabled = Form.useWatch('docker_enabled', { form, preserve: true }) as boolean
+  const sourceType = Form.useWatch('source_type', { form, preserve: true }) as SourceType | undefined
+  const gitUrl = Form.useWatch('git_url', { form, preserve: true }) as string | undefined
+  const gitRef = Form.useWatch('git_ref', { form, preserve: true }) as string | undefined
 
   // A mismatch worth warning about needs BOTH a confident detection and an
   // explicit choice that contradicts it. "auto" is never a mismatch — it is
@@ -130,8 +134,8 @@ export function useCreateTaskModel(options: ModelOptions = {}) {
     () => findPythonMismatch(analysis?.detected_python, pythonVersion),
     [analysis, pythonVersion],
   )
-  const gitRefType = Form.useWatch('git_ref_type', form) as 'branch' | 'tag' | undefined
-  const frontendDirWatch = Form.useWatch('frontend_dir', form) as string | undefined
+  const gitRefType = Form.useWatch('git_ref_type', { form, preserve: true }) as 'branch' | 'tag' | undefined
+  const frontendDirWatch = Form.useWatch('frontend_dir', { form, preserve: true }) as string | undefined
 
   // Git refs state
   const [gitRefs, setGitRefs] = useState<GitRefs>({ branches: [], tags: [] })
@@ -456,7 +460,7 @@ export function useCreateTaskModel(options: ModelOptions = {}) {
     }
   }, [form])
 
-  const projectPath = Form.useWatch('project_path', form)
+  const projectPath = Form.useWatch('project_path', { form, preserve: true })
 
   useEffect(() => {
     // Local-mode only: auto-scan the server path

@@ -60,6 +60,10 @@ follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this proje
   frequency is re-read every 10 s, and the GPU probe is skipped on machines without nvidia-smi.
 
 ### Fixed
+- Quick build showed a project it had just recognised as "Could not tell from the files", without its
+  backend settings, for one render after reading it: the page watched the project type, which is only on
+  screen once the project is read, in a way that reports an absent field as empty. It also made a
+  frontend test fail now and then on a busy machine.
 - A rebuild's frontend build tool, command and output directory were replaced by whatever detection found
   as soon as the form opened. Detection now fills only fields nobody set on a new build, and offers its
   values next to the fields of a stored config.
