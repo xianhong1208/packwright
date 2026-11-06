@@ -35,6 +35,20 @@
 
 ## 建立任務(New build)
 
+**New build** 一打開是**快速建置**:選「A folder on this server」或「A Git repository」,填路徑或網址,
+系統會讀專案,把找到的東西逐項列在「What Packwright found」:是後端、前端還是全端、從哪個檔案啟動、
+前端在哪個目錄、怎麼建置。看起來對就按 **Start build**;類型認錯可以直接點選更正,認不出來時會請你選。
+建置名稱預設是資料夾或 repo 的名字。
+
+下面的 **Settings** 已經選好常用值,最常改的四個可以當場調整:打包方式(External 快、Full 全部包進去但很慢)、
+單一檔案或資料夾、建置後試跑、要不要另外包成 Docker image。其他設定會列出目前使用的值,按 **Change**
+直接跳到完整精靈的那一步。如果路徑不在伺服器允許的範圍,會直接顯示原因。
+
+要調更多設定(Docker、打包模式、要一起打包的目錄……)就按 **All settings**,會進入下面的完整精靈,
+快速建置已經偵測到的值都會帶過去。重新建置(Rebuild)一律直接開完整精靈。
+
+### 完整精靈(All settings)
+
 跟著精靈走,每一步上方都有提示。**不確定的欄位保持預設、直接下一步就好。** 步驟會隨專案類型變化:後端是 Basics → Backend → Docker → Review,前端是 Basics → Frontend → Docker → Review,全端五步都有。
 
 ### ① 基本資訊(唯一必填頁)

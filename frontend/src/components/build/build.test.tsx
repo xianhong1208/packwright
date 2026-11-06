@@ -3,6 +3,7 @@ import { render, screen, fireEvent } from '@testing-library/react'
 import type { BuildResult } from '../../api/types'
 import BuildResultPanel from './BuildResultPanel'
 import FailureReport from './FailureReport'
+import { trackFor } from './stages'
 
 const base: BuildResult = {
   preflight: [],
@@ -70,5 +71,29 @@ describe('FailureReport', () => {
 
     rerender(<FailureReport result={base} logs={['compiling', 'Error: from live log']} />)
     expect(screen.getByText('Error: from live log')).toBeInTheDocument()
+  })
+})
+
+describe('trackFor', () => {
+  const track = (on: number) =>
+    ['preflight', 'compile', 'bundle', 'verify'].map((key, i) => ({
+      key, label: key, state: (i < on ? 'done' : i === on ? 'on' : 'todo') as 'done' | 'on' | 'todo',
+    }))
+  const states = (t: { state: string }[]) => t.map((s) => s.state)
+
+  it('leaves a running build as it is', () => {
+    expect(states(trackFor(track(1), 'running'))).toEqual(['done', 'on', 'todo', 'todo'])
+  })
+  it('marks every stage of a passed build done, though "done" is not on the track', () => {
+    expect(states(trackFor(track(-1), 'completed'))).toEqual(['done', 'done', 'done', 'done'])
+  })
+  it('fails a failed build at the stage it was in', () => {
+    expect(states(trackFor(track(2), 'failed'))).toEqual(['done', 'done', 'failed', 'todo'])
+  })
+  it('falls back to the stored failed stage once the live one is gone', () => {
+    expect(states(trackFor(track(-1), 'failed', 'compile'))).toEqual(['done', 'failed', 'todo', 'todo'])
+  })
+  it('stops a cancelled build where it was', () => {
+    expect(states(trackFor(track(1), 'cancelled'))).toEqual(['done', 'stopped', 'todo', 'todo'])
   })
 })

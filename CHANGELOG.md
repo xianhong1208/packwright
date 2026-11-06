@@ -6,6 +6,23 @@ follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this proje
 
 ## [Unreleased]
 
+### Added
+- **Quick build.** New build now opens on one screen that needs only a source: a folder on the server or
+  a Git repository and branch. Packwright reads the project (a Python entry point or pyproject.toml, a
+  package.json and where it is) and shows what it found row by row: backend, frontend or full stack, the
+  entry point, the frontend directory and build command, the Python version and dependency groups. A
+  wrong type is corrected in place; an unrecognised project has to be given one before it can start.
+  The settings people change most (packing, one file or a folder, the start-up check, a Docker image)
+  are changed in place, and every other one is listed with the value it will use and a *Change* link to
+  its step in the full wizard. *All settings* opens that wizard with everything already found filled
+  in; rebuilds go straight there. A source the server may not read says why. Git scans now return the
+  same fingerprints a local path gets.
+- **Animations that explain.** A first build is preceded by a short animation of what happens to the
+  code (on an empty home page and on Quick build before a source is given); found settings pop in as
+  they are read; and a running build shows a stage track whose current stage pulses and whose rail
+  fills as it advances, for every project type (it used to be backend-only). All of them hold still
+  when the system asks for reduced motion.
+
 ### Changed
 - **Users, Roles and Git credentials have a new layout.** The page is called Users again (it was People
   in 1.1.0). Accounts waiting to be let in are listed first, with an Activate button; the list tells a
@@ -13,6 +30,17 @@ follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this proje
   a count each, and changes a role in place. Roles are cards that group their permissions by category
   and say who inherits what and how many users have the role. Git credentials are cards that say which
   clones use them and when they were last used.
+- **Builds share the cores.** A build that leaves CPU jobs on Auto used one compile job per core even
+  when other builds were running, so three builds on a 128-core machine ran 384 compilers. Auto now uses
+  every core for a build that runs alone and an equal share (at least 4) when several run together; the
+  build log says which. A CPU jobs value set on the form is used as before.
+- **Machine load is collected once for everyone.** Each Machine and home page poll collected it from
+  scratch, sleeping 0.2 s and reading a file per core; one open Machine page cost the server about 13x
+  its idle CPU, and each extra viewer as much again. One snapshot is now shared for 1.5 s, the core
+  frequency is re-read every 10 s, and the GPU probe is skipped on machines without nvidia-smi.
+
+### Fixed
+- The Machine page reported the logical core count as the physical one ("128 threads on 128 cores").
 
 ## [1.1.0] — 2026-11-06
 

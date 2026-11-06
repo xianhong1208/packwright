@@ -1,6 +1,6 @@
 import { useState, useEffect, type ReactNode } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
-import { Progress, Button, Spin, message, Steps } from 'antd'
+import { Progress, Button, Spin, message } from 'antd'
 import { ArrowClockwiseIcon, ArrowLeftIcon, DownloadSimpleIcon, ProhibitIcon } from '../components/ui/icons'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import LogViewer from '../components/LogViewer'
@@ -15,20 +15,9 @@ import { getErrorDetail, isNotFound } from '../utils/errors'
 import { binaryName } from '../utils/buildConfig'
 import { PROJECT_TYPE_META } from '../utils/projectTypeMeta'
 import { parseUtc, timeAgo } from '../utils/time'
-
-// ── Build-stage stepper (set by nuitka_worker: preflight→compile→bundle→verify→done) ──
-const STAGE_ORDER = ['queued', 'preflight', 'compile', 'bundle', 'verify', 'done'] as const
-const STAGE_ITEMS = [
-  { title: 'Queued', description: 'Waiting for a build slot' },
-  { title: 'Preflight', description: 'Checking the environment' },
-  { title: 'Compile', description: 'Nuitka compiling' },
-  { title: 'Bundle', description: 'Copying dependencies and data' },
-  { title: 'Verify', description: 'Smoke-testing the binary' },
-]
-const stageIndex = (stage: string) => {
-  const i = STAGE_ORDER.indexOf(stage as (typeof STAGE_ORDER)[number])
-  return i < 0 ? 0 : i
-}
+import StageTrack from '../components/build/StageTrack'
+import { trackFor } from '../components/build/stages'
+import { stageTrack } from './dashboard/bench'
 
 // Human-readable duration for a seconds count.
 const fmtDuration = (secs: number): string =>
@@ -267,15 +256,10 @@ export default function TaskDetail() {
         </div>
       </div>
 
-      {/* Build stage stepper — backend / fullstack only */}
-      {hasBackend && task.stage && (
-        <div className="glass-card p-4 mb-6">
-          <Steps
-            size="small"
-            current={stageIndex(task.stage)}
-            status={task.status === 'failed' || task.status === 'cancelled' ? 'error' : undefined}
-            items={STAGE_ITEMS}
-          />
+      {/* Where the build is — every project type, live as the stage changes */}
+      {task.config && (
+        <div className="glass-card p-5 mb-6">
+          <StageTrack items={trackFor(stageTrack(task), task.status, result?.failed_stage)} />
         </div>
       )}
 
