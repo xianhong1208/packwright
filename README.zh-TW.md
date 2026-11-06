@@ -19,6 +19,21 @@ Packwright 在 v1.0.0 以前名為 *Build Center*。存在於既有資料中的�
 
 ## 安裝
 
+### 用 Docker
+
+image 裡已經有建置需要的一切:Python 3.12 到 3.14 的 Nuitka 工具鏈、ccache、Node.js(npm,yarn 與 pnpm 透過 corepack)、git 與 docker CLI。
+
+```bash
+git clone https://github.com/xianhong1208/packwright.git
+cd packwright
+docker compose up -d
+docker compose logs packwright | grep "bootstrap admin"   # 第一次登入的密碼
+```
+
+打開 `http://localhost:5018`,以 **`admin`** 登入。Packwright 保存的一切(資料庫、自動產生的金鑰、工作區、產出、編譯快取)都在 `packwright-data` volume 裡,所以 `git pull` 後 `docker compose up -d --build` 就能升級,不會遺失資料。建置在容器裡以 uid 1000 執行。`docker-compose.yml` 裡有說明怎麼讓建置讀取主機上的資料夾,以及(在信任所有帳號時)讓 Docker 輸出使用主機的 Docker。
+
+### 從原始碼
+
 **環境需求:** Python 3.13+、[uv](https://docs.astral.sh/uv/)、Node.js 22.12+(建置管理台與前端建置用),以及各引擎所需的 Nuitka 工具鏈(C 編譯器)與 Docker(Docker 輸出用)。資料庫預設用本機 SQLite 檔(免設定);PostgreSQL 為選用(設 `DATABASE_URL`)。`pigz` 選用,可加速 image 壓縮。[ccache](https://ccache.dev/) 選用但強烈建議:裝了之後 Nuitka 會重用沒變的 C 檔,重建可以快好幾倍(**Machine** 頁會顯示有沒有啟用)。
 
 ```bash

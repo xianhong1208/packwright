@@ -84,6 +84,26 @@ cp .env.example .env                      # 選用;全部用預設值可以不�
 
 ## 啟動與部署
 
+### 用 Docker
+
+```bash
+docker compose up -d                                       # 建 image 並在背景啟動
+docker compose logs packwright | grep "bootstrap admin"     # 第一次登入的密碼
+```
+
+- **資料都在 `/data`**(compose 裡的 `packwright-data` volume):資料庫、第一次啟動產生的金鑰
+  (`/data/.env`)、工作區、產出、匯出的 image、編譯快取。刪掉容器重建不會遺失任何東西;
+  刪掉 volume 才會。
+- **建置以 uid 1000(`packwright`)執行。** 掛進來的主機資料夾要讓 uid 1000 可寫,否則容器會
+  在啟動時直接說明。
+- **本機資料夾來源**:把資料夾掛進容器(例如 `/srv/projects:/srv/projects`),再設
+  `LOCAL_SOURCE_ROOTS=/srv/projects`。專案的 `.venv` 要是在容器裡建的
+  (`docker compose exec packwright uv venv --python 3.13 /srv/projects/<專案>/.venv`),
+  主機上建的 venv 指向主機的 Python,容器裡用不了。Git 來源不受影響,會自動在容器裡建 venv。
+- **Docker 輸出**要把主機的 `/var/run/docker.sock` 掛進來,並用 `group_add` 加入 socket 的 GID。
+  這等於讓**每個能建置的帳號都能控制主機的 Docker(也就是主機的 root)**,只在信任所有帳號時才開。
+- 升級:`git pull` 後 `docker compose up -d --build`。
+
 ### 直接啟動
 
 ```bash

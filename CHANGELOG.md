@@ -50,6 +50,12 @@ follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this proje
   turn it on; each build's log and result say how many C files came from the cache. `NUITKA_CACHE_DIR`
   moves Nuitka's cache, with the ccache store, to another directory.
 
+- **Docker image.** `docker compose up -d` runs Packwright with everything its builds need: the Nuitka
+  toolchain for Python 3.12 to 3.14, ccache, Node.js with npm, yarn and pnpm, git and the docker CLI.
+  Everything it keeps is in one volume, so recreating the container keeps the database, the generated
+  secrets (nobody is signed out), the builds and the compile cache. Builds run as an unprivileged user.
+  CI builds the image and runs two real builds in it on every change.
+
 ### Changed
 - **Users, Roles and Git credentials have a new layout.** The page is called Users again (it was People
   in 1.1.0). Accounts waiting to be let in are listed first, with an Activate button; the list tells a
