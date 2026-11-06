@@ -158,3 +158,37 @@ class TestTheBinaryCanStillStart:
 
         assert env["PACKWRIGHT_SMOKE_TEST"] == "1"
         assert env["BUILD_CENTER_SMOKE_TEST"] == "1"
+
+
+class TestSmokeTestCleansUp:
+    """A service that is still running after the smoke test's window passes, and is
+    stopped. A Nuitka onefile binary is a small launcher that starts the real
+    program as its child; only the launcher was stopped, so every build of a
+    service left the program running on the build host, holding its port (the
+    next build of MCP Gate then failed with "port already in use")."""
+
+    @pytest.mark.unit
+    @pytest.mark.asyncio
+    async def test_tc_smk_018_a_long_running_service_is_stopped_with_its_children(self, tmp_path, mocker):
+        """TC-SMK-018: the launcher and the program it started are both gone afterwards."""
+        import os
+
+        from app.services import nuitka_worker
+
+        mocker.patch.object(nuitka_worker, "_build_smoke_env", return_value={"PATH": "/usr/bin:/bin"})
+        mocker.patch.object(nuitka_worker, "_SMOKE_WINDOW", 1.0)
+        child_pid = tmp_path / "child.pid"
+        binary = tmp_path / "launcher"
+        # Like a onefile launcher: start the real program, then wait on it.
+        binary.write_text(f"#!/bin/sh\n/bin/sleep 300 &\necho $! > {child_pid}\nwait\n")
+        binary.chmod(0o755)
+
+        import asyncio
+
+        # Bounded: when the launcher alone is stopped, waiting on it can hang.
+        result = await asyncio.wait_for(nuitka_worker._smoke_test("t", binary, tmp_path), timeout=15)
+
+        assert result["status"] == "pass" and "still running" in result["detail"]
+        pid = int(child_pid.read_text())
+        with pytest.raises(ProcessLookupError):
+            os.kill(pid, 0)  # the program the launcher started is gone too
