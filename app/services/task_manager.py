@@ -82,6 +82,7 @@ class TaskManager:
             "config": request.config,
             "logs": [],
             "process": None,
+            "project_id": request.project_id,
         }
 
         async with self._lock:
@@ -93,9 +94,14 @@ class TaskManager:
             user_name=request.user_name,
             project_name=request.project_name,
             python_version=request.config.python_version,
+            # Set here rather than by the database: SQLite's CURRENT_TIMESTAMP keeps
+            # whole seconds, so two builds started in one second had no order.
+            start_time=now,
             status=TaskStatus.PENDING.value,
             output_dir=request.config.output_dir,
             config=request.config.model_dump(),
+            version=request.config.version or None,
+            project_id=request.project_id,
         )
         db.add(db_task)
         await db.commit()
@@ -382,6 +388,7 @@ class TaskManager:
             config=task_data["config"],
             logs=task_data["logs"],
             result=task_data.get("result"),
+            project_id=task_data.get("project_id"),
         )
 
     async def set_stage(self, task_id: str, stage: str) -> None:

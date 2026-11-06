@@ -9,6 +9,7 @@ from app.models.refresh_token import RefreshToken
 from app.models.password_reset import PasswordResetToken
 from app.models.audit_log import AuditLog
 from app.models.git_credential import GitCredential
+from app.models.project import Project
 
 __all__ = [
     "Task",
@@ -21,4 +22,5 @@ __all__ = [
     "PasswordResetToken",
     "AuditLog",
     "GitCredential",
+    "Project",
 ]

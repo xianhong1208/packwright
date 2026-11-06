@@ -706,7 +706,7 @@ class TestBuildNuitkaCommand:
     """
 
     @staticmethod
-    def _plan(tmp_path, stdlib=None, installed=(), lazy=(), debug=False, jobs=8, **overrides):
+    def _plan(tmp_path, stdlib=None, installed=(), lazy=(), debug=False, jobs=8, version_file=None, **overrides):
         from app.schemas.task import BuildConfig
         from app.services.nuitka_worker import build_nuitka_command
 
@@ -715,6 +715,7 @@ class TestBuildNuitkaCommand:
             config, nuitka_python="/py", project_path=tmp_path, output_dir=tmp_path / "dist",
             entry_point=tmp_path / "main.py", output_name="app", jobs=jobs, debug=debug,
             lazy_packages=list(lazy), stdlib=stdlib, installed_packages=list(installed),
+            version_file=version_file,
         )
 
     @staticmethod
@@ -764,6 +765,16 @@ class TestBuildNuitkaCommand:
         assert ["--follow-import-to=pkg", "--include-package=pkg"] == plan.cmd[plan.cmd.index("--follow-import-to=pkg"):][:2]
         assert "--nofollow-import-to=pkg" not in plan.cmd and "--nofollow-import-to=rich" in plan.cmd
         assert not any("missing" in a for a in plan.cmd)
+
+    @pytest.mark.unit
+    def test_tc_nui_119_version_file_is_embedded(self, tmp_path):
+        """TC-NUI-119: a build with a version carries a VERSION file inside the program;
+        one without carries none."""
+        version = tmp_path / "v" / "VERSION"
+        with_version = self._plan(tmp_path, stdlib=self._stdlib(), version_file=version)
+        without = self._plan(tmp_path, stdlib=self._stdlib())
+        assert f"--include-data-files={version}=VERSION" in with_version.cmd
+        assert not any("=VERSION" in a for a in without.cmd)
 
     @pytest.mark.unit
     def test_tc_nui_117_extra_files(self, tmp_path):

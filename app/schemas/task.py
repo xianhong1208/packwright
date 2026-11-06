@@ -8,6 +8,8 @@ from typing import Any, Literal
 
 from pydantic import BaseModel, Field, field_validator, model_validator
 
+_VERSION_RE = re.compile(r"[A-Za-z0-9][A-Za-z0-9._+-]{0,63}")
+
 
 class TaskStatus(str, Enum):
     """Task status enumeration."""
@@ -100,6 +102,10 @@ class BuildConfig(BaseModel):
             if not self.git_ref.strip():
                 raise ValueError("git_ref is required when source_type is git")
         return self
+
+    # The version being built (1.2.0, v2.0.0-rc.1). Read from the project when
+    # possible; groups a project's builds and is stamped into the output.
+    version: str = Field(default="", max_length=64, description="Version of the project being built")
     output_dir: str = Field(
         default="dist",
         description="Output directory name (relative to project)",
@@ -176,6 +182,19 @@ class BuildConfig(BaseModel):
         max_length=10000,
         description="Content for env file to write before frontend build",
     )
+
+    @field_validator("version")
+    @classmethod
+    def validate_version(cls, v: str) -> str:
+        """A version is stamped into a file name, a Docker tag and a VERSION file,
+        so it is kept to the characters all three accept."""
+        v = (v or "").strip()
+        if v and not _VERSION_RE.fullmatch(v):
+            raise ValueError(
+                "Version may use letters, digits, '.', '-', '_' and '+', start with a letter "
+                "or digit, and be at most 64 characters (e.g. 1.2.0, v2.0.0-rc.1)"
+            )
+        return v
 
     @field_validator("frontend_build_command")
     @classmethod
@@ -370,6 +389,9 @@ class TaskCreate(BaseModel):
         description="Display name for the project",
     )
     config: BuildConfig
+    # The project this is a version of; without one, the build is filed under the
+    # project with its name and source (created if there is none).
+    project_id: int | None = None
     user_name: str | None = Field(default=None, exclude=True)
 
 
@@ -475,6 +497,7 @@ class TaskResponse(BaseModel):
     config: BuildConfig
     logs: list[str] = Field(default_factory=list)
     result: BuildResult | None = None
+    project_id: int | None = None
 
 
 class HistoryItem(BaseModel):
@@ -490,6 +513,7 @@ class HistoryItem(BaseModel):
     output_dir: str
     config: BuildConfig | None = None
     result: BuildResult | None = None
+    project_id: int | None = None
 
 
 class WebSocketMessage(BaseModel):

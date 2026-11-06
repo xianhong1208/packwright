@@ -271,6 +271,9 @@ async def _run_frontend_build(
         await task_manager.append_log(task_id, f"Warning: Build output not found at {output_path}")
     else:
         # Count files in output
+        if config.version:
+            # Served with the site (/VERSION), so a deployed frontend says which build it is.
+            (output_path / "VERSION").write_text(config.version + "\n", encoding="utf-8")
         file_count = sum(1 for _ in output_path.rglob("*") if _.is_file())
         await task_manager.append_log(task_id, f"Build output: {output_path} ({file_count} files)")
 
