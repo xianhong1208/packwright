@@ -27,7 +27,7 @@ const MAIN_NAV: NavItem[] = [
   { path: '/monitor', label: 'Machine', Icon: GaugeIcon },
 ]
 const ADMIN_NAV: NavItem[] = [
-  { path: '/admin/users', label: 'People', Icon: UsersIcon, permission: ['user:view'], match: (p) => p.startsWith('/admin/users') },
+  { path: '/admin/users', label: 'Users', Icon: UsersIcon, permission: ['user:view'], match: (p) => p.startsWith('/admin/users') },
   { path: '/admin/roles', label: 'Roles', Icon: ShieldCheckIcon, permission: ['role:view'] },
   { path: '/settings/git-credentials', label: 'Git credentials', Icon: KeyIcon, permission: ['user:manage'] },
 ]
