@@ -88,6 +88,20 @@ def _write_stored_lock_hash(fe_path: Path, digest: str) -> None:
         pass
 
 
+
+def install_command(tool: FrontendBuildTool, has_package_lock: bool) -> list[str]:
+    """How dependencies are installed: from the lock file where the tool has one."""
+    if tool == FrontendBuildTool.NPM:
+        return ["npm", "ci", "--legacy-peer-deps"] if has_package_lock else ["npm", "install"]
+    if tool in (FrontendBuildTool.YARN, FrontendBuildTool.PNPM, FrontendBuildTool.BUN):
+        return [tool.value, "install", "--frozen-lockfile"]
+    return [tool.value, "install"]
+
+
+def build_command(tool: FrontendBuildTool, script: str) -> list[str]:
+    """How the frontend is built: the package.json script, run by its tool."""
+    return [tool.value, "run", script]
+
 async def run_frontend_build(
     task_id: str,
     config: BuildConfig,
@@ -207,18 +221,7 @@ async def _run_frontend_build(
     await task_manager.update_task(task_id, "status_msg", "Installing dependencies...")
     await task_manager.update_task(task_id, "progress", 10)
 
-    if tool == FrontendBuildTool.NPM:
-        install_cmd = [tool_cmd, "ci", "--legacy-peer-deps"]
-        if not (fe_path / "package-lock.json").exists():
-            install_cmd = [tool_cmd, "install"]
-    elif tool == FrontendBuildTool.YARN:
-        install_cmd = [tool_cmd, "install", "--frozen-lockfile"]
-    elif tool == FrontendBuildTool.PNPM:
-        install_cmd = [tool_cmd, "install", "--frozen-lockfile"]
-    elif tool == FrontendBuildTool.BUN:
-        install_cmd = [tool_cmd, "install", "--frozen-lockfile"]
-    else:
-        install_cmd = [tool_cmd, "install"]
+    install_cmd = install_command(tool, (fe_path / "package-lock.json").exists())
 
     # Lockfile-hash skip: if the lockfile hasn't changed since the last
     # successful install and node_modules is still present, reinstalling is a
@@ -255,7 +258,7 @@ async def _run_frontend_build(
     await task_manager.append_log(task_id, "=== Building frontend ===")
     await task_manager.update_task(task_id, "status_msg", "Building frontend...")
 
-    build_cmd = [tool_cmd, "run", config.frontend_build_command]
+    build_cmd = build_command(tool, config.frontend_build_command)
     await task_manager.append_log(task_id, f"Command: {' '.join(build_cmd)}")
 
     success = await _run_command(task_id, build_cmd, fe_path)

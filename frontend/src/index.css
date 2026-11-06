@@ -796,6 +796,26 @@ h1, h2, h3, h4, h5 { font-family: var(--font-display); letter-spacing: -0.015em;
 .project-defaults div { display: flex; justify-content: space-between; gap: 12px; font-size: 14px; }
 .project-defaults dt { color: var(--ink-muted); }
 .project-defaults dd { margin: 0; color: var(--ink); text-align: right; overflow-wrap: anywhere; }
+.detected-hint { display: inline-block; margin-top: 4px; font-size: 13px; color: var(--color-signal-400); }
+.detected-hint[data-match] { color: var(--ink-faint); }
+.detected-hint code { font-family: var(--font-mono); font-size: 12px; padding: 0 5px; border-radius: 4px; background: var(--color-void-800); color: var(--ink); }
+.detected-hint button { border: 0; background: none; padding: 0; margin-left: 4px; cursor: pointer; font: inherit; color: var(--color-cyber-400); }
+.detected-hint button:hover { color: var(--color-cyber-300); }
+.settings-bar {
+  position: sticky; bottom: 0; z-index: 10;
+  display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 12px;
+  margin-top: 8px; padding: 14px 0;
+  border-top: 1px solid var(--seam); background: var(--color-void-950);
+}
+.command-steps { list-style: none; margin: 0; padding: 0; display: grid; gap: 14px; }
+.command-stage { font-size: 13px; color: var(--ink-muted); margin-bottom: 4px; }
+.command-line {
+  margin: 0; padding: 10px 12px; border-radius: 8px;
+  background: var(--color-void-950); border: 1px solid var(--seam);
+  font-family: var(--font-mono); font-size: 12.5px; line-height: 1.6; color: var(--ink);
+  white-space: pre-wrap; word-break: break-all;
+}
+.command-notes { margin: 14px 0 0; padding-left: 18px; color: var(--ink-faint); font-size: 13px; display: grid; gap: 4px; }
 .modal-label { display: block; margin-bottom: 6px; font-size: 14px; color: var(--ink-muted); }
 .modal-help { display: block; margin-top: 6px; font-size: 13px; color: var(--ink-faint); }
 .notice {

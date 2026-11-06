@@ -154,6 +154,19 @@ describe('New build wizard', () => {
     })
   })
 
+  it('rebuild keeps the stored frontend build command when detection says otherwise', async () => {
+    api.detectFrontendConfig.mockResolvedValue({ detected: true, build_tool: 'npm', build_command: 'build', output_dir: 'dist' })
+    renderWizard(rebuildOf({ project_type: 'frontend_only', frontend_dir: '.', frontend_build_tool: 'pnpm', frontend_build_command: 'build:prod' }))
+    await waitFor(() => expect(api.detectFrontendConfig).toHaveBeenCalled(), { timeout: 3000 })
+
+    const start = await goToReview()
+    await act(async () => {
+      fireEvent.click(start)
+    })
+    await waitFor(() => expect(api.create).toHaveBeenCalledTimes(1))
+    expect(api.create.mock.calls[0][0].config).toMatchObject({ frontend_build_tool: 'pnpm', frontend_build_command: 'build:prod' })
+  })
+
   it('keeps a draft of the form and restores it on the next visit', async () => {
     const first = renderWizard()
     await openAllSettings()

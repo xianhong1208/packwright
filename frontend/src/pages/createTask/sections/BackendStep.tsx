@@ -3,6 +3,7 @@ import { ArrowsClockwiseIcon, CodeIcon, FolderIcon, GearIcon, WarningIcon } from
 
 import { useCreateTask } from '../context'
 import { SectionHeader } from '../ui'
+import DetectedHint from './DetectedHint'
 import { depGroupHint, depGroupPlaceholder } from '../depGroups'
 
 const { Option } = Select
@@ -106,6 +107,7 @@ export default function BackendStep() {
             <Col xs={24} md={8}>
               <Form.Item
                 name="entry_point"
+                extra={<DetectedHint field="entry_point" />}
                 label={<span style={{ color: 'var(--ink-muted)' }}>Entry point</span>}
                 tooltip="The main Python file to compile, relative to the project path."
                 validateTrigger={['onBlur', 'onChange']}

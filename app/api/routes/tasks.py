@@ -646,6 +646,18 @@ async def git_scan_tree(
     return result
 
 
+@router.post("/tasks/preview-commands")
+async def preview_build_commands(
+    config: BuildConfig,
+    current_user: AuthUser,
+    _: None = Depends(require_permission(PermissionCode.TASK_CREATE)),
+) -> dict:
+    """The commands a build with this config would run (app/services/command_preview)."""
+    from app.services.command_preview import preview_commands
+
+    return preview_commands(config)
+
+
 @router.post("/tasks", response_model=TaskResponse, status_code=201)
 async def create_task(
     request: TaskCreate,

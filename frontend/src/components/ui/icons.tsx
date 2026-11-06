@@ -28,6 +28,7 @@ import {
   DeviceTabletIcon as DeviceTablet,
   DownloadSimpleIcon as DownloadSimple,
   FileZipIcon as FileZip,
+  FloppyDiskIcon as FloppyDisk,
   FolderIcon as Folder,
   GaugeIcon as Gauge,
   GearIcon as Gear,
@@ -113,6 +114,7 @@ export const DeviceMobileIcon = wrap(DeviceMobile, 'DeviceMobileIcon')
 export const DeviceTabletIcon = wrap(DeviceTablet, 'DeviceTabletIcon')
 export const DownloadSimpleIcon = wrap(DownloadSimple, 'DownloadSimpleIcon')
 export const FileZipIcon = wrap(FileZip, 'FileZipIcon')
+export const FloppyDiskIcon = wrap(FloppyDisk, 'FloppyDiskIcon')
 export const FolderIcon = wrap(Folder, 'FolderIcon')
 export const GaugeIcon = wrap(Gauge, 'GaugeIcon')
 export const GearIcon = wrap(Gear, 'GearIcon')
