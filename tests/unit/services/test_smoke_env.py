@@ -158,3 +158,106 @@ class TestTheBinaryCanStillStart:
 
         assert env["PACKWRIGHT_SMOKE_TEST"] == "1"
         assert env["BUILD_CENTER_SMOKE_TEST"] == "1"
+
+
+class TestGpuFailureIsNotGuessed:
+    """A start-up failure is excused as "no GPU on the build host" only when the
+    output is about a GPU. "failed to initialize" alone matched MCP Gate's
+    "Failed to initialize database: Auto migration failed", and a program that
+    could not start was reported as a warning on a completed build."""
+
+    @pytest.mark.unit
+    @pytest.mark.parametrize("line", [
+        "RuntimeError: No CUDA-capable device is detected",
+        "hipErrorNoDevice: HIP error: no ROCm-capable device is detected",
+        "pynvml.NVMLError: Failed to initialize NVML: Driver/library version mismatch",
+        "RuntimeError: Failed to initialize the GPU backend",
+        "ImportError: libcuda.so.1: cannot open shared object file",
+    ])
+    def test_tc_smk_015_gpu_initialisation_failures_are_recognised(self, line):
+        """TC-SMK-015: what torch, ROCm and NVML print without a GPU still counts."""
+        from app.services.nuitka_worker import _looks_like_gpu_failure
+
+        assert _looks_like_gpu_failure(line.lower())
+
+    @pytest.mark.unit
+    @pytest.mark.parametrize("line", [
+        "ERROR | main:main:324 - Failed to initialize database: Auto migration failed",
+        "Failed to initialize logging: permission denied",
+        "Traceback ...\nModuleNotFoundError: No module named 'hipster'",
+    ])
+    def test_tc_smk_016_other_initialisation_failures_are_not(self, line):
+        """TC-SMK-016: a failure that names no GPU is a failure."""
+        from app.services.nuitka_worker import _looks_like_gpu_failure
+
+        assert not _looks_like_gpu_failure(line.lower())
+
+    @pytest.mark.unit
+    @pytest.mark.asyncio
+    async def test_tc_smk_017_a_program_that_cannot_start_fails_the_check(self, tmp_path, mocker):
+        """TC-SMK-017: end to end, MCP Gate's start-up failure fails the smoke test."""
+        from app.services import nuitka_worker
+
+        mocker.patch.object(nuitka_worker, "_build_smoke_env", return_value={"PATH": "/usr/bin:/bin"})
+        binary = tmp_path / "app"
+        binary.write_text(
+            "#!/bin/sh\n"
+            "echo '2026-11-06 16:40:24 | ERROR | main:main:324 - Failed to initialize database: Auto migration failed'\n"
+            "exit 1\n"
+        )
+        binary.chmod(0o755)
+        result = await nuitka_worker._smoke_test("t", binary, tmp_path)
+        assert result["status"] == "fail"
+        assert "Failed to initialize database" in result["detail"]
+
+
+class TestSmokeTestCleansUp:
+    """A service that is still running after the smoke test's window passes, and is
+    stopped. A Nuitka onefile binary is a small launcher that starts the real
+    program as its child; only the launcher was stopped, so every build of a
+    service left the program running on the build host, holding its port (the
+    next build of MCP Gate then failed with "port already in use")."""
+
+    @pytest.mark.unit
+    @pytest.mark.asyncio
+    async def test_tc_smk_018_a_long_running_service_is_stopped_with_its_children(self, tmp_path, mocker):
+        """TC-SMK-018: the launcher and the program it started are both gone afterwards."""
+        from app.services import nuitka_worker
+
+        mocker.patch.object(nuitka_worker, "_build_smoke_env", return_value={"PATH": "/usr/bin:/bin"})
+        mocker.patch.object(nuitka_worker, "_SMOKE_WINDOW", 1.0)
+        child_pid = tmp_path / "child.pid"
+        binary = tmp_path / "launcher"
+        # Like a onefile launcher: start the real program, then wait on it.
+        binary.write_text(f"#!/bin/sh\n/bin/sleep 300 &\necho $! > {child_pid}\nwait\n")
+        binary.chmod(0o755)
+
+        import asyncio
+
+        # Bounded: when the launcher alone is stopped, waiting on it can hang.
+        result = await asyncio.wait_for(nuitka_worker._smoke_test("t", binary, tmp_path), timeout=15)
+
+        assert result["status"] == "pass" and "still running" in result["detail"]
+        pid = int(child_pid.read_text())
+        assert _stopped_within(pid, seconds=3), "the program the launcher started is still running"
+
+
+def _stopped_within(pid: int, seconds: float) -> bool:
+    """Whether a process has stopped: gone, or dead and waiting to be reaped.
+
+    A killed child whose parent died too is a zombie until init reaps it; in a CI
+    container that can take a while, and os.kill(pid, 0) still finds it there.
+    """
+    import time
+    from pathlib import Path
+
+    deadline = time.monotonic() + seconds
+    while time.monotonic() < deadline:
+        try:
+            state = Path(f"/proc/{pid}/stat").read_text().rsplit(")", 1)[1].split()[0]
+        except (FileNotFoundError, ProcessLookupError):
+            return True
+        if state == "Z":
+            return True
+        time.sleep(0.05)
+    return False
