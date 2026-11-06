@@ -749,6 +749,31 @@ def _build_smoke_env(extra_env: dict[str, str] | None) -> dict[str, str]:
     return env
 
 
+# What torch, ROCm, CUDA and NVML print when there is no GPU to start on.
+_GPU_HINTS = (
+    "rocm_sdk", "_rocm_init", "rocminfo", "libamdhip", "hip error",
+    "cuda error", "cudaerror", "no cuda-capable device", "libcuda",
+    "no hip", "torch/cuda",
+)
+# Words that make a generic "failed to initialize" line about a GPU.
+_GPU_WORDS = ("cuda", "hip", "rocm", "nvml", "gpu", "accelerator")
+
+
+def _looks_like_gpu_failure(low: str) -> bool:
+    """Whether a binary's (lower-cased) output says it stopped for want of a GPU.
+
+    "failed to initialize" counts only on a line that also names a GPU: on its
+    own it matched "Failed to initialize database", and a program that could not
+    start was excused as an environment problem and its build marked completed.
+    """
+    if any(h in low for h in _GPU_HINTS):
+        return True
+    return any(
+        "failed to initialize" in line and any(re.search(rf"\b{w}\b", line) for w in _GPU_WORDS)
+        for line in low.splitlines()
+    )
+
+
 async def _smoke_test(
     task_id: str,
     binary: Path,
@@ -821,12 +846,7 @@ async def _smoke_test(
         # a torch/ROCm/CUDA program can't initialize here even when the binary is
         # fine — same idea as the port case. Treat as a warning and tell the user
         # to verify on the target GPU machine, rather than failing the build.
-        gpu_hints = (
-            "rocm_sdk", "_rocm_init", "rocminfo", "libamdhip", "hip error",
-            "cuda error", "cudaerror", "no cuda-capable device", "libcuda",
-            "no hip", "failed to initialize", "torch/cuda",
-        )
-        if any(h in low for h in gpu_hints):
+        if _looks_like_gpu_failure(low):
             return {
                 "status": "warn",
                 "detail": (
