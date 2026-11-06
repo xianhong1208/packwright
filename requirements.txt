@@ -6,7 +6,7 @@ websockets>=17.4
 # Database
 sqlalchemy[asyncio]>=2.1.6
 asyncpg>=0.29.0
-psycopg2-binary>=2.9.9
+psycopg2-binary>=2.9.13
 
 # Configuration
 pydantic>=2.14.2
