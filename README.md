@@ -20,7 +20,7 @@ Packwright was called *Build Center* up to v1.0.0. Names that live in existing d
 
 ## Install
 
-**Prerequisites:** Python 3.13+, [uv](https://docs.astral.sh/uv/), Node.js 22.12+ (to build the console, and for frontend builds), and — for the engines they drive — Nuitka's toolchain (a C compiler) and Docker (for Docker output). The database is a local SQLite file by default (no setup); PostgreSQL is optional (set `DATABASE_URL`). `pigz` is optional and speeds up image compression.
+**Prerequisites:** Python 3.13+, [uv](https://docs.astral.sh/uv/), Node.js 22.12+ (to build the console, and for frontend builds), and — for the engines they drive — Nuitka's toolchain (a C compiler) and Docker (for Docker output). The database is a local SQLite file by default (no setup); PostgreSQL is optional (set `DATABASE_URL`). `pigz` is optional and speeds up image compression. [ccache](https://ccache.dev/) is optional and strongly recommended: with it, Nuitka reuses the C files that did not change, so a rebuild can be several times faster (the **Machine** page says whether it is on).
 
 ```bash
 git clone https://github.com/xianhong1208/packwright.git
@@ -73,6 +73,7 @@ Everything is environment-driven, and nothing is required. `.env.example` lists 
 | `CORS_ORIGINS` | dev ports | CSV of browser origins allowed to call the API. |
 | `GIT_WORKSPACE_DIR` | `./data/workspace` | Where clones and build workspaces live (and where non-Docker outputs are downloaded from). |
 | `DOCKER_IMAGES_DIR` | `./data/docker_images` | Where exported Docker images (`.tar.gz`) are written. |
+| `NUITKA_CACHE_DIR` | *(empty → `~/.cache/Nuitka`)* | Nuitka's cache, including the ccache store that makes rebuilds faster. |
 | `LOCAL_SOURCE_ROOTS` | *(empty)* | CSV of absolute prefixes a local-source build may read; empty disables local mode. |
 | `UV_BIN` / `PRE_BUILD_PATH` | auto | uv binary and subprocess PATH; auto-detected when empty. |
 | `MAX_CONCURRENT_BUILDS` | `3` | Simultaneous builds; the rest wait in the queue. |

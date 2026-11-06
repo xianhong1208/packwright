@@ -20,7 +20,7 @@ Packwright 在 v1.0.0 以前名為 *Build Center*。存在於既有資料中的�
 
 ## 安裝
 
-**環境需求:** Python 3.13+、[uv](https://docs.astral.sh/uv/)、Node.js 22.12+(建置管理台與前端建置用),以及各引擎所需的 Nuitka 工具鏈(C 編譯器)與 Docker(Docker 輸出用)。資料庫預設用本機 SQLite 檔(免設定);PostgreSQL 為選用(設 `DATABASE_URL`)。`pigz` 選用,可加速 image 壓縮。
+**環境需求:** Python 3.13+、[uv](https://docs.astral.sh/uv/)、Node.js 22.12+(建置管理台與前端建置用),以及各引擎所需的 Nuitka 工具鏈(C 編譯器)與 Docker(Docker 輸出用)。資料庫預設用本機 SQLite 檔(免設定);PostgreSQL 為選用(設 `DATABASE_URL`)。`pigz` 選用,可加速 image 壓縮。[ccache](https://ccache.dev/) 選用但強烈建議:裝了之後 Nuitka 會重用沒變的 C 檔,重建可以快好幾倍(**Machine** 頁會顯示有沒有啟用)。
 
 ```bash
 git clone https://github.com/xianhong1208/packwright.git
@@ -73,6 +73,7 @@ uv run python main.py         # 先套用 migration,再於 http://0.0.0.0:5018 �
 | `CORS_ORIGINS` | 開發埠 | 允許呼叫 API 的瀏覽器來源(CSV)。 |
 | `GIT_WORKSPACE_DIR` | `./data/workspace` | clone 與建置工作區位置(非 Docker 產物也從這裡下載)。 |
 | `DOCKER_IMAGES_DIR` | `./data/docker_images` | 匯出的 Docker image(`.tar.gz`)寫入位置。 |
+| `NUITKA_CACHE_DIR` | *(空 → `~/.cache/Nuitka`)* | Nuitka 的快取,包含讓重建變快的 ccache 儲存區。 |
 | `LOCAL_SOURCE_ROOTS` | *(空)* | 本機來源可讀取的絕對路徑前綴(CSV);留空則停用本機模式。 |
 | `UV_BIN` / `PRE_BUILD_PATH` | 自動 | uv 路徑與 subprocess PATH;留空自動偵測。 |
 | `MAX_CONCURRENT_BUILDS` | `3` | 同時進行的建置數,其餘排隊。 |
