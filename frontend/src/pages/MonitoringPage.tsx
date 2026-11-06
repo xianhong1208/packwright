@@ -5,17 +5,12 @@ import { ArrowUpIcon, ArrowsClockwiseIcon, WarningCircleIcon } from '../componen
 import api from '../api/client'
 import { getErrorDetail } from '../utils/errors'
 import type { SystemStats } from '../api/types'
+import { formatBytes } from '../utils/bytes'
+import CompileCache from './machine/CompileCache'
 import { advanceSamples, EMPTY_SAMPLES, type Samples } from './monitoringSamples'
 import { heatColor } from './dashboard/bench'
 import PageHeader from '../components/layout/PageHeader'
 
-const formatBytes = (bytes: number): string => {
-  if (bytes <= 0) return '0 B'
-  const k = 1024
-  const sizes = ['B', 'KB', 'MB', 'GB', 'TB']
-  const i = Math.min(sizes.length - 1, Math.floor(Math.log(bytes) / Math.log(k)))
-  return `${(bytes / Math.pow(k, i)).toFixed(i === 0 ? 0 : 1)} ${sizes[i]}`
-}
 
 const meterColor = (pct: number): string =>
   pct >= 90 ? 'var(--color-alert-400)' : pct >= 75 ? 'var(--color-signal-400)' : 'var(--ink-muted)'
@@ -132,6 +127,8 @@ export default function MonitoringPage() {
           ))}
         </div>
       </section>
+
+      <CompileCache />
 
       {stats.gpus.length > 0 && (
         <section className="glass-card p-5" aria-label="GPUs">

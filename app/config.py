@@ -163,6 +163,13 @@ class Settings(BaseSettings):
     # copying package bytes. Leave empty to use the default user cache.
     bootstrap_uv_cache_dir: str = ""
 
+    # === Compile cache ===
+    # Nuitka's cache directory (NUITKA_CACHE_DIR), which holds the ccache store
+    # that lets a rebuild reuse unchanged C files. Empty (the default) leaves
+    # Nuitka's own choice: ~/.cache/Nuitka of the user running the service.
+    # Set it when that home is not persistent (a container) or too small.
+    nuitka_cache_dir: str = ""
+
     # === Notifications ===
     # The address people open Packwright at (e.g. https://packwright.example.com).
     # Build notifications link to the build's page with it; empty sends them

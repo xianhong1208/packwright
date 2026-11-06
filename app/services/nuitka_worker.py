@@ -25,6 +25,7 @@ from app.schemas.task import BuildConfig, PackMode
 from app.services.source_guard import SourceGuard
 from app.services.task_manager import task_manager
 from app.services.process_runner import run_step
+from app.services import compile_cache
 
 settings = get_settings()
 logger = logging.getLogger(__name__)
@@ -1117,11 +1118,22 @@ def build_nuitka_command(
             f"Skipped {len(skipped)} invalid module names (not dotted identifiers; left out of nofollow): "
             + ", ".join(sorted(skipped)[:10])
         )
+    nofollowed = False
     for pkg in blacklist:
         if not _MODULE_NAME_RE.fullmatch(pkg):
             continue
         cmd.append(f"--nofollow-import-to={pkg}")
         cmd.append(f"--nofollow-import-to={pkg}.*")
+        nofollowed = True
+    if nofollowed:
+        # Nuitka 4 compiles a loader into the program that raises ImportError
+        # ("actively excluded from Nuitka compilation") for every module it was
+        # told not to follow, and it sits on sys.meta_path ahead of the libs/
+        # directory External mode puts on sys.path. Left on, every External
+        # build of a project with a dependency compiled and then failed on its
+        # first import. libs/ is where those modules are meant to come from.
+        cmd.append("--no-deployment-flag=excluded-module-usage")
+        log.append("Excluded packages load from libs/ (excluded-module-usage guard off)")
 
     # Optimization / diagnostics options
     if not config.enable_anti_bloat:
@@ -1400,7 +1412,14 @@ async def run_nuitka_build(task_id: str, config: BuildConfig, db: AsyncSession) 
         await task_manager.append_log(task_id, f"Command: {' '.join(nuitka_cmd)}")
 
         # Build environment for Nuitka process
-        nuitka_env = {**os.environ, "TERM": "xterm-256color"}
+        nuitka_env = compile_cache.build_environment(os.environ, settings.nuitka_cache_dir)
+        nuitka_env["TERM"] = "xterm-256color"
+        ccache = compile_cache.ccache_binary(nuitka_env)
+        if ccache:
+            await task_manager.append_log(
+                task_id,
+                f"C compile cache: ccache ({ccache}), store in {compile_cache.ccache_dir(nuitka_env)}",
+            )
 
         # For FULL mode, add project's .venv/site-packages to PYTHONPATH
         # so Nuitka can discover and bundle all project dependencies
@@ -1417,12 +1436,16 @@ async def run_nuitka_build(task_id: str, config: BuildConfig, db: AsyncSession) 
                     await task_manager.append_log(task_id, f"Added to PYTHONPATH: {extra_path}")
 
         current_progress = 0.0
+        # Nuitka's own ccache summary, read back into the build result.
+        cache_lines: list[str] = []
 
         async def consume(lines: list[str], frame: str | None) -> None:
             nonlocal current_progress
             status_msg = ""
             for text in lines:
                 await task_manager.append_log(task_id, text)
+                if "Cached C files" in text:
+                    cache_lines.append(text)
                 current_progress, status_msg = parse_nuitka_progress(text, current_progress, status_msg)
             if frame:  # an in-place progress bar: drives progress, never logged
                 current_progress, status_msg = parse_nuitka_progress(frame, current_progress, status_msg)
@@ -1442,6 +1465,11 @@ async def run_nuitka_build(task_id: str, config: BuildConfig, db: AsyncSession) 
         # the Nuitka process at the top.
         step = await run_step(task_id, nuitka_cmd, cwd=project_path, env=nuitka_env, on_output=consume)
         ret_code = -1 if step.returncode is None else step.returncode
+        cache_summary = compile_cache.parse_build_summary(cache_lines)
+        if cache_summary is not None:
+            build_result["compile_cache"] = cache_summary
+        if ret_code == 0:
+            await task_manager.append_log(task_id, compile_cache.describe_summary(cache_summary, ccache, nuitka_env))
         if version_dir is not None:
             shutil.rmtree(version_dir, ignore_errors=True)
 

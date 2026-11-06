@@ -58,6 +58,26 @@ configured.
 | `FINISHED_TASK_RETENTION_MINUTES` | `60` | Minutes a finished (completed, failed or cancelled) task stays in the in-memory live-task list, with its log buffer, before it is evicted. Build history in the database is not affected; this only bounds memory use. |
 | `MAX_CONCURRENT_BUILDS` | `3` | How many builds run at the same time. Further submissions wait in the queue ("Queued — waiting for build slot") until a slot frees. Each build can saturate several CPU cores, so size this to the machine. |
 
+## Compile cache
+
+Nuitka compiles every module it includes into C and runs the C compiler on each file. When
+[ccache](https://ccache.dev/) is installed on the build host, Nuitka routes the compiler through
+it on its own and a rebuild only compiles the files that changed: a Full-mode build of a small
+Starlette app took 123 s the first time and 21 s when rebuilt from a fresh clone, reusing 80 of
+its 81 C files. Install it with the system package manager (`apt install ccache`,
+`dnf install ccache`); the next build picks it up without a restart. The **Machine** page shows
+whether it is on, how big the store is and where it lives, and each build's log and result say
+how many C files came from it.
+
+| Variable | Default | Description |
+|---|---|---|
+| `NUITKA_CACHE_DIR` | *(empty)* | Nuitka's cache directory, which holds the ccache store (`<dir>/ccache`). Empty leaves Nuitka's default, `~/.cache/Nuitka` of the user running the service. Set it when that home is not persistent (a container) or too small. |
+
+ccache caps its store at 5 GiB by default and evicts the oldest files itself. Change the cap with
+`CCACHE_MAXSIZE` in the service's environment (e.g. `CCACHE_MAXSIZE=20G`), or clear the store with
+`CCACHE_DIR=<dir>/ccache ccache -C`. `NUITKA_CCACHE_BINARY` points Nuitka at a ccache that is not
+on `PATH`.
+
 ## Notifications
 
 A project's settings have a **Notifications** tab: Discord and Slack incoming webhooks, or any URL

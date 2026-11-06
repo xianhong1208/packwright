@@ -54,6 +54,7 @@ Packwright 把專案打包成可以直接交付的東西:
 | [uv](https://docs.astral.sh/uv/) | 管理後端依賴與各 Python 版本 |
 | Node.js | 22.12 以上(建置管理台;前端專案的建置也需要) |
 | C 編譯器 | Nuitka 需要(Linux 上一般是 gcc) |
+| ccache | 選用但強烈建議:Nuitka 會用它重用沒變的 C 檔,重建快好幾倍(`apt install ccache`,不必重啟服務) |
 | Docker | 選用,輸出 Docker image 時才需要 |
 | pigz | 選用,多執行緒壓縮 Docker 匯出 |
 | PostgreSQL | 選用;預設用 SQLite,不需要任何資料庫設定 |
@@ -645,6 +646,7 @@ gunzip -c packwright-<時間>.sql.gz | psql -h HOST -U USER -d DBNAME    # Postg
 | PATCH / DELETE | `/api/projects/{id}/notifications/{nid}` | 建立者或 `project:manage` | 修改或移除通知對象 |
 | POST | `/api/projects/{id}/notifications/{nid}/test` | 建立者或 `project:manage` | 送出測試訊息 |
 | GET | `/api/monitoring/stats` | 登入 | CPU、記憶體、磁碟與編譯環境狀態 |
+| GET | `/api/monitoring/compile-cache` | 登入 | 編譯快取(ccache)是否啟用、大小與位置 |
 | GET | `/api/monitoring/build-stats` | `history:view_own / history:view_all` | 首頁的建置統計 |
 | GET | `/health` | 公開 | 健康檢查與版本 |
 | WS | `/ws/tasks` | `task:view_all` | 所有建置的即時串流 |
