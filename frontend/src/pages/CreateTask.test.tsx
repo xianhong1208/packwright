@@ -28,11 +28,6 @@ vi.mock('../api/client', () => ({ taskApi: api, projectApi: projects }))
 
 import CreateTask from './CreateTask'
 
-// These tests wait on the page's real 500 ms detection debounce and allow
-// findBy* up to 3-5 s, so the default 5 s per test was tighter than the waits
-// inside it: a busy machine failed them on time alone.
-vi.setConfig({ testTimeout: 15_000 })
-
 function renderWizard(state?: unknown) {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false }, mutations: { retry: false } } })
   return render(
