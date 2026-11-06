@@ -3,14 +3,12 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import {
   App as AntApp,
   Button,
-  Empty,
   Form,
   Input,
   Modal,
   Popconfirm,
   Select,
-  Space,
-  Table,
+  Spin,
   Tag,
   Tooltip,
   Typography,
@@ -22,7 +20,7 @@ import {
   type GitCredential,
   type GitProvider,
 } from '../../api/gitCredentialsApi'
-import { parseUtc } from '../../utils/time'
+import { parseUtc, timeAgo } from '../../utils/time'
 
 const { Text } = Typography
 
@@ -120,59 +118,6 @@ export default function GitCredentialsPage() {
     }
   }
 
-  const columns = [
-    {
-      title: 'Provider',
-      dataIndex: 'provider',
-      key: 'provider',
-      render: (p: GitProvider) => <span className="inline-flex items-center gap-2">{PROVIDER_META[p].icon}{PROVIDER_META[p].label}</span>,
-    },
-    { title: 'Host', dataIndex: 'host', key: 'host', render: (h: string) => <Text code>{h}</Text> },
-    {
-      title: 'Label',
-      dataIndex: 'label',
-      key: 'label',
-      render: (l: string | null) => l || <Text type="secondary">—</Text>,
-    },
-    {
-      title: 'Token',
-      dataIndex: 'token_hint',
-      key: 'token_hint',
-      render: (hint: string | null) => (
-        <Text type="secondary">••••{hint ?? ''}</Text>
-      ),
-    },
-    {
-      title: 'Last used',
-      dataIndex: 'last_used_at',
-      key: 'last_used_at',
-      render: (v: string | null) =>
-        v ? parseUtc(v).toLocaleString() : <Text type="secondary">Never</Text>,
-    },
-    {
-      title: '',
-      key: 'actions',
-      width: 120,
-      render: (_: unknown, cred: GitCredential) => (
-        <Space size="small">
-          <Tooltip title="Edit">
-            <Button type="text" size="small" icon={<PencilSimpleIcon />} onClick={() => openEdit(cred)} />
-          </Tooltip>
-          <Popconfirm
-            title="Delete this credential?"
-            description="Builds cloning private repos from this host will fail to authenticate."
-            okText="Delete"
-            okButtonProps={{ danger: true, loading: deleteMutation.isPending }}
-            cancelText="Cancel"
-            onConfirm={() => deleteMutation.mutate(cred.id)}
-          >
-            <Button type="text" size="small" danger icon={<TrashIcon />} aria-label="Delete" />
-          </Popconfirm>
-        </Space>
-      ),
-    },
-  ]
-
   return (
     <div className="max-w-5xl">
       <PageHeader
@@ -185,22 +130,60 @@ export default function GitCredentialsPage() {
         }
       />
 
-      <Table
-        scroll={{ x: 760 }}
-        rowKey="id"
-        loading={isLoading}
-        columns={columns}
-        dataSource={credentials}
-        pagination={false}
-        locale={{ emptyText: (
-          <Empty
-            image={Empty.PRESENTED_IMAGE_SIMPLE}
-            description={<span style={{ color: 'var(--ink-muted)' }}>No credentials yet. Public repositories don't need one.</span>}
-          >
-            <Button icon={<PlusIcon />} onClick={openCreate}>Add credential</Button>
-          </Empty>
-        ) }}
-      />
+      {isLoading ? (
+        <div className="py-16 text-center"><Spin /></div>
+      ) : credentials.length === 0 ? (
+        <section className="glass-card p-6 sm:p-8" aria-labelledby="no-creds">
+          <h2 id="no-creds" className="text-[17px] font-semibold m-0" style={{ color: 'var(--ink)' }}>No credentials yet</h2>
+          <p className="mt-1 mb-5 text-sm" style={{ color: 'var(--ink-muted)', maxWidth: '62ch' }}>
+            Public repositories don't need one. For a private repository, add an access token for its host
+            (github.com, gitlab.com or your own server), and every build that clones from that host uses it.
+          </p>
+          <Button type="primary" icon={<PlusIcon />} onClick={openCreate}>Add credential</Button>
+        </section>
+      ) : (
+        <ul className="cred-list" aria-label="Git credentials">
+          {credentials.map((cred) => {
+            const meta = PROVIDER_META[cred.provider]
+            return (
+              <li key={cred.id} className="cred-card">
+                <span className="cred-mark" aria-hidden="true">{meta.icon}</span>
+                <div className="min-w-0 flex-1">
+                  <div className="build-name truncate">{cred.label || cred.host}</div>
+                  <div className="build-meta">
+                    <span>{meta.label}</span>
+                    <code>{cred.host}</code>
+                    <span>token ••••{cred.token_hint ?? ''}</span>
+                    <span>
+                      {cred.last_used_at
+                        ? <Tooltip title={parseUtc(cred.last_used_at).toLocaleString()}><span>used {timeAgo(cred.last_used_at)}</span></Tooltip>
+                        : 'not used yet'}
+                    </span>
+                  </div>
+                  <p className="cred-use">Used by builds that clone from <code>https://{cred.host}/…</code></p>
+                </div>
+                <div className="flex gap-1.5 flex-none">
+                  <Tooltip title="Edit">
+                    <Button aria-label={`Edit ${cred.label || cred.host}`} icon={<PencilSimpleIcon />} onClick={() => openEdit(cred)} />
+                  </Tooltip>
+                  <Popconfirm
+                    title="Delete this credential?"
+                    description="Builds cloning private repositories from this host will fail to sign in."
+                    okText="Delete"
+                    okButtonProps={{ danger: true, loading: deleteMutation.isPending }}
+                    cancelText="Cancel"
+                    onConfirm={() => deleteMutation.mutate(cred.id)}
+                  >
+                    <Tooltip title="Delete">
+                      <Button aria-label={`Delete ${cred.label || cred.host}`} danger icon={<TrashIcon />} />
+                    </Tooltip>
+                  </Popconfirm>
+                </div>
+              </li>
+            )
+          })}
+        </ul>
+      )}
 
       <Modal
         title={editing ? 'Edit credential' : 'Add Git credential'}

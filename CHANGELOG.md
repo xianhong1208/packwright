@@ -24,6 +24,12 @@ follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this proje
   when the system asks for reduced motion.
 
 ### Changed
+- **Users, Roles and Git credentials have a new layout.** The page is called Users again (it was People
+  in 1.1.0). Accounts waiting to be let in are listed first, with an Activate button; the list tells a
+  new registration (Waiting) from an account that was switched off (Disabled), filters by status with
+  a count each, and changes a role in place. Roles are cards that group their permissions by category
+  and say who inherits what and how many users have the role. Git credentials are cards that say which
+  clones use them and when they were last used.
 - **Builds share the cores.** A build that leaves CPU jobs on Auto used one compile job per core even
   when other builds were running, so three builds on a 128-core machine ran 384 compilers. Auto now uses
   every core for a build that runs alone and an equal share (at least 4) when several run together; the
