@@ -3,6 +3,7 @@ import { DownloadSimpleIcon, GlobeIcon, ScanIcon } from '../../../components/ui/
 
 import { useCreateTask } from '../context'
 import { SectionHeader } from '../ui'
+import DetectedHint from './DetectedHint'
 
 const { Option } = Select
 
@@ -46,6 +47,7 @@ export default function FrontendStep() {
             <Col xs={24} md={8}>
               <Form.Item
                 name="frontend_dir"
+                extra={<DetectedHint field="frontend_dir" />}
                 label={<span style={{ color: 'var(--ink-muted)' }}>Frontend directory</span>}
                 tooltip="Use '.' for the project root. If the frontend lives in a subdirectory, enter its name, e.g. 'frontend'."
               >
@@ -55,6 +57,7 @@ export default function FrontendStep() {
             <Col xs={24} md={8}>
               <Form.Item
                 name="frontend_build_tool"
+                extra={<DetectedHint field="frontend_build_tool" />}
                 label={<span style={{ color: 'var(--ink-muted)' }}>Build tool</span>}
               >
                 <Select>
@@ -68,6 +71,7 @@ export default function FrontendStep() {
             <Col xs={24} md={8}>
               <Form.Item
                 name="frontend_build_command"
+                extra={<DetectedHint field="frontend_build_command" />}
                 label={<span style={{ color: 'var(--ink-muted)' }}>Build command</span>}
                 tooltip="e.g. build, build:prod"
               >
@@ -79,6 +83,7 @@ export default function FrontendStep() {
             <Col xs={24} md={8}>
               <Form.Item
                 name="frontend_output_dir"
+                extra={<DetectedHint field="frontend_output_dir" />}
                 label={<span style={{ color: 'var(--ink-muted)' }}>Output directory</span>}
                 tooltip="Where the frontend build lands, e.g. dist."
               >

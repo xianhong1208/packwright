@@ -3,7 +3,7 @@ import { Link, useNavigate, useParams } from 'react-router-dom'
 import { Button, Input, Modal, Popconfirm, Spin, Tooltip, message } from 'antd'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { projectApi, taskApi } from '../api/client'
-import { ArrowLeftIcon, CaretDownIcon, DownloadSimpleIcon, PencilSimpleIcon, RocketLaunchIcon, TrashIcon } from '../components/ui/icons'
+import { ArrowLeftIcon, CaretDownIcon, DownloadSimpleIcon, PencilSimpleIcon, RocketLaunchIcon, SlidersIcon, TrashIcon } from '../components/ui/icons'
 import PageHeader from '../components/layout/PageHeader'
 import { STATUS_META } from '../utils/statusMeta'
 import { PROJECT_TYPE_META } from '../utils/projectTypeMeta'
@@ -154,6 +154,7 @@ export default function ProjectPage() {
                 </Popconfirm>
               </>
             )}
+            <Button icon={<SlidersIcon />} onClick={() => navigate(`/projects/${project.id}/settings`)}>Settings</Button>
             <Button type="primary" icon={<RocketLaunchIcon />} onClick={() => setBuilding(true)}>Build a new version</Button>
           </>
         }
@@ -172,7 +173,7 @@ export default function ProjectPage() {
         </section>
         <aside className="glass-card p-5 self-start" aria-labelledby="defaults">
           <h2 id="defaults" className="text-[15px] font-semibold m-0 mb-1" style={{ color: 'var(--ink)' }}>New versions are built with</h2>
-          <p className="m-0 mb-3 text-sm" style={{ color: 'var(--ink-muted)' }}>Change any of it for one build in the build dialog.</p>
+          <p className="m-0 mb-3 text-sm" style={{ color: 'var(--ink-muted)' }}>Change them under <Link to={`/projects/${project.id}/settings`}>Settings</Link>, or for one build in the build dialog.</p>
           <dl className="project-defaults">
             {defaults.map(([k, v]) => (
               <div key={k}><dt>{k}</dt><dd>{v}</dd></div>

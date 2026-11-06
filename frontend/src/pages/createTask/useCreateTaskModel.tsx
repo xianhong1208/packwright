@@ -11,6 +11,8 @@ import type {
   ProjectAnalysis,
   RepoDiagnosisCheck,
   DetectedVersion,
+  DetectedFrontendConfig,
+  TaskCreate,
 } from '../../api/types'
 import { useFormDraft } from '../../hooks/useFormDraft'
 import { parseUtc } from '../../utils/time'
@@ -19,6 +21,7 @@ import { assembleTaskCreate } from './buildConfig'
 import { findPythonMismatch, pickDefaultRef } from './pythonVersion'
 import type { DepGroupsRead } from './depGroups'
 import { guessProject, nameFromSource, type ProjectGuess } from './quickPlan'
+import type { Preset } from './initialValues'
 
 export interface RebuildState {
   rebuild: boolean
@@ -26,8 +29,19 @@ export interface RebuildState {
   config: BuildConfig
 }
 
+export interface ModelOptions {
+  /** Start from this config instead of the navigation state (a project's settings). */
+  preset?: Preset
+  /** 'settings' edits a project's defaults: nothing is built, and nothing found in the
+   *  project overwrites what is stored — it is offered next to the field instead. */
+  purpose?: 'build' | 'settings'
+  /** Called with the assembled request instead of starting a build. */
+  onSubmit?: (request: TaskCreate) => void
+}
+
 /** All state, effects and handlers of the New build page; the steps read it through CreateTaskContext. */
-export function useCreateTaskModel() {
+export function useCreateTaskModel(options: ModelOptions = {}) {
+  const purpose = options.purpose ?? 'build'
   const navigate = useNavigate()
   const location = useLocation()
   const queryClient = useQueryClient()
@@ -41,7 +55,11 @@ export function useCreateTaskModel() {
   const [dockerAdvKeys, setDockerAdvKeys] = useState<string[]>([])
 
   // Rebuild state from History or TaskDetail navigation
-  const rebuildState = location.state as RebuildState | null
+  const preset = options.preset
+  const rebuildState = useMemo(
+    () => (preset ? { rebuild: true, ...preset } : (location.state as RebuildState | null)),
+    [preset, location.state],
+  )
   const isRebuild = rebuildState?.rebuild === true
 
   // Rebuild carries the original task's advanced values — open the relevant
@@ -148,6 +166,8 @@ export function useCreateTaskModel() {
 
   const [loadingEnv, setLoadingEnv] = useState(false)
   const [detectingConfig, setDetectingConfig] = useState(false)
+  // What the frontend detection found, offered next to its fields.
+  const [frontendDetected, setFrontendDetected] = useState<DetectedFrontendConfig | null>(null)
   const [envFiles, setEnvFiles] = useState<string[]>([])
   const [loadingEnvFiles, setLoadingEnvFiles] = useState(false)
 
@@ -172,7 +192,9 @@ export function useCreateTaskModel() {
   const autoNameRef = useRef<string | null>(null)
   const applyGuess = useCallback((checks: RepoDiagnosisCheck[], source: string, version?: DetectedVersion | null): ProjectGuess => {
     setRepoChecks(checks)
-    if (version && !form.isFieldTouched('version')) {
+    // A fresh build takes the version the code states. A stored config keeps its own:
+    // a project's settings have no version at all, and a rebuild's is the one it was.
+    if (version && !isRebuild && !form.isFieldTouched('version')) {
       form.setFieldValue('version', version.value)
       setVersionSource(version.source)
     }
@@ -197,7 +219,7 @@ export function useCreateTaskModel() {
       form.setFieldValue('project_name', autoNameRef.current)
     }
     return guess
-  }, [form, mode])
+  }, [form, mode, isRebuild])
 
   const hasBackend = projectType === 'backend_only' || projectType === 'fullstack'
   const showFrontendSettings = projectType === 'frontend_only' || projectType === 'fullstack'
@@ -345,10 +367,19 @@ export function useCreateTaskModel() {
         if (!silent) message.info('No frontend config detected in this directory')
         return
       }
-      const updates: Record<string, string> = {}
-      if (config.build_tool) updates.frontend_build_tool = config.build_tool
-      if (config.build_command) updates.frontend_build_command = config.build_command
-      if (config.output_dir) updates.frontend_output_dir = config.output_dir
+      setFrontendDetected(config)
+      // An explicit Detect fills the fields. Detection that runs by itself fills only
+      // fields nobody set, and never a stored config (a rebuild, a project's settings):
+      // it used to replace a rebuild's build command without anyone noticing. There it
+      // is offered next to the field instead.
+      if (silent && isRebuild) return
+      const fill = (name: string, value: string | null | undefined) =>
+        value && (!silent || !form.isFieldTouched(name)) ? { [name]: value } : {}
+      const updates: Record<string, string> = {
+        ...fill('frontend_build_tool', config.build_tool),
+        ...fill('frontend_build_command', config.build_command),
+        ...fill('frontend_output_dir', config.output_dir),
+      }
       if (Object.keys(updates).length > 0) form.setFieldsValue(updates)
       if (!silent) {
         const parts: string[] = []
@@ -370,7 +401,7 @@ export function useCreateTaskModel() {
     } finally {
       setDetectingConfig(false)
     }
-  }, [form])
+  }, [form, isRebuild])
 
   const createMutation = useMutation({
     mutationFn: taskApi.create,
@@ -449,7 +480,7 @@ export function useCreateTaskModel() {
   // Quick build, local path: fingerprint the folder, then run the detections that
   // depend on the type — the path effect above ran before the type was known.
   useEffect(() => {
-    if (mode !== 'quick' || sourceType === 'git') return
+    if ((mode !== 'quick' && purpose !== 'settings') || sourceType === 'git') return
     const path = ((projectPath as string | undefined) || '').trim()
     if (!path.startsWith('/')) {
       setRepoChecks(null)
@@ -469,7 +500,7 @@ export function useCreateTaskModel() {
       }
     }, 500)
     return () => clearTimeout(timer)
-  }, [mode, sourceType, projectPath, applyGuess, fetchPyprojectGroups, detectFrontendConfig])
+  }, [mode, purpose, sourceType, projectPath, applyGuess, fetchPyprojectGroups, detectFrontendConfig])
 
   // Git mode: debounce-fetch branches/tags when the git_url changes.
   const fetchGitRefs = useCallback(
@@ -577,7 +608,7 @@ export function useCreateTaskModel() {
   useEffect(() => {
     if (sourceType !== 'git') return
     // Quick build reads the project type from this scan, so it cannot wait for one.
-    if (!hasBackend && mode !== 'quick') return
+    if (!hasBackend && mode !== 'quick' && purpose !== 'settings') return
     const url = (gitUrl || '').trim()
     const ref = (gitRef || '').trim()
     const refType = gitRefType || 'branch'
@@ -586,7 +617,7 @@ export function useCreateTaskModel() {
     if (key === treeScannedFor) return
     const timer = setTimeout(() => { void handleScanGitTree() }, 800)
     return () => clearTimeout(timer)
-  }, [sourceType, hasBackend, mode, gitUrl, gitRef, gitRefType, treeScannedFor, handleScanGitTree])
+  }, [sourceType, hasBackend, mode, purpose, gitUrl, gitRef, gitRefType, treeScannedFor, handleScanGitTree])
 
   // Git mode only: shallow-clone the repo and populate frontend config +
   // env file contents. Runs in parallel with scan_tree above, so fullstack
@@ -764,6 +795,10 @@ export function useCreateTaskModel() {
       selectedDirs,
       selectedDataDirs,
     })
+    if (options.onSubmit) {
+      options.onSubmit(request)
+      return
+    }
     const version = request.config.version ?? ''
     if (version) {
       // Building a version that already passed is allowed, but rarely meant.
@@ -950,6 +985,8 @@ export function useCreateTaskModel() {
     setMode,
     repoChecks,
     repoError,
+    frontendDetected,
+    purpose,
     versionSource,
     workspaceDir,
     setWorkspaceDir,
