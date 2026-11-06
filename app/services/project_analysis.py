@@ -73,6 +73,27 @@ _DATA_EXTENSIONS = {
     ".pdf",
 }
 
+# Top-level folders that hold tests, examples or documentation: never part of
+# the program, whatever files they contain.
+_DEV_ONLY = {"tests", "test", "testing", "examples", "example", "docs", "doc", "benchmarks", "benchmark"}
+
+
+def _special_role(name: str, files: set[str], subdirs: set[str]) -> tuple[str, str] | None:
+    """Roles that counting .py and data files gets wrong, from what sits directly
+    in the folder. Built with plain counts, MCP Gate compiled its migrations in as
+    Python (the program then could not find alembic/, and a package named alembic
+    shadowed the real library), shipped tests/ and examples/, and copied docs/
+    and its frontend's sources beside the binary.
+    """
+    if name.lower() in _DEV_ONLY:
+        return "skip", "Tests, examples or documentation; not part of the program"
+    if "package.json" in files:
+        return "skip", "A Node project (package.json): the frontend step builds it; its sources are not shipped"
+    if "env.py" in files and "versions" in subdirs:
+        return "data", "Alembic migrations, read from disk at start-up; copied beside the program"
+    return None
+
+
 # Recursion / scan caps to keep the analysis fast on large projects.
 _MAX_DEPTH = 3
 _MAX_FILES_SCANNED = 2000
@@ -241,8 +262,17 @@ def analyze_project_layout(project_path, entry_point: str = "main.py") -> dict:
                 continue
 
             py_files, data_files, has_root_init = _scan_directory(child)
+            try:
+                inside = list(child.iterdir())
+            except OSError:
+                inside = []
+            special = _special_role(
+                name, {p.name for p in inside if p.is_file()}, {p.name for p in inside if p.is_dir()}
+            )
 
-            if py_files > 0:
+            if special:
+                role, reason = special
+            elif py_files > 0:
                 role = "source"
                 if has_root_init:
                     reason = f"{py_files} .py files with __init__.py (a Python package)"
@@ -302,7 +332,9 @@ def classify_from_paths(file_paths, entry_point: str = "main.py") -> dict:
         "suggested_data_dirs": [],
     }
     try:
-        stats: dict[str, dict] = defaultdict(lambda: {"py": 0, "data": 0, "init": False})
+        stats: dict[str, dict] = defaultdict(
+            lambda: {"py": 0, "data": 0, "init": False, "files": set(), "subdirs": set()}
+        )
         for path in file_paths:
             parts = str(path).split("/")
             if len(parts) < 2:
@@ -310,6 +342,7 @@ def classify_from_paths(file_paths, entry_point: str = "main.py") -> dict:
             top = parts[0]
             if _is_excluded(top):
                 continue
+            (stats[top]["files"] if len(parts) == 2 else stats[top]["subdirs"]).add(parts[1])
             fname = parts[-1]
             suffix = ("." + fname.rsplit(".", 1)[1].lower()) if "." in fname else ""
             if suffix == ".py":
@@ -321,7 +354,10 @@ def classify_from_paths(file_paths, entry_point: str = "main.py") -> dict:
 
         for name in sorted(stats):
             s = stats[name]
-            if s["py"] > 0:
+            special = _special_role(name, s["files"], s["subdirs"])
+            if special:
+                role, reason = special
+            elif s["py"] > 0:
                 role = "source"
                 reason = (
                     f"{s['py']} .py files with __init__.py (a Python package)"
