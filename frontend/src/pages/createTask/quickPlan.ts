@@ -29,3 +29,15 @@ export function nameFromSource(source: string): string {
   const last = source.trim().replace(/[/\\]+$/, '').split(/[/\\:]/).pop() ?? ''
   return last.replace(/\.git$/i, '')
 }
+
+/** What the build hands back, in the words of the settings chosen on Quick build. */
+export function outputSentence(o: { backend: boolean; packMode?: string; onefile?: boolean; verify?: boolean; docker?: boolean }): string {
+  const docker = o.docker ? ' A Docker image of it is made too.' : ''
+  if (!o.backend) return `The built files, ready to put behind a web server.${docker}`
+  const full = o.packMode === 'full'
+  const what = o.onefile === false
+    ? full ? 'A folder with the program and everything it needs.' : 'A folder with the program, and its libraries in libs/.'
+    : full ? 'One executable with everything inside it.' : 'One executable, with its libraries in a libs/ folder beside it.'
+  const verify = o.verify === false ? '' : ' It is run once to check it starts.'
+  return `${what}${verify}${docker}`
+}

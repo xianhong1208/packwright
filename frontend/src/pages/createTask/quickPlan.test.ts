@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest'
 import type { RepoDiagnosisCheck } from '../../api/types'
-import { guessProject, nameFromSource } from './quickPlan'
+import { guessProject, nameFromSource, outputSentence } from './quickPlan'
 
 const ok = (key: string, path: string): RepoDiagnosisCheck => ({ key, label: '', status: 'ok', path })
 const missing = (key: string): RepoDiagnosisCheck => ({ key, label: '', status: 'warn', path: null })
@@ -32,5 +32,18 @@ describe('nameFromSource', () => {
     ['  /data/Report Tool  ', 'Report Tool'],
   ])('%s → %s', (source, name) => {
     expect(nameFromSource(source)).toBe(name)
+  })
+})
+
+describe('outputSentence', () => {
+  it('follows packing and output for a backend', () => {
+    expect(outputSentence({ backend: true, packMode: 'external', onefile: true })).toBe(
+      'One executable, with its libraries in a libs/ folder beside it. It is run once to check it starts.')
+    expect(outputSentence({ backend: true, packMode: 'full', onefile: true, verify: false })).toBe('One executable with everything inside it.')
+    expect(outputSentence({ backend: true, packMode: 'full', onefile: false, verify: false })).toBe('A folder with the program and everything it needs.')
+    expect(outputSentence({ backend: true, packMode: 'external', onefile: false, verify: false })).toBe('A folder with the program, and its libraries in libs/.')
+  })
+  it('mentions the Docker image, and has no executable for a frontend', () => {
+    expect(outputSentence({ backend: false, docker: true })).toBe('The built files, ready to put behind a web server. A Docker image of it is made too.')
   })
 })

@@ -268,4 +268,62 @@ describe('Quick build', () => {
 
     await waitFor(() => expect(api.scanGitTree).toHaveBeenCalled(), { timeout: 5000 })
   })
+
+  it('says why a folder could not be read instead of calling it unrecognised', async () => {
+    api.diagnoseRepo.mockRejectedValue({ response: { data: { detail: 'Access denied: path must be under /srv/projects' } } })
+    renderWizard()
+    await pointAt('/media/elsewhere/app')
+
+    expect(await screen.findByText('Access denied: path must be under /srv/projects', {}, { timeout: 3000 })).toBeInTheDocument()
+    expect(screen.queryByText(/Could not tell from the files/)).toBeNull()
+    expect(screen.getByRole('button', { name: /Start build/ })).toBeDisabled()
+  })
+
+  it('leaves the entry point empty and required when the usual ones are missing', async () => {
+    api.diagnoseRepo.mockResolvedValue({ checks: [ok('pyproject', 'pyproject.toml')] })
+    renderWizard()
+    await pointAt('/srv/projects/tool')
+
+    const entry = await screen.findByLabelText('Entry point', {}, { timeout: 3000 })
+    expect(entry).toHaveValue('')
+    await act(async () => {
+      fireEvent.click(screen.getByRole('button', { name: /Start build/ }))
+    })
+    expect(api.create).not.toHaveBeenCalled()
+  })
+
+  it('submits the settings changed in place', async () => {
+    api.diagnoseRepo.mockResolvedValue({ checks: [ok('entry_point', 'main.py')] })
+    renderWizard()
+    await pointAt('/srv/projects/svc')
+    await screen.findByText('Settings', {}, { timeout: 3000 })
+
+    await act(async () => {
+      fireEvent.click(screen.getByText('Full'))
+      fireEvent.click(screen.getByText('A folder'))
+      fireEvent.click(screen.getByRole('switch', { name: 'Docker image' }))
+    })
+    await act(async () => {
+      fireEvent.click(screen.getByRole('button', { name: /Start build/ }))
+    })
+
+    await waitFor(() => expect(api.create).toHaveBeenCalledTimes(1))
+    expect(api.create.mock.calls[0][0].config).toMatchObject({ pack_mode: 'full', onefile: false, docker_enabled: true })
+  })
+
+  it('opens the full wizard at the step that holds a setting', async () => {
+    api.diagnoseRepo.mockResolvedValue({ checks: [ok('entry_point', 'main.py')] })
+    renderWizard()
+    await pointAt('/srv/projects/svc')
+
+    // Wait outside act(): updates inside it are held until it returns, so the
+    // button would never appear while act() is waiting for it.
+    const change = await screen.findByRole('button', { name: 'Change Dependency group' }, { timeout: 3000 })
+    await act(async () => {
+      fireEvent.click(change)
+    })
+
+    const current = screen.getByRole('navigation', { name: 'Build steps' }).querySelector('[aria-current="step"]')
+    expect(current?.textContent).toContain('Backend')
+  })
 })
