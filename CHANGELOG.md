@@ -7,6 +7,20 @@ follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this proje
 ## [Unreleased]
 
 ### Added
+- **Projects.** The code the team builds again and again is now a project: its source, the settings new
+  versions start from, and every build of it, grouped by version. **Projects** lists them; a project's
+  page shows each version with its latest outcome, its builds and a download of the last one that
+  passed, and *Build a new version* starts one in a dialog that reads the version from the code, picks
+  the branch or tag for Git projects, takes the usual settings for this build only, and says when that
+  version already passed. Projects are shared by everyone who may build; their creator and holders of
+  the new `project:manage` permission may rename or delete one (its builds stay). Every build is filed
+  under a project — the one it was built from, or the project with its name and source, created on the
+  first build — and upgrading files existing builds the same way.
+- **Versions.** A build can say which version of the project it is: read from the Git tag, pyproject.toml
+  or package.json, shown on New build and changeable. The version names the download
+  (`shop-1.2.0.tar.gz`), tags the Docker image (`shop:1.2.0`, with the `org.opencontainers.image.version`
+  label and `PACKWRIGHT_BUILD_VERSION`), and is written into a `VERSION` file beside the output and
+  inside the program, next to its main module. Building a version that already passed asks first.
 - **Quick build.** New build now opens on one screen that needs only a source: a folder on the server or
   a Git repository and branch. Packwright reads the project (a Python entry point or pyproject.toml, a
   package.json and where it is) and shows what it found row by row: backend, frontend or full stack, the
@@ -40,6 +54,11 @@ follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this proje
   frequency is re-read every 10 s, and the GPU probe is skipped on machines without nvidia-smi.
 
 ### Fixed
+- An image without a configured name was tagged with the project folder's name as it was, and Docker
+  refuses upper-case repository names, so a folder like `MCP_Center` could not be built into an image.
+  The default name is lowercased.
+- Builds started within the same second had no order on SQLite (its timestamp keeps whole seconds); the
+  start time is now set to the microsecond.
 - The Machine page reported the logical core count as the physical one ("128 threads on 128 cores").
 
 ## [1.1.0] — 2026-11-06

@@ -57,8 +57,15 @@ export interface RepoDiagnosisCheck {
   path: string | null
 }
 
+/** A version read from the project: the Git tag built, pyproject.toml or package.json. */
+export interface DetectedVersion {
+  value: string
+  source: string
+}
+
 export interface RepoDiagnosis {
   checks: RepoDiagnosisCheck[]
+  version?: DetectedVersion | null
 }
 
 /** What scanning a Git repository at a ref returns. */
@@ -68,6 +75,47 @@ export interface GitScanTree {
   analysis?: ProjectAnalysis
   /** The same fingerprints a local path gets from diagnoseRepo. */
   checks?: RepoDiagnosisCheck[]
+  version?: DetectedVersion | null
+}
+
+// ===== Projects =====
+
+/** One build of a project, as its page lists it. */
+export interface BuildBrief {
+  task_id: string
+  version: string | null
+  status: TaskStatus
+  user_name: string
+  start_time: string
+  end_time: string | null
+}
+
+export interface ProjectSummary {
+  id: number
+  name: string
+  project_type: ProjectType
+  source_type: SourceType
+  source: string
+  created_by: string
+  created_at: string
+  updated_at: string
+  builds: number
+  latest: BuildBrief | null
+  last_passed: BuildBrief | null
+  can_edit: boolean
+}
+
+export interface ProjectDetail extends ProjectSummary {
+  config: BuildConfig
+  history: BuildBrief[]
+}
+
+/** An earlier build of the version about to be built. */
+export interface SameVersionBuild {
+  task_id: string
+  status: TaskStatus
+  user_name: string
+  start_time: string
 }
 
 export interface GitPreviewFrontend {
@@ -87,6 +135,8 @@ export interface BuildConfig {
   git_ref_type: GitRefType
   // Common
   project_path: string
+  /** The version being built (1.2.0, v2.0.0-rc.1); '' when none was given. */
+  version?: string
   output_dir: string
   // Backend (for backend_only and fullstack)
   python_version: string
@@ -209,6 +259,7 @@ export interface TaskResponse {
   config: BuildConfig
   logs: string[]
   result: BuildResult | null
+  project_id?: number | null
 }
 
 export interface HistoryItem {
@@ -222,6 +273,7 @@ export interface HistoryItem {
   output_dir: string
   config?: BuildConfig
   result?: BuildResult | null
+  project_id?: number | null
 }
 
 export interface DetectedFrontendConfig {

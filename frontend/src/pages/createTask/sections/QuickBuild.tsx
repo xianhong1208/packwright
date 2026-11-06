@@ -59,6 +59,7 @@ export default function QuickBuild() {
     scanningTree,
     repoChecks,
     repoError,
+    versionSource,
     analysis,
     depGroups,
     loadingDepGroups,
@@ -104,7 +105,7 @@ export default function QuickBuild() {
   const start = async () => {
     try {
       const sourceFields = sourceType === 'git' ? ['git_url', 'git_ref'] : ['project_path']
-      await form.validateFields(['project_name', ...sourceFields, ...(hasBackend ? ['entry_point'] : [])])
+      await form.validateFields(['project_name', 'version', ...sourceFields, ...(hasBackend ? ['entry_point'] : [])])
       handleManualSubmit()
     } catch {
       // The fields show what is missing.
@@ -259,10 +260,17 @@ export default function QuickBuild() {
 
       {hasSource && (
         <section className="glass-card p-6 mb-4" aria-labelledby="quick-name">
-          <h2 id="quick-name" className="text-[17px] font-semibold m-0 mb-3" style={{ color: 'var(--ink)' }}>Name</h2>
-          <Form.Item name="project_name" className="!mb-0" rules={[{ required: true, message: 'Give the build a name' }]}>
-            <Input className="input-field" placeholder="my-app" aria-label="Build name" />
-          </Form.Item>
+          <h2 id="quick-name" className="text-[17px] font-semibold m-0 mb-3" style={{ color: 'var(--ink)' }}>Name and version</h2>
+          <div className="grid gap-3 sm:grid-cols-[minmax(0,1fr)_200px]">
+            <Form.Item name="project_name" className="!mb-0" rules={[{ required: true, message: 'Give the build a name' }]}
+              extra="The project it is filed under. Builds with the same name and source are one project.">
+              <Input className="input-field" placeholder="my-app" aria-label="Build name" />
+            </Form.Item>
+            <Form.Item name="version" className="!mb-0" rules={[{ pattern: /^[A-Za-z0-9][A-Za-z0-9._+-]{0,63}$/, message: 'Letters, digits, . - _ + only, e.g. 1.2.0 or v2.0.0-rc.1' }]}
+              extra={versionSource ? `Read from ${versionSource}.` : 'Optional, e.g. 1.2.0.'}>
+              <Input className="input-field" placeholder="1.2.0" aria-label="Version" />
+            </Form.Item>
+          </div>
         </section>
       )}
 

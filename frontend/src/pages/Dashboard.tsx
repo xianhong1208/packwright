@@ -131,6 +131,7 @@ function RunningEntry({ task, onOpen, onCancel, cancelling }: { task: TaskRespon
       <article className="bench-card running">
         <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1">
           <Link to={`/task/${task.id}`} className="bench-name">{task.project_name}</Link>
+          {task.config.version && <span className="version-chip ml-2">{task.config.version}</span>}
           <span className="bench-what">{PROJECT_TYPE_META[task.config.project_type].label}</span>
           <span className="ml-auto font-semibold" style={{ color: 'var(--color-teal-400)' }}>
             {task.status === 'pending' ? 'Waiting for a build slot' : task.status_msg || 'Running'}
@@ -168,7 +169,10 @@ function FinishedEntry({ item }: { item: HistoryItem }) {
       <span className="bench-dot" style={{ background: meta.color }} aria-hidden="true" />
       <Link to={`/history/${item.task_id}`} className="bench-card finished">
         <div className="min-w-0 flex-1">
-          <div className="bench-name">{item.project_name}</div>
+          <div className="bench-name">
+            {item.project_name}
+            {item.config?.version && <span className="version-chip ml-2">{item.config.version}</span>}
+          </div>
           <div className="bench-what truncate">{[type?.label, line.detail].filter(Boolean).join(', ')}</div>
         </div>
         <div className="text-right flex-none">

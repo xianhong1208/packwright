@@ -172,3 +172,10 @@ describe('assembleTaskCreate — shape', () => {
     }
   })
 })
+
+describe('version', () => {
+  it('is sent trimmed, and empty when none was given', () => {
+    expect(assemble({ version: '  1.2.0 ' }).config.version).toBe('1.2.0')
+    expect(assemble({}).config.version).toBe('')
+  })
+})

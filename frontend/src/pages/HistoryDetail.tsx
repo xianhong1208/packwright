@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react'
-import { useParams, useNavigate } from 'react-router-dom'
+import { useParams, useNavigate, Link } from 'react-router-dom'
 import { Spin, Button, Tag, Tooltip, Descriptions, message, Modal } from 'antd'
 import { ArrowClockwiseIcon, ArrowLeftIcon, CopyIcon, CubeIcon, DesktopIcon, DownloadSimpleIcon, HardDrivesIcon, TrashIcon, WarningCircleIcon } from '../components/ui/icons'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
@@ -159,8 +159,9 @@ export default function HistoryDetail() {
               className="text-xl font-semibold"
               style={{ color: 'var(--ink)', fontFamily: 'var(--font-display)' }}
             >
-              {record.project_name}
+              {record.project_id ? <Link to={`/projects/${record.project_id}`} className="hover:underline">{record.project_name}</Link> : record.project_name}
             </h1>
+            {record.config?.version && <span className="version-chip">{record.config.version}</span>}
             <span
               className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-medium"
               style={{ backgroundColor: status.bgColor, color: status.color }}

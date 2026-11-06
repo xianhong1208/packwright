@@ -44,6 +44,7 @@ export function assembleTaskCreate({
       ? ((values.git_ref_type || 'branch') as BuildConfig['git_ref_type'])
       : 'branch',
     project_path: isGit ? '' : str(values.project_path),
+    version: str(values.version).trim(),
 
     output_dir: str(values.output_dir, 'dist'),
     python_version: str(values.python_version, 'auto'),
