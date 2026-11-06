@@ -6,6 +6,8 @@ follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this proje
 
 ## [Unreleased]
 
+## [1.1.0] — 2026-11-06
+
 ### Changed
 - **The console is redesigned.** Warm graphite with a brass accent, and teal for anything running; a
   narrow tool rail, a quick jump to any page or recent build (Ctrl/Cmd+K), and one page heading on every
@@ -167,5 +169,6 @@ role-based permissions.
 - Timezone-safe token expiry on SQLite; portable build statistics.
 - Git credentials feedback in the console; no pre-filled personal paths in New build.
 
-[Unreleased]: https://github.com/xianhong1208/packwright/compare/v1.0.0...dev
+[Unreleased]: https://github.com/xianhong1208/packwright/compare/v1.1.0...dev
+[1.1.0]: https://github.com/xianhong1208/packwright/compare/v1.0.0...v1.1.0
 [1.0.0]: https://github.com/xianhong1208/packwright/releases/tag/v1.0.0
