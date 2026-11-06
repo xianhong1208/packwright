@@ -214,6 +214,12 @@ LOCAL_SOURCE_ROOTS=/srv/projects,/data/builds
 - 專案由所有有建置權限(`task:create`)的人共用;改名、刪除限建立者與有 `project:manage` 權限的人。
   刪除專案不會刪掉它的建置。
 
+專案頁的 **Settings** 是「新版本用什麼設定建置」:分頁 General、Backend、Frontend、Docker、Commands,
+欄位跟 New build 精靈相同。專案本身寫得出來的欄位(類型、進入點、前端目錄、建置工具與指令、輸出目錄)
+會註明是否「Matches what the project says」,不一致時顯示專案的值並可按 **Use it** 套用——偵測結果
+不會自己覆蓋存好的設定。**Commands** 列出建置會執行的 Nuitka、npm、docker 指令(用建置時同一段程式
+算出來,不會實際執行),並註明哪些部分要到建置時才知道。只有建立者與 `project:manage` 可以儲存。
+
 版本會被蓋進產物:下載檔名(`shop-1.2.0.tar.gz`)、Docker image 的 tag(`shop:1.2.0`,並加上
 `org.opencontainers.image.version` label 與 `PACKWRIGHT_BUILD_VERSION` 環境變數),以及 `VERSION` 檔
 ——放在產物旁邊,也包進執行檔裡(程式可以用 `os.path.join(os.path.dirname(__file__), "VERSION")` 讀到)。

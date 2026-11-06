@@ -16,6 +16,12 @@ follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this proje
   the new `project:manage` permission may rename or delete one (its builds stay). Every build is filed
   under a project — the one it was built from, or the project with its name and source, created on the
   first build — and upgrading files existing builds the same way.
+- **Project settings.** A project's page has *Settings*: the settings new versions are built with, as
+  tabs (General, Backend, Frontend, Docker, Commands) that reuse the New build steps. A field the project
+  itself states (type, entry point, frontend directory, build tool and command, output directory) says
+  whether it matches, or offers the project's value with *Use it*. *Commands* shows the Nuitka, npm and
+  docker lines a build would run, worked out by the same code the build uses, with notes on what only a
+  build can find out. Saving is for the project's creator and project managers.
 - **Versions.** A build can say which version of the project it is: read from the Git tag, pyproject.toml
   or package.json, shown on New build and changeable. The version names the download
   (`shop-1.2.0.tar.gz`), tags the Docker image (`shop:1.2.0`, with the `org.opencontainers.image.version`
@@ -54,6 +60,11 @@ follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this proje
   frequency is re-read every 10 s, and the GPU probe is skipped on machines without nvidia-smi.
 
 ### Fixed
+- A rebuild's frontend build tool, command and output directory were replaced by whatever detection found
+  as soon as the form opened. Detection now fills only fields nobody set on a new build, and offers its
+  values next to the fields of a stored config.
+- An option added to the Nuitka command after the program file would have been taken as an argument to
+  the program; the program file is always last.
 - An image without a configured name was tagged with the project folder's name as it was, and Docker
   refuses upper-case repository names, so a folder like `MCP_Center` could not be built into an image.
   The default name is lowercased.

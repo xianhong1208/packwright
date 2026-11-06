@@ -3,6 +3,7 @@ import { CodeIcon, FolderIcon, GitBranchIcon, GlobeIcon, LinkIcon, ScanIcon, Squ
 
 import { useCreateTask } from '../context'
 import { SectionHeader } from '../ui'
+import DetectedHint from './DetectedHint'
 
 const { Option } = Select
 
@@ -22,6 +23,7 @@ export default function BasicsStep() {
     scanningTree,
     workspaceDir,
     versionSource,
+    purpose,
   } = useCreateTask()
   return (
     <>
@@ -36,18 +38,22 @@ export default function BasicsStep() {
         <Input placeholder="my-project" className="input-field" size="large" />
       </Form.Item>
 
-      <Form.Item
-        name="version"
-        label={<span style={{ color: 'var(--ink-muted)' }}>Version</span>}
-        tooltip="Which version of the project this build is. It names the download, tags the Docker image and is written into a VERSION file. Builds with the same name and source are grouped under one project by version."
-        extra={versionSource ? `Read from ${versionSource}.` : 'Optional, e.g. 1.2.0.'}
-        rules={[{ pattern: /^[A-Za-z0-9][A-Za-z0-9._+-]{0,63}$/, message: 'Letters, digits, . - _ + only, e.g. 1.2.0 or v2.0.0-rc.1' }]}
-      >
-        <Input placeholder="1.2.0" className="input-field" size="large" aria-label="Version" />
-      </Form.Item>
+      {/* A version belongs to a build, not to a project's defaults. */}
+      {purpose !== 'settings' && (
+        <Form.Item
+          name="version"
+          label={<span style={{ color: 'var(--ink-muted)' }}>Version</span>}
+          tooltip="Which version of the project this build is. It names the download, tags the Docker image and is written into a VERSION file. Builds with the same name and source are grouped under one project by version."
+          extra={versionSource ? `Read from ${versionSource}.` : 'Optional, e.g. 1.2.0.'}
+          rules={[{ pattern: /^[A-Za-z0-9][A-Za-z0-9._+-]{0,63}$/, message: 'Letters, digits, . - _ + only, e.g. 1.2.0 or v2.0.0-rc.1' }]}
+        >
+          <Input placeholder="1.2.0" className="input-field" size="large" aria-label="Version" />
+        </Form.Item>
+      )}
 
       <Form.Item
         name="project_type"
+                extra={<DetectedHint field="project_type" />}
         label={<span style={{ color: 'var(--ink-muted)' }}>Project type</span>}
         rules={[{ required: true }]}
       >

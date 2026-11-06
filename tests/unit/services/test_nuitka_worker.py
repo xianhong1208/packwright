@@ -774,6 +774,8 @@ class TestBuildNuitkaCommand:
         with_version = self._plan(tmp_path, stdlib=self._stdlib(), version_file=version)
         without = self._plan(tmp_path, stdlib=self._stdlib())
         assert f"--include-data-files={version}=VERSION" in with_version.cmd
+        # Options after the program file would be the program's own arguments.
+        assert with_version.cmd[-1] == str(tmp_path / "main.py")
         assert not any("=VERSION" in a for a in without.cmd)
 
     @pytest.mark.unit
