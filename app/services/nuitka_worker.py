@@ -1142,13 +1142,14 @@ def build_nuitka_command(
                 cmd.append(f"--include-package-data={pkg}")
                 log.append(f"Including package data: {pkg}")
 
-    cmd.append(str(entry_point))
     # The version, inside the program: it sits next to the main module at run
     # time (os.path.dirname(__file__)), in one-file and folder builds alike.
     if version_file is not None:
         cmd.append(f"--include-data-files={version_file}=VERSION")
         log.append("Embedding VERSION")
 
+    # Last: everything after the program file belongs to the program, not to Nuitka.
+    cmd.append(str(entry_point))
     return NuitkaPlan(cmd, report_file, log)
 
 

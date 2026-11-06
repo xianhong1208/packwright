@@ -366,6 +366,10 @@ export const taskApi = {
     return response.data
   },
 
+  /** The commands a build with this config would run, without running anything. */
+  previewCommands: async (config: BuildConfig): Promise<{ steps: { stage: string; command: string }[]; notes: string[] }> =>
+    (await api.post('/tasks/preview-commands', config)).data,
+
   getOutputDownloadUrl: async (taskId: string): Promise<string> => {
     const response = await api.post<{ ticket: string; expires_in: number }>(
       `/history/${taskId}/download-ticket`,

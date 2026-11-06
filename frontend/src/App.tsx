@@ -11,6 +11,7 @@ const CreateTask = lazy(() => import('./pages/CreateTask'))
 const History = lazy(() => import('./pages/History'))
 const ProjectsPage = lazy(() => import('./pages/ProjectsPage'))
 const ProjectPage = lazy(() => import('./pages/ProjectPage'))
+const ProjectSettingsPage = lazy(() => import('./pages/ProjectSettingsPage'))
 const TaskDetail = lazy(() => import('./pages/TaskDetail'))
 const HistoryDetail = lazy(() => import('./pages/HistoryDetail'))
 const LoginPage = lazy(() => import('./pages/LoginPage'))
@@ -167,6 +168,7 @@ function App() {
                   <Route path="create" element={<CreateTask />} />
                   <Route path="projects" element={<ProjectsPage />} />
                   <Route path="projects/:projectId" element={<ProjectPage />} />
+                  <Route path="projects/:projectId/settings" element={<ProjectSettingsPage />} />
                   <Route path="history" element={<History />} />
                   <Route path="history/:taskId" element={<HistoryDetail />} />
                   <Route path="task/:taskId" element={<TaskDetail />} />
