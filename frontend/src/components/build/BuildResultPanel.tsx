@@ -77,6 +77,12 @@ export default function BuildResultPanel({ result }: { result: BuildResult | nul
         </div>
       )}
 
+      {result.compile_cache && (
+        <p className="text-sm mb-4" style={{ color: 'var(--ink-muted)' }}>
+          Compile cache: reused {result.compile_cache.hits} of {result.compile_cache.hits + result.compile_cache.compiled} C files.
+        </p>
+      )}
+
       {result.preflight && result.preflight.length > 0 && (
         <div>
           <div className="text-xs mb-2" style={{ color: 'var(--ink-faint)' }}>
