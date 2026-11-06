@@ -968,6 +968,20 @@ class NuitkaPlan:
     log: list[str] = field(default_factory=list)
 
 
+def auto_jobs(cpu_count: int, builds_running: int, floor: int = 4) -> int:
+    """C compile jobs for a build that did not set its own.
+
+    One job per core is fastest for a build that has the machine to itself, but
+    builds that run together each started one too: three builds on 128 cores ran
+    384 compilers, and the extra ones only added switching and memory. Each build
+    now gets its share of the cores that are busy building, never below ``floor``
+    (or the core count, on a small machine).
+    """
+    cpu_count = max(1, cpu_count)
+    share = cpu_count // max(1, builds_running)
+    return max(min(floor, cpu_count), share)
+
+
 def build_nuitka_command(
     config: BuildConfig,
     *,
@@ -1333,7 +1347,18 @@ async def run_nuitka_build(task_id: str, config: BuildConfig, db: AsyncSession) 
         output_name = config.output_name or Path(config.entry_point).stem
         await task_manager.append_log(task_id, f"Output name: {output_name}")
 
-        jobs = config.nuitka_jobs if config.nuitka_jobs > 0 else (os.cpu_count() or 1)
+        if config.nuitka_jobs > 0:
+            jobs = config.nuitka_jobs
+        else:
+            from app.services.build_dispatcher import builds_in_slot
+
+            running = builds_in_slot()
+            jobs = auto_jobs(os.cpu_count() or 1, running)
+            await task_manager.append_log(
+                task_id,
+                f"Compiling with {jobs} of {os.cpu_count() or 1} cores "
+                f"({running} {'build' if running == 1 else 'builds'} running)",
+            )
         external = config.pack_mode == PackMode.EXTERNAL
         plan = build_nuitka_command(
             config,
