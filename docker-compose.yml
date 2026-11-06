@@ -1,0 +1,41 @@
+# Packwright with Docker Compose.
+#
+#   docker compose up -d
+#   docker compose logs packwright | grep "bootstrap admin"   # first sign-in password
+#
+# Then open http://localhost:5018 and sign in as "admin". Everything Packwright
+# keeps lives in the "packwright-data" volume. docs/configuration.md lists every
+# setting; put them under "environment" below or in a .env file next to this one.
+
+services:
+  packwright:
+    build: .
+    image: packwright:local
+    restart: unless-stopped
+    ports:
+      - "5018:5018"
+    volumes:
+      - packwright-data:/data
+      # Build folders on this host ("A folder on this server"): mount them and
+      # list the mount point in LOCAL_SOURCE_ROOTS. The folder must be writable
+      # by uid 1000, and a project's .venv must be built for this container.
+      # - /srv/projects:/srv/projects
+      # Docker output: lets builds use the host's Docker. Anyone who can start a
+      # build then controls the host's Docker daemon (i.e. root on the host);
+      # leave it out unless you trust every account. group_add must be the GID
+      # that owns the socket on the host (stat -c %g /var/run/docker.sock).
+      # - /var/run/docker.sock:/var/run/docker.sock
+    # group_add:
+    #   - "998"
+    environment:
+      # Without BOOTSTRAP_ADMIN_PASSWORD the first start creates "admin" with a
+      # random password, printed once in the log. Setting it to an empty value
+      # creates no admin at all (self-registration only), so leave it out.
+      # BOOTSTRAP_ADMIN_PASSWORD: choose-a-long-one
+      # LOCAL_SOURCE_ROOTS: /srv/projects
+      MAX_CONCURRENT_BUILDS: ${MAX_CONCURRENT_BUILDS:-3}
+      # Behind a reverse proxy on this host, its address as seen from the container:
+      # TRUSTED_PROXY_IPS: 172.17.0.1
+
+volumes:
+  packwright-data:

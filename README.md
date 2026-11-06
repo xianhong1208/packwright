@@ -19,6 +19,21 @@ Packwright was called *Build Center* up to v1.0.0. Names that live in existing d
 
 ## Install
 
+### With Docker
+
+The image carries everything builds need: the Nuitka toolchain for Python 3.12 to 3.14, ccache, Node.js (npm, yarn and pnpm through corepack), git and the docker CLI.
+
+```bash
+git clone https://github.com/xianhong1208/packwright.git
+cd packwright
+docker compose up -d
+docker compose logs packwright | grep "bootstrap admin"   # the first sign-in password
+```
+
+Open `http://localhost:5018` and sign in as **`admin`**. Everything Packwright keeps (database, generated secrets, workspaces, outputs, the compile cache) is in the `packwright-data` volume, so `docker compose up -d --build` after a `git pull` upgrades without losing anything. Builds run as uid 1000 inside the container. `docker-compose.yml` shows how to let builds read folders on the host and, if you trust every account, use the host's Docker for Docker output.
+
+### From source
+
 **Prerequisites:** Python 3.13+, [uv](https://docs.astral.sh/uv/), Node.js 22.12+ (to build the console, and for frontend builds), and — for the engines they drive — Nuitka's toolchain (a C compiler) and Docker (for Docker output). The database is a local SQLite file by default (no setup); PostgreSQL is optional (set `DATABASE_URL`). `pigz` is optional and speeds up image compression. [ccache](https://ccache.dev/) is optional and strongly recommended: with it, Nuitka reuses the C files that did not change, so a rebuild can be several times faster (the **Machine** page says whether it is on).
 
 ```bash

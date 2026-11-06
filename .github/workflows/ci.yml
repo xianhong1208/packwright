@@ -88,3 +88,19 @@ jobs:
       - name: npm (production dependencies, high and above)
         working-directory: frontend
         run: npm audit --omit=dev --audit-level=high
+
+  docker:
+    name: Docker image (build + end-to-end smoke)
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      # Builds the image, runs two real Nuitka builds through the API (the second
+      # must reuse the compile cache), then recreates the container on the same
+      # volume and checks the database and the session secret survived.
+      - name: Check docker-compose.yml
+        run: docker compose config --quiet
+      - name: Build and smoke-test the image
+        run: bash scripts/docker_smoke.sh
