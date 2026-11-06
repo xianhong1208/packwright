@@ -1117,11 +1117,22 @@ def build_nuitka_command(
             f"Skipped {len(skipped)} invalid module names (not dotted identifiers; left out of nofollow): "
             + ", ".join(sorted(skipped)[:10])
         )
+    nofollowed = False
     for pkg in blacklist:
         if not _MODULE_NAME_RE.fullmatch(pkg):
             continue
         cmd.append(f"--nofollow-import-to={pkg}")
         cmd.append(f"--nofollow-import-to={pkg}.*")
+        nofollowed = True
+    if nofollowed:
+        # Nuitka 4 compiles a loader into the program that raises ImportError
+        # ("actively excluded from Nuitka compilation") for every module it was
+        # told not to follow, and it sits on sys.meta_path ahead of the libs/
+        # directory External mode puts on sys.path. Left on, every External
+        # build of a project with a dependency compiled and then failed on its
+        # first import. libs/ is where those modules are meant to come from.
+        cmd.append("--no-deployment-flag=excluded-module-usage")
+        log.append("Excluded packages load from libs/ (excluded-module-usage guard off)")
 
     # Optimization / diagnostics options
     if not config.enable_anti_bloat:
