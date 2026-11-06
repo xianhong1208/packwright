@@ -170,6 +170,12 @@ class Settings(BaseSettings):
     # Set it when that home is not persistent (a container) or too small.
     nuitka_cache_dir: str = ""
 
+    # === Notifications ===
+    # The address people open Packwright at (e.g. https://packwright.example.com).
+    # Build notifications link to the build's page with it; empty sends them
+    # without a link, since the server cannot know its own public address.
+    public_url: str = ""
+
     # === Workspace cleanup (git mode only) ===
     # Periodic background sweep of git_workspace_dir that deletes per-task
     # clones according to task status + age. Never touches running/pending.

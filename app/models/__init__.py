@@ -10,6 +10,7 @@ from app.models.password_reset import PasswordResetToken
 from app.models.audit_log import AuditLog
 from app.models.git_credential import GitCredential
 from app.models.project import Project
+from app.models.notification import ProjectNotification
 
 __all__ = [
     "Task",
@@ -23,4 +24,5 @@ __all__ = [
     "AuditLog",
     "GitCredential",
     "Project",
+    "ProjectNotification",
 ]

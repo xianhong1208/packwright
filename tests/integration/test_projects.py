@@ -15,15 +15,6 @@ def _git(url: str, **extra) -> dict:
     return {"source_type": "git", "git_url": url, "git_ref": "main", "project_type": "backend_only", **extra}
 
 
-@pytest.fixture
-def no_builds(mocker):
-    from app.api.routes import projects as projects_route
-    from app.api.routes import tasks as tasks_route
-
-    mocker.patch.object(tasks_route, "start_build_task", mocker.AsyncMock())
-    mocker.patch.object(projects_route, "start_build_task", mocker.AsyncMock())
-
-
 def _h(token: str) -> dict:
     return {"Authorization": f"Bearer {token}"}
 

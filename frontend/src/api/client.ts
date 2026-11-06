@@ -1,5 +1,7 @@
 import axios, { type AxiosError, type InternalAxiosRequestConfig } from 'axios'
 import type {
+  NotificationKind,
+  ProjectNotification,
   BuildStats,
   HistoryItem,
   TaskCreate,
@@ -389,6 +391,20 @@ export const projectApi = {
   /** Build a new version with the project's settings, and these changes for this build only. */
   build: async (id: number, body: { version: string; overrides?: Partial<BuildConfig> }): Promise<TaskResponse> =>
     (await api.post<TaskResponse>(`/projects/${id}/builds`, body)).data,
+  notifications: async (id: number): Promise<ProjectNotification[]> =>
+    (await api.get<ProjectNotification[]>(`/projects/${id}/notifications`)).data,
+  addNotification: async (
+    id: number, body: { kind: NotificationKind; url: string; on_failed: boolean; on_passed: boolean },
+  ): Promise<ProjectNotification> => (await api.post<ProjectNotification>(`/projects/${id}/notifications`, body)).data,
+  updateNotification: async (
+    id: number, notificationId: number, body: { url?: string; on_failed?: boolean; on_passed?: boolean },
+  ): Promise<ProjectNotification> =>
+    (await api.patch<ProjectNotification>(`/projects/${id}/notifications/${notificationId}`, body)).data,
+  removeNotification: async (id: number, notificationId: number): Promise<void> => {
+    await api.delete(`/projects/${id}/notifications/${notificationId}`)
+  },
+  testNotification: async (id: number, notificationId: number): Promise<{ ok: boolean; error: string | null }> =>
+    (await api.post<{ ok: boolean; error: string | null }>(`/projects/${id}/notifications/${notificationId}/test`)).data,
   /** Earlier builds of a version, to ask before building it again. */
   sameVersion: async (projectName: string, version: string): Promise<SameVersionBuild[]> =>
     (await api.get<SameVersionBuild[]>('/history/versions', { params: { project_name: projectName, version } })).data,
