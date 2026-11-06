@@ -1,12 +1,13 @@
 import type { ReactNode } from 'react'
-import { Button, Form, Input, Radio, Select, Segmented, type FormInstance } from 'antd'
-import { CheckIcon, FolderIcon, LinkIcon, QuestionIcon, RocketLaunchIcon, SlidersIcon, SpinnerIcon } from '../../../components/ui/icons'
+import { Button, Form, Input, Radio, Select, Segmented, Switch, type FormInstance } from 'antd'
+import { CheckIcon, FolderIcon, LinkIcon, QuestionIcon, RocketLaunchIcon, SlidersIcon, SpinnerIcon, WarningCircleIcon } from '../../../components/ui/icons'
 import type { ProjectType } from '../../../api/types'
 import { useCreateTask } from '../context'
-import { guessProject } from '../quickPlan'
+import { guessProject, outputSentence } from '../quickPlan'
+import { activeSteps, type StepKey } from '../steps'
 import BuildFlow from '../../../components/build/BuildFlow'
 
-type RowState = 'looking' | 'found' | 'ask'
+type RowState = 'looking' | 'found' | 'ask' | 'error'
 
 /** A form value, whether or not its field is on screen (see the note at its use). */
 function useField<T>(form: FormInstance, name: string): T | undefined {
@@ -22,7 +23,7 @@ function Finding({ state, label, children }: { state: RowState; label: string; c
   return (
     <li className="finding" data-state={state}>
       <span className="finding-mark" aria-hidden="true">
-        {state === 'looking' ? <SpinnerIcon /> : state === 'found' ? <CheckIcon /> : <QuestionIcon />}
+        {state === 'looking' ? <SpinnerIcon /> : state === 'found' ? <CheckIcon /> : state === 'error' ? <WarningCircleIcon /> : <QuestionIcon />}
       </span>
       <div className="min-w-0 flex-1">
         <div className="finding-label">{label}</div>
@@ -57,6 +58,7 @@ export default function QuickBuild() {
     loadingRefs,
     scanningTree,
     repoChecks,
+    repoError,
     analysis,
     depGroups,
     loadingDepGroups,
@@ -66,6 +68,9 @@ export default function QuickBuild() {
     createMutation,
     handleManualSubmit,
     setMode,
+    setCurrentStep,
+    selectedDirs,
+    selectedDataDirs,
   } = useCreateTask()
 
   // preserve: these fields are not rendered here (they live in the full wizard),
@@ -78,17 +83,28 @@ export default function QuickBuild() {
   const frontendOut = useField<string>(form, 'frontend_output_dir')
   const projectPath = useField<string>(form, 'project_path')
   const gitUrl = useField<string>(form, 'git_url')
+  const packMode = useField<string>(form, 'pack_mode')
+  const onefile = useField<boolean>(form, 'onefile')
+  const verify = useField<boolean>(form, 'verify_after_build')
+  const dockerOn = useField<boolean>(form, 'docker_enabled')
 
   const hasSource = sourceType === 'git' ? Boolean(gitUrl?.trim()) : Boolean(projectPath?.trim().startsWith('/'))
-  const reading = sourceType === 'git' ? loadingRefs || scanningTree : repoChecks === null
+  const reading = !repoError && (sourceType === 'git' ? loadingRefs || scanningTree : repoChecks === null)
   const guess = repoChecks ? guessProject(repoChecks) : null
   const typeKnown = Boolean(guess?.projectType)
   const python = analysis?.detected_python?.version
 
+  // Open the full wizard at the step that holds a setting.
+  const goTo = (step: StepKey) => {
+    const at = activeSteps(projectType).findIndex((st) => st.key === step)
+    setCurrentStep(Math.max(0, at))
+    setMode('full')
+  }
+
   const start = async () => {
     try {
       const sourceFields = sourceType === 'git' ? ['git_url', 'git_ref'] : ['project_path']
-      await form.validateFields(['project_name', ...sourceFields])
+      await form.validateFields(['project_name', ...sourceFields, ...(hasBackend ? ['entry_point'] : [])])
       handleManualSubmit()
     } catch {
       // The fields show what is missing.
@@ -164,6 +180,13 @@ export default function QuickBuild() {
           <p className="m-0 mb-4 text-sm" style={{ color: 'var(--ink-muted)' }}>
             Read from the project. Anything it gets wrong can be changed here or under All settings.
           </p>
+          {repoError ? (
+            <ul className="findings">
+              <Finding state="error" label={sourceType === 'git' ? 'Could not read the repository' : 'Could not read the folder'}>
+                {repoError}
+              </Finding>
+            </ul>
+          ) : (
           <ul className="findings">
             <Finding state={reading ? 'looking' : typeKnown ? 'found' : 'ask'} label="What it is">
               {reading ? (
@@ -224,14 +247,15 @@ export default function QuickBuild() {
 
             {!reading && typeKnown && (
               <Finding state="found" label="You get">
-                {hasBackend
-                  ? 'One executable, with its libraries in a libs/ folder beside it. It is run once to check it starts.'
-                  : 'The built files, ready to put behind a web server.'}
+                {outputSentence({ backend: hasBackend, packMode, onefile, verify, docker: dockerOn })}
               </Finding>
             )}
           </ul>
+          )}
         </section>
       )}
+
+      {hasSource && !repoError && !reading && <QuickSettings goTo={goTo} selected={selectedDirs.length} data={selectedDataDirs.length} />}
 
       {hasSource && (
         <section className="glass-card p-6 mb-4" aria-labelledby="quick-name">
@@ -249,7 +273,7 @@ export default function QuickBuild() {
           icon={<RocketLaunchIcon />}
           loading={createMutation.isPending}
           // Unrecognised projects need the type picked; the form's default is a guess nobody made.
-          disabled={!hasSource || reading || (!typeKnown && !form.isFieldTouched('project_type'))}
+          disabled={!hasSource || reading || Boolean(repoError) || (!typeKnown && !form.isFieldTouched('project_type'))}
           onClick={start}
           style={{ height: 44, minWidth: 164 }}
         >
@@ -260,5 +284,108 @@ export default function QuickBuild() {
         </Button>
       </div>
     </div>
+  )
+}
+
+/** A setting changed here, with what each choice means. */
+function Choice({ label, help, children }: { label: string; help: ReactNode; children: ReactNode }) {
+  return (
+    <div className="quick-choice">
+      <div className="min-w-0">
+        <div className="font-semibold" style={{ color: 'var(--ink)' }}>{label}</div>
+        <div className="text-sm" style={{ color: 'var(--ink-muted)' }}>{help}</div>
+      </div>
+      <div className="flex-none">{children}</div>
+    </div>
+  )
+}
+
+/**
+ * The settings people change most, changed in place, and every other one listed
+ * with the value it will use and a way to it in the full wizard.
+ */
+function QuickSettings({ goTo, selected, data }: { goTo: (step: StepKey) => void; selected: number; data: number }) {
+  const { form, hasBackend, showFrontendSettings, dockerEnabled } = useCreateTask()
+  const packMode = useField<string>(form, 'pack_mode')
+  const onefile = useField<boolean>(form, 'onefile')
+  const python = useField<string>(form, 'python_version')
+  const jobs = useField<number>(form, 'nuitka_jobs')
+  const group = useField<string>(form, 'dependency_group')
+  const envFile = useField<string>(form, 'frontend_env_content')
+  const baseImage = useField<string>(form, 'docker_base_image')
+  const port = useField<number>(form, 'docker_expose_port')
+
+  const others: { name: string; value: string; step: StepKey }[] = [
+    ...(hasBackend
+      ? [
+          { name: 'Python version', value: !python || python === 'auto' ? 'Automatic' : python, step: 'backend' as StepKey },
+          { name: 'CPU jobs', value: jobs ? String(jobs) : 'Automatic', step: 'backend' as StepKey },
+          { name: 'Dependency group', value: group || 'None (default dependencies)', step: 'backend' as StepKey },
+          { name: 'Source code to bundle', value: selected ? `${selected} selected` : 'None', step: 'backend' as StepKey },
+          { name: 'Data directories', value: data ? `${data} selected` : 'None', step: 'backend' as StepKey },
+        ]
+      : []),
+    ...(showFrontendSettings
+      ? [{ name: 'Frontend environment (.env)', value: envFile?.trim() ? 'Loaded' : 'None', step: 'frontend' as StepKey }]
+      : []),
+    ...(dockerEnabled
+      ? [{ name: 'Docker image', value: `${baseImage || 'python:3.13-slim'}, port ${port || 8000}`, step: 'docker' as StepKey }]
+      : []),
+  ]
+
+  return (
+    <section className="glass-card p-6 mb-4" aria-labelledby="quick-settings">
+      <h2 id="quick-settings" className="text-[17px] font-semibold m-0 mb-1" style={{ color: 'var(--ink)' }}>Settings</h2>
+      <p className="m-0 mb-4 text-sm" style={{ color: 'var(--ink-muted)' }}>The usual choices are already made. Change them here, or open any other setting below.</p>
+
+      <div className="quick-choices">
+        {hasBackend && (
+          <Choice
+            label="Packing"
+            help={packMode === 'full'
+              ? 'Everything compiled into the program. Slow: a large project can take hours.'
+              : 'Libraries copied beside the program in libs/. Builds in minutes.'}
+          >
+            <Form.Item name="pack_mode" className="!mb-0">
+              <Segmented options={[{ value: 'external', label: 'External' }, { value: 'full', label: 'Full' }]} aria-label="Packing" />
+            </Form.Item>
+          </Choice>
+        )}
+        {hasBackend && (
+          <Choice
+            label="Output"
+            help={onefile === false ? 'A folder holding the program and what it needs.' : 'A single executable file.'}
+          >
+            <Form.Item name="onefile" className="!mb-0">
+              <Segmented options={[{ value: true, label: 'One file' }, { value: false, label: 'A folder' }]} aria-label="Output" />
+            </Form.Item>
+          </Choice>
+        )}
+        {hasBackend && (
+          <Choice label="Check it starts" help="Run the program once after building; a missing module fails the build here.">
+            <Form.Item name="verify_after_build" valuePropName="checked" className="!mb-0">
+              <Switch aria-label="Check it starts" />
+            </Form.Item>
+          </Choice>
+        )}
+        <Choice label="Docker image" help="Also wrap the result in a Docker image you can download.">
+          <Form.Item name="docker_enabled" valuePropName="checked" className="!mb-0">
+            <Switch aria-label="Docker image" />
+          </Form.Item>
+        </Choice>
+      </div>
+
+      {others.length > 0 && (
+        <dl className="quick-others">
+          {others.map((o) => (
+            <div key={o.name} className="quick-other">
+              <dt>{o.name}</dt>
+              <dd>{o.value}</dd>
+              <button type="button" className="quick-change" onClick={() => goTo(o.step)} aria-label={`Change ${o.name}`}>Change</button>
+            </div>
+          ))}
+        </dl>
+      )}
+    </section>
   )
 }

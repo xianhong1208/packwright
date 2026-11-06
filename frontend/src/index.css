@@ -526,6 +526,31 @@ h1, h2, h3, h4, h5 { font-family: var(--font-display); letter-spacing: -0.015em;
   border-radius: 5px;
   background: var(--color-void-800);
 }
+.finding[data-state='error'] .finding-mark {
+  background: color-mix(in srgb, var(--color-alert-500) 20%, transparent);
+  color: var(--color-alert-400);
+}
+.finding[data-state='error'] .finding-label { color: var(--color-alert-400); }
+.quick-choices { display: grid; gap: 4px; }
+.quick-choice {
+  display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between;
+  gap: 8px 16px; padding: 12px 0;
+  border-bottom: 1px solid var(--seam);
+}
+.quick-others { margin: 16px 0 0; display: grid; gap: 2px; }
+.quick-other {
+  display: grid; grid-template-columns: minmax(0, 1fr) auto; column-gap: 12px;
+  align-items: baseline; padding: 6px 0;
+}
+.quick-other dt { font-size: 13px; color: var(--ink-muted); }
+.quick-other dd { margin: 0; grid-column: 1; color: var(--ink); overflow-wrap: anywhere; }
+.quick-change {
+  grid-column: 2; grid-row: 1 / span 2; align-self: center;
+  border: 0; background: none; padding: 4px 6px; cursor: pointer;
+  color: var(--color-cyber-400); font: inherit; font-size: 14px; border-radius: 6px;
+}
+.quick-change:hover { color: var(--color-cyber-300); }
+.quick-change:focus-visible { outline: 2px solid var(--color-cyber-500); outline-offset: 2px; }
 @keyframes finding-pop {
   from { transform: scale(0.4); opacity: 0; }
   to { transform: scale(1); opacity: 1; }

@@ -12,8 +12,11 @@ follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this proje
   package.json and where it is) and shows what it found row by row: backend, frontend or full stack, the
   entry point, the frontend directory and build command, the Python version and dependency groups. A
   wrong type is corrected in place; an unrecognised project has to be given one before it can start.
-  *All settings* opens the full wizard with everything already found filled in. Rebuilds go straight
-  to the wizard. Git scans now return the same fingerprints a local path gets.
+  The settings people change most (packing, one file or a folder, the start-up check, a Docker image)
+  are changed in place, and every other one is listed with the value it will use and a *Change* link to
+  its step in the full wizard. *All settings* opens that wizard with everything already found filled
+  in; rebuilds go straight there. A source the server may not read says why. Git scans now return the
+  same fingerprints a local path gets.
 - **Animations that explain.** A first build is preceded by a short animation of what happens to the
   code (on an empty home page and on Quick build before a source is given); found settings pop in as
   they are read; and a running build shows a stage track whose current stage pulses and whose rail

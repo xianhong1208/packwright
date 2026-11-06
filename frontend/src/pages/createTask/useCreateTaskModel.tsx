@@ -162,9 +162,13 @@ export function useCreateTaskModel() {
   // nothing found here is lost. A rebuild already has its settings.
   const [mode, setMode] = useState<'quick' | 'full'>(() => (isRebuild ? 'full' : 'quick'))
   const [repoChecks, setRepoChecks] = useState<RepoDiagnosisCheck[] | null>(null)
+  // Why the source could not be read (not allowed, not there…). Kept apart from
+  // "nothing recognisable", which it used to be shown as.
+  const [repoError, setRepoError] = useState<string | null>(null)
   const autoNameRef = useRef<string | null>(null)
   const applyGuess = useCallback((checks: RepoDiagnosisCheck[], source: string): ProjectGuess => {
     setRepoChecks(checks)
+    setRepoError(null)
     const guess = guessProject(checks)
     if (mode !== 'quick') return guess
     // Never over something the person set themselves.
@@ -173,6 +177,11 @@ export function useCreateTaskModel() {
     }
     fill('project_type', guess.projectType)
     fill('entry_point', guess.entryPoint)
+    // A Python project without a usual entry point: leave the field empty for the
+    // person to fill, rather than showing the form's main.py under "no main.py".
+    if (guess.projectType !== 'frontend_only' && guess.entryPoint === null && !form.isFieldTouched('entry_point')) {
+      form.setFieldValue('entry_point', '')
+    }
     fill('frontend_dir', guess.frontendDir)
     const name = (form.getFieldValue('project_name') as string | undefined) ?? ''
     if (!name || name === autoNameRef.current) {
@@ -436,6 +445,7 @@ export function useCreateTaskModel() {
     const path = ((projectPath as string | undefined) || '').trim()
     if (!path.startsWith('/')) {
       setRepoChecks(null)
+      setRepoError(null)
       return
     }
     const timer = setTimeout(async () => {
@@ -444,8 +454,10 @@ export function useCreateTaskModel() {
         const guess = applyGuess(checks, path)
         if (guess.projectType === 'backend_only' || guess.projectType === 'fullstack') void fetchPyprojectGroups(path)
         if (guess.projectType === 'frontend_only' || guess.projectType === 'fullstack') void detectFrontendConfig(true)
-      } catch {
-        setRepoChecks([])
+      } catch (err: unknown) {
+        const e = err as { response?: { data?: { detail?: string } } }
+        setRepoChecks(null)
+        setRepoError(e.response?.data?.detail ?? 'The server could not read this folder.')
       }
     }, 500)
     return () => clearTimeout(timer)
@@ -533,6 +545,7 @@ export function useCreateTaskModel() {
     } catch (err: unknown) {
       setDepGroupsRead('failed')
       const e = err as { response?: { data?: { detail?: string } } }
+      setRepoError(e.response?.data?.detail ?? 'The server could not read this repository.')
       notification.error({
         message: 'Could not scan the repo structure',
         description:
@@ -679,6 +692,8 @@ export function useCreateTaskModel() {
     setEnvFiles([])
     setDepGroups([])
     setDepGroupsRead('unread')
+    setRepoChecks(null)
+    setRepoError(null)
     form.setFieldValue('dependency_group', undefined)
   }, [sourceType, form])
 
@@ -912,6 +927,7 @@ export function useCreateTaskModel() {
     mode,
     setMode,
     repoChecks,
+    repoError,
     workspaceDir,
     setWorkspaceDir,
     draftSavedAt,
