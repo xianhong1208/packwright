@@ -157,7 +157,7 @@ function AddDestination({ projectId, onAdded, onError }: { projectId: number; on
 
   return (
     <section className="glass-card p-4" aria-labelledby="add-notification">
-      <h3 id="add-notification" className="text-[15px] font-semibold m-0 mb-3 inline-flex items-center gap-2" style={{ color: 'var(--ink)' }}>
+      <h3 id="add-notification" className="text-[15px] font-semibold m-0 mb-3 flex items-center gap-2" style={{ color: 'var(--ink)' }}>
         <PlusIcon /> Add a notification
       </h3>
       <Segmented<NotificationKind>
