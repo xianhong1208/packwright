@@ -76,6 +76,16 @@ follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this proje
   production 5 → 0 (axios, react-router).
 
 ### Fixed
+- **Source code to bundle** passed a selected file to `--follow-import-to` by its file name and to
+  `--include-data-dir`, which only takes directories. A `.py` file is now one module, any other file a
+  data file (`--include-data-files`).
+- A missing `package.json` was reported as an unknown failure; it now points at the frontend directory.
+  The dependency-install diagnosis also recognises npm 10, which writes `npm error` instead of `npm ERR!`.
+- **Dependency group** asked for the project path even after one was entered, when the project simply
+  defines no groups. It now says whether pyproject.toml was read, had no groups, or could not be read.
+- The Builds list and home page did not show an output's size or smoke test: the history list left the
+  build result out. It now carries the parts a row shows (size, smoke test, failed stage, first
+  diagnosis), not the preflight checks and error lines the detail page has.
 - Success rates counted cancelled and running builds as failures. They count only builds that passed or
   failed now, in the summary, per day (which gains `failed`) and per project.
 - The sessions list marked every sign-in from the same address as "this device", so the current one
