@@ -20,6 +20,7 @@ SECURITY INVARIANTS (do not violate):
 from __future__ import annotations
 
 import asyncio
+from collections.abc import Callable
 import base64
 import ipaddress
 import os
@@ -596,6 +597,7 @@ async def scan_tree(
             "suggested_extra_dirs": [],
             "suggested_data_dirs": [],
         }
+        checks: list[dict] = []
         try:
             lsr_cmd = ["git", "ls-tree", "-r", "--name-only", "HEAD"]
             proc4 = await _spawn(
@@ -611,6 +613,7 @@ async def scan_tree(
 
                 paths = lsr_bytes.decode("utf-8", "replace").splitlines()
                 analysis = classify_from_paths(paths)
+                checks = check_repo_paths(path_lookup(paths))
         except Exception:
             pass
 
@@ -618,6 +621,9 @@ async def scan_tree(
             "directories": sorted(names),
             "analysis": analysis,
             "dependency_groups": dependency_groups,
+            # The same fingerprints a local path gets from /git/diagnose, so
+            # New build can tell a backend from a frontend from a full stack.
+            "checks": checks,
         }
     finally:
         _safe_rmtree(tmp_root)
@@ -904,6 +910,37 @@ REPO_CHECKS: list[dict] = [
 ]
 
 
+def check_repo_paths(exists: Callable[[str], bool]) -> list[dict]:
+    """Run REPO_CHECKS against a project, given a way to ask whether a relative
+    path exists in it.
+
+    One definition for both sources: a local project answers from the file
+    system, a Git repository from its ``ls-tree`` file list, so New build infers
+    the same project type whichever way the code arrives.
+    """
+    results: list[dict] = []
+    for check in REPO_CHECKS:
+        hit_path = next((c for c in check["paths"] if exists(c)), None)
+        if hit_path is not None:
+            results.append({"key": check["key"], "label": check["label_ok"], "status": "ok", "path": hit_path})
+        else:
+            results.append({
+                "key": check["key"],
+                "label": check["label_missing"],
+                "status": check["status_when_missing"],
+                "path": None,
+            })
+    return results
+
+
+def path_lookup(paths: list[str]) -> Callable[[str], bool]:
+    """``exists`` for check_repo_paths over a repository file list, in which a
+    directory exists when any file lies under it."""
+    files = set(paths)
+    dirs = {p.rsplit("/", i)[0] for p in paths for i in range(1, p.count("/") + 1)}
+    return lambda rel: rel in files or rel in dirs
+
+
 def diagnose_repo(path: Path) -> dict:
     """Scan `path` for structural fingerprints and return status chips.
 
@@ -918,28 +955,4 @@ def diagnose_repo(path: Path) -> dict:
     path = Path(path)
     if not path.exists() or not path.is_dir():
         return {"checks": []}
-
-    results: list[dict] = []
-    for check in REPO_CHECKS:
-        hit_path: str | None = None
-        for candidate in check["paths"]:
-            probe = path / candidate
-            if probe.exists():
-                hit_path = candidate
-                break
-        if hit_path is not None:
-            results.append({
-                "key": check["key"],
-                "label": check["label_ok"],
-                "status": "ok",
-                "path": hit_path,
-            })
-        else:
-            results.append({
-                "key": check["key"],
-                "label": check["label_missing"],
-                "status": check["status_when_missing"],
-                "path": None,
-            })
-
-    return {"checks": results}
+    return {"checks": check_repo_paths(lambda rel: (path / rel).exists())}
