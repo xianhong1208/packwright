@@ -189,7 +189,7 @@ export default function History() {
                   </div>
                   <div className="build-verdict" style={{ color: meta.color }}>
                     {line.verdict}
-                    {record.status === 'failed' && line.detail && <div className="build-meta truncate max-w-[280px]">{line.detail}</div>}
+                    {line.detail && <div className="build-meta truncate max-w-[280px]">{line.detail}</div>}
                   </div>
                   <div className="flex gap-1.5 flex-none">
                     {record.config && (
