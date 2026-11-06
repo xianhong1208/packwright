@@ -20,6 +20,7 @@ const api = vi.hoisted(() => ({
   listGitRefs: vi.fn(),
   scanGitTree: vi.fn(),
   previewGitFrontend: vi.fn(),
+  diagnoseRepo: vi.fn(),
   create: vi.fn(),
 }))
 vi.mock('../api/client', () => ({ taskApi: api }))
@@ -53,6 +54,13 @@ const rebuildOf = (config: Partial<BuildConfig>) => ({
   config: { project_name: 'again', project_path: '/srv/projects/app', python_version: 'auto', entry_point: 'main.py', ...config } as BuildConfig,
 })
 
+/** New build opens on Quick build; the wizard is behind "All settings". */
+async function openAllSettings() {
+  await act(async () => {
+    fireEvent.click(await screen.findByRole('button', { name: /All settings/ }))
+  })
+}
+
 async function goToReview() {
   for (let i = 0; i < 6 && !screen.queryByRole('button', { name: /Start (re)?build/ }); i++) {
     await act(async () => {
@@ -73,6 +81,7 @@ beforeEach(() => {
   api.detectFrontendConfig.mockResolvedValue({})
   api.listEnvFiles.mockResolvedValue({ files: [] })
   api.create.mockResolvedValue({ id: 'new-task' })
+  api.diagnoseRepo.mockResolvedValue({ checks: [] })
 })
 
 describe('New build wizard', () => {
@@ -88,6 +97,7 @@ describe('New build wizard', () => {
 
   it('submits what the user entered, with the defaults for the rest', async () => {
     renderWizard()
+    await openAllSettings()
     fireEvent.change(screen.getByPlaceholderText('my-project'), { target: { value: 'hello-cli' } })
     fireEvent.change(screen.getByPlaceholderText('/path/to/your/project'), { target: { value: '/srv/projects/app' } })
 
@@ -113,6 +123,7 @@ describe('New build wizard', () => {
 
   it('does not leave Basics while the project path is missing', async () => {
     renderWizard()
+    await openAllSettings()
     fireEvent.change(screen.getByPlaceholderText('my-project'), { target: { value: 'x' } })
     await act(async () => {
       fireEvent.click(screen.getAllByRole('button', { name: /^Next/ }).at(-1)!)
@@ -142,6 +153,7 @@ describe('New build wizard', () => {
 
   it('keeps a draft of the form and restores it on the next visit', async () => {
     const first = renderWizard()
+    await openAllSettings()
     fireEvent.change(screen.getByPlaceholderText('my-project'), { target: { value: 'draft-me' } })
     await waitFor(() => expect(localStorage.getItem('createTaskDraft') ?? '').toContain('draft-me'), {
       timeout: 3000,
@@ -149,6 +161,111 @@ describe('New build wizard', () => {
     first.unmount()
 
     renderWizard()
+    await openAllSettings()
     expect(await screen.findByDisplayValue('draft-me')).toBeInTheDocument()
+  })
+})
+
+const ok = (key: string, path: string) => ({ key, label: '', status: 'ok' as const, path })
+const FULLSTACK = [ok('entry_point', 'app/main.py'), ok('package_json', 'frontend/package.json'), ok('pyproject', 'pyproject.toml')]
+
+async function pointAt(path: string) {
+  fireEvent.change(screen.getByLabelText('Project folder'), { target: { value: path } })
+}
+
+describe('Quick build', () => {
+  it('reads the project, names the build after its folder and submits what it found', async () => {
+    api.diagnoseRepo.mockResolvedValue({ checks: FULLSTACK })
+    renderWizard()
+    await pointAt('/srv/projects/shop')
+
+    expect(await screen.findByText(/A frontend and a Python backend/, {}, { timeout: 3000 })).toBeInTheDocument()
+    expect(screen.getByLabelText('Build name')).toHaveValue('shop')
+    // The frontend field is not on this screen; what it shows must still be what is sent.
+    expect(await screen.findByText('frontend/')).toBeInTheDocument()
+    await act(async () => {
+      fireEvent.click(screen.getByRole('button', { name: /Start build/ }))
+    })
+
+    await waitFor(() => expect(api.create).toHaveBeenCalledTimes(1))
+    expect(api.create.mock.calls[0][0]).toMatchObject({
+      project_name: 'shop',
+      config: { project_type: 'fullstack', project_path: '/srv/projects/shop', entry_point: 'app/main.py', frontend_dir: 'frontend' },
+    })
+  })
+
+  it('asks for the type when the files do not say, and will not start on a guess nobody made', async () => {
+    renderWizard()
+    await pointAt('/srv/projects/odd')
+
+    expect(await screen.findByText(/Could not tell from the files/, {}, { timeout: 3000 })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /Start build/ })).toBeDisabled()
+
+    await act(async () => {
+      fireEvent.click(screen.getByText('Frontend'))
+    })
+    expect(screen.getByRole('button', { name: /Start build/ })).toBeEnabled()
+  })
+
+  it('keeps what it found when switching to All settings', async () => {
+    api.diagnoseRepo.mockResolvedValue({ checks: FULLSTACK })
+    renderWizard()
+    await pointAt('/srv/projects/shop')
+    await screen.findByText(/A frontend and a Python backend/, {}, { timeout: 3000 })
+
+    await openAllSettings()
+
+    expect(screen.getByPlaceholderText('my-project')).toHaveValue('shop')
+    expect(screen.getByPlaceholderText('/path/to/your/project')).toHaveValue('/srv/projects/shop')
+    await waitFor(() => expect(railSteps().length).toBe(5)) // full stack: Basics, Backend, Frontend, Docker, Review
+  })
+
+  it('does not replace a name the person typed when the folder changes', async () => {
+    api.diagnoseRepo.mockResolvedValue({ checks: FULLSTACK })
+    renderWizard()
+    await pointAt('/srv/projects/shop')
+    await screen.findByText(/A frontend and a Python backend/, {}, { timeout: 3000 })
+    fireEvent.change(screen.getByLabelText('Build name'), { target: { value: 'storefront' } })
+
+    await pointAt('/srv/projects/shop-v2')
+    await waitFor(() => expect(api.diagnoseRepo).toHaveBeenLastCalledWith('/srv/projects/shop-v2'), { timeout: 3000 })
+
+    expect(screen.getByLabelText('Build name')).toHaveValue('storefront')
+  })
+
+  it('reads a Git repository the same way, naming the build after it', async () => {
+    api.listGitRefs.mockResolvedValue({ branches: ['main'], tags: [] })
+    api.scanGitTree.mockResolvedValue({ directories: ['src'], dependency_groups: [], checks: [ok('package_json', 'package.json')] })
+    api.previewGitFrontend.mockResolvedValue({ frontend_config: { detected: false }, env_files: {}, frontend_dir_exists: true })
+    renderWizard()
+    await act(async () => {
+      fireEvent.click(screen.getByText('A Git repository'))
+    })
+    fireEvent.change(screen.getByLabelText('Repository URL'), { target: { value: 'https://github.com/acme/storefront.git' } })
+
+    expect(await screen.findByText(/A web frontend, built into static files/, {}, { timeout: 5000 })).toBeInTheDocument()
+    expect(api.scanGitTree).toHaveBeenCalledWith('https://github.com/acme/storefront.git', 'main', 'branch')
+    expect(screen.getByLabelText('Build name')).toHaveValue('storefront')
+  })
+
+  it('still scans a Git repository when the type already says frontend', async () => {
+    api.listGitRefs.mockResolvedValue({ branches: ['main'], tags: [] })
+    api.scanGitTree.mockResolvedValue({ directories: [], dependency_groups: [], checks: FULLSTACK })
+    api.previewGitFrontend.mockResolvedValue({ frontend_config: { detected: false }, env_files: {}, frontend_dir_exists: true })
+    renderWizard()
+    // An unrecognised folder first, set to Frontend by hand...
+    await pointAt('/srv/projects/odd')
+    await screen.findByText(/Could not tell from the files/, {}, { timeout: 3000 })
+    await act(async () => {
+      fireEvent.click(screen.getByText('Frontend'))
+    })
+    // ...then the code turns out to be in Git. The scan is what tells Quick build
+    // anything, so it has to run whatever the type says.
+    await act(async () => {
+      fireEvent.click(screen.getByText('A Git repository'))
+    })
+    fireEvent.change(screen.getByLabelText('Repository URL'), { target: { value: 'https://github.com/acme/shop.git' } })
+
+    await waitFor(() => expect(api.scanGitTree).toHaveBeenCalled(), { timeout: 5000 })
   })
 })

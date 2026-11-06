@@ -37,6 +37,7 @@ import {
   HardDrivesIcon as HardDrives,
   HouseIcon as House,
   KeyIcon as Key,
+  LightningIcon as Lightning,
   LinkIcon as Link,
   ListIcon as List,
   LockIcon as Lock,
@@ -52,6 +53,7 @@ import {
   SealCheckIcon as SealCheck,
   ShieldCheckIcon as ShieldCheck,
   SignOutIcon as SignOut,
+  SlidersIcon as Sliders,
   SquaresFourIcon as SquaresFour,
   TagIcon as Tag,
   TrashIcon as Trash,
@@ -118,6 +120,7 @@ export const GlobeIcon = wrap(Globe, 'GlobeIcon')
 export const HardDrivesIcon = wrap(HardDrives, 'HardDrivesIcon')
 export const HouseIcon = wrap(House, 'HouseIcon')
 export const KeyIcon = wrap(Key, 'KeyIcon')
+export const LightningIcon = wrap(Lightning, 'LightningIcon')
 export const LinkIcon = wrap(Link, 'LinkIcon')
 export const ListIcon = wrap(List, 'ListIcon')
 export const LockIcon = wrap(Lock, 'LockIcon')
@@ -133,6 +136,7 @@ export const ScanIcon = wrap(Scan, 'ScanIcon')
 export const SealCheckIcon = wrap(SealCheck, 'SealCheckIcon')
 export const ShieldCheckIcon = wrap(ShieldCheck, 'ShieldCheckIcon')
 export const SignOutIcon = wrap(SignOut, 'SignOutIcon')
+export const SlidersIcon = wrap(Sliders, 'SlidersIcon')
 export const SquaresFourIcon = wrap(SquaresFour, 'SquaresFourIcon')
 export const TagIcon = wrap(Tag, 'TagIcon')
 export const TrashIcon = wrap(Trash, 'TrashIcon')
