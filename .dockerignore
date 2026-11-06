@@ -2,6 +2,7 @@
 __pycache__/
 *.py[cod]
 .venv/
+.venv-py*/
 *.egg-info/
 
 # Node
@@ -20,3 +21,8 @@ frontend/dist/
 *.md
 .claude/
 .env
+
+# Local state and tests are not part of the image
+data/
+tests/
+frontend/coverage/
