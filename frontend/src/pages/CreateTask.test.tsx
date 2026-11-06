@@ -28,6 +28,11 @@ vi.mock('../api/client', () => ({ taskApi: api, projectApi: projects }))
 
 import CreateTask from './CreateTask'
 
+// These tests wait on the page's real 500 ms detection debounce and allow
+// findBy* up to 3-5 s, so the default 5 s per test was tighter than the waits
+// inside it: a busy machine failed them on time alone.
+vi.setConfig({ testTimeout: 15_000 })
+
 function renderWizard(state?: unknown) {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false }, mutations: { retry: false } } })
   return render(
@@ -306,6 +311,30 @@ describe('Quick build', () => {
       fireEvent.click(screen.getByRole('button', { name: /Start build/ }))
     })
     expect(api.create).not.toHaveBeenCalled()
+  })
+
+  it('never shows the settings without the type it found, not even for one render', async () => {
+    api.diagnoseRepo.mockResolvedValue({ checks: [ok('entry_point', 'main.py')] })
+    // Every DOM change is checked as it lands: a bad in-between render is
+    // committed and replaced before any findBy* poll would see it, which is how
+    // "submits the settings changed in place" failed only on a busy machine.
+    const seen: string[] = []
+    const observer = new MutationObserver(() => {
+      if (!document.getElementById('quick-settings')) return
+      const text = document.body.textContent ?? ''
+      if (text.includes('Could not tell from the files')) seen.push('type shown as unknown')
+      if (!text.includes('Packing')) seen.push('backend settings missing')
+    })
+    observer.observe(document.body, { childList: true, subtree: true, characterData: true })
+    try {
+      renderWizard()
+      await pointAt('/srv/projects/svc')
+      await screen.findByText('Packing', {}, { timeout: 3000 })
+      await act(async () => {}) // let any follow-up render land while observed
+    } finally {
+      observer.disconnect()
+    }
+    expect([...new Set(seen)]).toEqual([])
   })
 
   it('submits the settings changed in place', async () => {
