@@ -251,6 +251,8 @@ export interface CompileCacheStatus {
   /** null: no limit, or unknown. */
   max_size_bytes: number | null
   files: number | null
+  /** Why the cache is off, e.g. "ccache is not installed"; null while it is on. */
+  reason: string | null
 }
 
 export interface TaskCreate {
