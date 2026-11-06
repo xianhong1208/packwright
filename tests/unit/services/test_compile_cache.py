@@ -110,8 +110,17 @@ class TestBuildSummary:
         assert compile_cache.describe_summary({"hits": 80, "compiled": 1}, "/usr/bin/ccache") == (
             "C compile cache: reused 80 of 81 C files, compiled 1."
         )
-        off = compile_cache.describe_summary(None, None)
+        off = compile_cache.describe_summary(None, None, {})
         assert "ccache is not installed" in off and "install ccache" in off
+
+    @pytest.mark.unit
+    def test_tc_cch_015_a_wrong_binary_path_is_not_called_missing(self, tmp_path):
+        """TC-CCH-015: a NUITKA_CCACHE_BINARY that does not exist is named as the
+        cause, so nobody installs a package that is already there."""
+        env = {"NUITKA_CCACHE_BINARY": str(tmp_path / "ccache")}
+        line = compile_cache.describe_summary(None, None, env)
+        assert f"NUITKA_CCACHE_BINARY points to {tmp_path / 'ccache'}, which does not exist" in line
+        assert "not installed" not in line
 
 
 STATS = (
@@ -148,6 +157,7 @@ class TestCacheStatus:
             "size_bytes": 4848 * 1024,
             "max_size_bytes": 5242880 * 1024,
             "files": 164,
+            "reason": None,
         }
         assert (tmp_path / "ccache_dir_seen").read_text().strip() == str(tmp_path / "nuitka" / "ccache")
 
@@ -165,6 +175,7 @@ class TestCacheStatus:
         """TC-CCH-013: without ccache the report says off, with where the store would be."""
         status = await compile_cache.cache_status({"PATH": str(tmp_path), "NUITKA_CACHE_DIR": str(tmp_path / "n")})
         assert status["enabled"] is False
+        assert status["reason"] == "ccache is not installed"
         assert status["directory"] == str(tmp_path / "n" / "ccache")
         assert status["size_bytes"] is None
 

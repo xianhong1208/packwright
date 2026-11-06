@@ -1458,7 +1458,7 @@ async def run_nuitka_build(task_id: str, config: BuildConfig, db: AsyncSession) 
         if cache_summary is not None:
             build_result["compile_cache"] = cache_summary
         if ret_code == 0:
-            await task_manager.append_log(task_id, compile_cache.describe_summary(cache_summary, ccache))
+            await task_manager.append_log(task_id, compile_cache.describe_summary(cache_summary, ccache, nuitka_env))
         if version_dir is not None:
             shutil.rmtree(version_dir, ignore_errors=True)
 

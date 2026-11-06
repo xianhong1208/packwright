@@ -32,8 +32,11 @@ export default function CompileCache() {
         </p>
       ) : (
         <p className="m-0 text-sm" style={{ color: 'var(--ink-muted)' }}>
-          ccache is not installed, so every build compiles all of its C files again. Install it on the build host
-          (<code>apt install ccache</code>, <code>dnf install ccache</code>); the next build uses it, no restart needed.
+          {data.reason ?? 'ccache is not installed'}, so every build compiles all of its C files again.
+          {data.reason?.startsWith('NUITKA_CCACHE_BINARY') ? ' Fix the path, or unset it to use ccache from PATH.' : (
+            <> Install it on the build host (<code>apt install ccache</code>, <code>dnf install ccache</code>);
+            the next build uses it, no restart needed.</>
+          )}
         </p>
       )}
       <p className="m-0 mt-2 text-[13px] break-all" style={{ color: 'var(--ink-faint)' }}>

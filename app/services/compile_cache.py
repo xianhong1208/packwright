@@ -49,6 +49,16 @@ def ccache_binary(environ: Mapping[str, str] | None = None) -> str | None:
     return shutil.which("ccache", path=env.get("PATH"))
 
 
+def why_off(environ: Mapping[str, str] | None = None) -> str:
+    """Why builds compile without ccache, worded for whoever runs the host. A
+    NUITKA_CCACHE_BINARY that does not exist is a typo, not a missing package."""
+    env = os.environ if environ is None else environ
+    named = env.get("NUITKA_CCACHE_BINARY")
+    if named:
+        return f"NUITKA_CCACHE_BINARY points to {named}, which does not exist"
+    return "ccache is not installed"
+
+
 def nuitka_cache_dir(environ: Mapping[str, str] | None = None) -> Path:
     """Nuitka's cache directory for a build run with this environment
     (nuitka/utils/AppDirs._getCacheDir): NUITKA_CACHE_DIR, else the user cache."""
@@ -103,11 +113,11 @@ def parse_build_summary(lines: Iterable[str]) -> dict[str, int] | None:
     return {"hits": hits, "compiled": compiled} if seen else None
 
 
-def describe_summary(summary: dict[str, int] | None, binary: str | None) -> str:
+def describe_summary(summary: dict[str, int] | None, binary: str | None, environ: Mapping[str, str] | None = None) -> str:
     """One build-log line about the compile cache."""
     if summary is None:
         if binary is None:
-            return ("C compile cache: off, ccache is not installed. Every build compiles all C files "
+            return (f"C compile cache: off, {why_off(environ)}. Every build compiles all C files "
                     "again; install ccache on the build host to reuse unchanged ones.")
         return "C compile cache: no C files were compiled."
     total = summary["hits"] + summary["compiled"]
@@ -140,6 +150,8 @@ async def cache_status(environ: Mapping[str, str] | None = None) -> dict[str, An
         "size_bytes": None,
         "max_size_bytes": None,
         "files": None,
+        # Why it is off; None while it is on.
+        "reason": None if binary else why_off(env),
     }
     if binary is None:
         return status
