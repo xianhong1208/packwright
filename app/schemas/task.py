@@ -412,6 +412,13 @@ class PreflightCheck(BaseModel):
     critical: bool = False
 
 
+class CompileCacheSummary(BaseModel):
+    """What the C compile cache did for one build."""
+
+    hits: int = 0
+    compiled: int = 0
+
+
 class ArtifactInfo(BaseModel):
     """Summary of the produced build artifact."""
 
@@ -479,6 +486,9 @@ class BuildResult(BaseModel):
     error_lines: list[str] = Field(default_factory=list)
     # Which build stage was active when it failed (preflight/compile/...).
     failed_stage: str | None = None
+    # C files Nuitka took from ccache vs. compiled (app/services/compile_cache).
+    # None when the build compiled without ccache.
+    compile_cache: CompileCacheSummary | None = None
 
 
 class TaskResponse(BaseModel):

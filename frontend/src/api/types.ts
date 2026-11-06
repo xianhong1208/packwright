@@ -238,6 +238,21 @@ export interface BuildResult {
   error_lines?: string[]
   /** Build stage that was active when the failure happened. */
   failed_stage?: string | null
+  /** C files Nuitka took from ccache vs. compiled; absent without ccache. */
+  compile_cache?: { hits: number; compiled: number } | null
+}
+
+/** GET /monitoring/compile-cache: the ccache store Nuitka builds use. */
+export interface CompileCacheStatus {
+  enabled: boolean
+  binary: string | null
+  directory: string
+  size_bytes: number | null
+  /** null: no limit, or unknown. */
+  max_size_bytes: number | null
+  files: number | null
+  /** Why the cache is off, e.g. "ccache is not installed"; null while it is on. */
+  reason: string | null
 }
 
 export interface TaskCreate {
