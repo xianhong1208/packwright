@@ -485,6 +485,87 @@ h1, h2, h3, h4, h5 { font-family: var(--font-display); letter-spacing: -0.015em;
 }
 
 /* -------------------------------------------------------------------------
+   Users, Roles, Git credentials — rows and cards in the Builds list's terms.
+   ------------------------------------------------------------------------- */
+.user-initial {
+  flex: none;
+  width: 36px; height: 36px; border-radius: 50%;
+  display: grid; place-items: center;
+  font-weight: 700; font-size: 15px;
+  background: var(--color-void-700); color: var(--ink-muted);
+}
+.user-initial[data-admin] {
+  background: color-mix(in srgb, var(--color-cyber-500) 20%, transparent);
+  color: var(--color-cyber-400);
+}
+.user-side { flex: none; display: flex; align-items: center; gap: 16px; }
+.user-standing { width: 72px; font-size: 14px; font-weight: 600; }
+/* On a phone the role and standing take a line of their own under the name. */
+@media (max-width: 720px) {
+  .user-row { flex-wrap: wrap; }
+  .user-row .user-side { order: 3; flex-basis: 100%; padding-left: 48px; }
+  .user-row .user-standing { width: auto; }
+}
+.waiting-card {
+  margin-bottom: 20px;
+  padding: 18px 20px;
+  border-radius: 12px;
+  border: 1px solid color-mix(in srgb, var(--color-signal-400) 40%, transparent);
+  background: color-mix(in srgb, var(--color-signal-400) 8%, var(--color-void-900));
+}
+.waiting-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 8px; }
+.waiting-list li { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+
+.role-grid { display: grid; gap: 16px; grid-template-columns: minmax(0, 1fr); }
+@media (min-width: 900px) { .role-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+.role-card {
+  padding: 18px 20px;
+  border-radius: 12px;
+  border: 1px solid var(--seam);
+  background: var(--color-void-900);
+}
+.role-head { display: flex; align-items: flex-start; gap: 12px; margin-bottom: 8px; }
+.role-mark {
+  flex: none; width: 36px; height: 36px; border-radius: 10px;
+  display: grid; place-items: center; font-size: 17px;
+  background: color-mix(in srgb, var(--color-cyber-500) 16%, transparent); color: var(--color-cyber-400);
+}
+.role-mark[data-system] { background: var(--color-void-700); color: var(--ink-muted); }
+.role-name { margin: 0; font-size: 17px; font-weight: 600; color: var(--ink); display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+.role-tag {
+  font-size: 12px; font-weight: 500; padding: 1px 8px; border-radius: 999px;
+  background: var(--color-void-700); color: var(--ink-muted);
+}
+.role-tag[data-off] { color: var(--color-alert-400); }
+.role-code { font-family: var(--font-mono); font-size: 12px; color: var(--ink-faint); }
+.role-desc { margin: 0 0 8px; color: var(--ink-muted); font-size: 14px; }
+.role-full { margin: 0; display: flex; align-items: center; gap: 8px; color: var(--color-cyber-400); }
+.role-perms { margin: 0; display: grid; gap: 10px; }
+.role-perm-group dt { font-size: 12px; color: var(--ink-faint); margin-bottom: 4px; text-transform: none; }
+.role-perm-group dd { margin: 0; display: flex; flex-wrap: wrap; gap: 6px; }
+.role-perm {
+  font-size: 13px; padding: 2px 9px; border-radius: 7px;
+  background: var(--color-void-800); color: var(--ink); border: 1px solid var(--seam);
+}
+
+.cred-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 12px; }
+.cred-card {
+  display: flex; align-items: flex-start; gap: 14px;
+  padding: 16px 18px;
+  border-radius: 12px;
+  border: 1px solid var(--seam);
+  background: var(--color-void-900);
+}
+.cred-mark {
+  flex: none; width: 44px; height: 44px; border-radius: 12px;
+  display: grid; place-items: center; font-size: 22px;
+  background: var(--color-void-700); color: var(--ink);
+}
+.cred-card .build-meta code { font-family: var(--font-mono); font-size: 12px; }
+.cred-use { margin: 6px 0 0; font-size: 13px; color: var(--ink-faint); }
+.cred-use code { font-family: var(--font-mono); font-size: 12px; color: var(--ink-muted); }
+
+/* -------------------------------------------------------------------------
    Quick build findings (pages/createTask/sections/QuickBuild). A row that
    turns from looking to found pops its check and glows once, so the form is
    seen filling itself in.
