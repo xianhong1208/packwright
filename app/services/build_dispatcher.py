@@ -1,6 +1,7 @@
 """Build dispatcher that routes to the appropriate build worker."""
 
 import asyncio
+import contextlib
 import os
 import shutil
 import time
@@ -19,6 +20,28 @@ _spawn = asyncio.create_subprocess_exec
 
 # Build concurrency limiter — lazily initialized from settings
 _build_semaphore: asyncio.Semaphore | None = None
+
+
+# Builds holding a slot right now. The Nuitka worker divides the machine's cores
+# by this (auto_jobs), so builds that run together share the cores instead of
+# each starting one compile job per core.
+_builds_in_slot = 0
+
+
+def builds_in_slot() -> int:
+    """How many builds hold a build slot at this moment."""
+    return _builds_in_slot
+
+
+@contextlib.asynccontextmanager
+async def _holding_slot():
+    """Count a build as running for as long as it holds its slot, however it ends."""
+    global _builds_in_slot
+    _builds_in_slot += 1
+    try:
+        yield
+    finally:
+        _builds_in_slot -= 1
 
 
 def _get_semaphore() -> asyncio.Semaphore:
@@ -646,7 +669,7 @@ async def start_build_task(task_id: str, config: BuildConfig) -> None:
         current = await task_manager.get_task(task_id)
         return current is None or current.status == TaskStatus.CANCELLED
 
-    async with sem:
+    async with sem, _holding_slot():
         # The user may have cancelled while this task sat in the queue —
         # without this check the CANCELLED status would be silently
         # overwritten by RUNNING and the build would execute anyway.
