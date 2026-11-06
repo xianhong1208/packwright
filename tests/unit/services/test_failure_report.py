@@ -170,6 +170,34 @@ class TestNewPatterns:
         assert any("Installing frontend dependencies failed" in p for p in problems)
 
     @pytest.mark.unit
+    def test_tc_fail_028_missing_package_json_is_named(self):
+        """TC-FAIL-028: diagnose — npm finding no package.json points at the frontend directory.
+
+        The log is npm 10's own wording from a real failed build. It fails during the
+        install, but the lock-file advice of the install rule would be wrong here.
+        """
+        log = (
+            "$ npm install\n"
+            "npm error code ENOENT\n"
+            "npm error syscall open\n"
+            "npm error path /srv/app/package.json\n"
+            "npm error errno -2\n"
+            "npm error enoent Could not read package.json: Error: ENOENT: no such file or "
+            "directory, open '/srv/app/package.json'\n"
+            "Error: Failed to install dependencies"
+        )
+        problems = [d["problem"] for d in diagnose_build_failure(log)]
+        assert problems[0] == "No package.json in the frontend directory"
+        assert "Installing frontend dependencies failed" not in problems
+
+    @pytest.mark.unit
+    def test_tc_fail_029_npm_10_install_failure_is_recognised(self):
+        """TC-FAIL-029: diagnose — npm 10 writes "npm error", not "npm ERR!"; both are install failures."""
+        log = "$ npm install\nnpm error code ERESOLVE\nnpm error ERESOLVE unable to resolve dependency tree"
+        problems = [d["problem"] for d in diagnose_build_failure(log)]
+        assert "Installing frontend dependencies failed" in problems
+
+    @pytest.mark.unit
     @pytest.mark.parametrize(
         "log",
         [

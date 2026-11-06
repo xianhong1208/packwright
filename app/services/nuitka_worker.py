@@ -1066,16 +1066,26 @@ def build_nuitka_command(
             extra_dir = extra_dir.strip()
             if extra_dir:
                 extra_path = project_path / extra_dir
-                if extra_path.exists():
+                # Only something importable is followed: a directory is a package and a
+                # .py file a module. Any other file is data; following it by name would
+                # pass Nuitka a module that cannot exist, and --include-data-dir only
+                # takes directories.
+                if extra_path.is_dir():
                     cmd.append(f"--follow-import-to={extra_dir}")
-                    if extra_path.is_dir():
-                        cmd.append(f"--include-package={extra_dir}")
-                        log.append(f"Including package: {extra_dir}")
-                    else:
-                        cmd.append(f"--include-data-dir={extra_path}={extra_dir}")
-                        log.append(f"Including data dir: {extra_dir}")
+                    cmd.append(f"--include-package={extra_dir}")
+                    log.append(f"Including package: {extra_dir}")
                     if extra_dir in blacklist:
                         blacklist.remove(extra_dir)
+                elif extra_path.is_file() and extra_path.suffix == ".py":
+                    module = extra_dir[: -len(".py")].replace("/", ".")
+                    cmd.append(f"--follow-import-to={module}")
+                    cmd.append(f"--include-module={module}")
+                    log.append(f"Including module: {module}")
+                    if module in blacklist:
+                        blacklist.remove(module)
+                elif extra_path.is_file():
+                    cmd.append(f"--include-data-files={extra_path}={extra_dir}")
+                    log.append(f"Including data file: {extra_dir}")
 
     # Data directories are copied after compilation (like libs/), not embedded.
     if config.data_dirs:

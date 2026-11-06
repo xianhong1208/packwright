@@ -9,7 +9,7 @@ The single public entry point, :func:`diagnose_build_failure`, performs a
 case-insensitive scan of the log text and returns a list of diagnosis dicts,
 each shaped as ``{"problem": str, "suggestion": str, "evidence": str}``. The
 list is ordered most-specific first so the UI can show the most relevant
-explanation at the top. All user-facing text is in Traditional Chinese.
+explanation at the top. All user-facing text is in English, like the console.
 
 The function is intentionally defensive: it never raises, treats ``None`` as an
 empty string, and de-duplicates so the same problem is not reported twice.
@@ -65,7 +65,7 @@ def diagnose_build_failure(log_text: str) -> list[dict]:
     """Return a list of {"problem": str, "suggestion": str, "evidence": str}
     for known failure patterns found in the build log. Empty list if nothing
     recognized. Ordered most-specific first. 'evidence' is the matched log
-    snippet (trimmed). All text in Traditional Chinese."""
+    snippet (trimmed). All text is in English, like the console."""
     if not log_text:
         return []
 
@@ -458,14 +458,40 @@ def diagnose_build_failure(log_text: str) -> list[dict]:
         logger.debug("A diagnosis rule raised and was skipped", exc_info=True)
 
     # ------------------------------------------------------------------
+    # 15a. No package.json where the frontend build looked. Checked before the
+    #      install rule: npm fails at the install step here too, and "fix your
+    #      lock file" would send the reader after the wrong thing.
+    # ------------------------------------------------------------------
+    missing_package_json = False
+    try:
+        pkg_match = _search(
+            r"[^\n]*(?:could not read package\.json|enoent[^\n]*package\.json)[^\n]*", text
+        )
+        if pkg_match:
+            missing_package_json = True
+            add(
+                "No package.json in the frontend directory",
+                "The frontend directory has to be the folder that holds package.json. Check "
+                "Frontend directory on the Frontend step (in a full-stack repository it is usually "
+                "frontend), and that the path or branch you chose has one.",
+                pkg_match.group(0),
+            )
+    except Exception:
+        # Isolated on purpose: a bug in one rule must not take the rest
+        # down. Logged so a broken rule shows up as something other than
+        # silently vanishing coverage.
+        logger.debug("A diagnosis rule raised and was skipped", exc_info=True)
+
+    # ------------------------------------------------------------------
     # 15. npm install failed — separate from "frontend build failed" so the
     #     suggestion can point at the lock file rather than the build script.
     # ------------------------------------------------------------------
     try:
         npm_match = _search(
-            r"(?:npm ERR!|ERR_PNPM_[A-Z_]+|error Couldn't find any versions)[^\n]*", text
+            # npm 10 prints "npm error"; earlier versions "npm ERR!".
+            r"(?:npm ERR!|npm error|ERR_PNPM_[A-Z_]+|error Couldn't find any versions)[^\n]*", text
         )
-        if npm_match and (
+        if npm_match and not missing_package_json and (
             "npm ci" in text_lower
             or "npm install" in text_lower
             or "err_pnpm" in text_lower

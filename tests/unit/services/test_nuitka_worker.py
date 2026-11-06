@@ -758,14 +758,27 @@ class TestBuildNuitkaCommand:
     @pytest.mark.unit
     def test_tc_nui_113_extra_dirs(self, tmp_path):
         """TC-NUI-113: a directory is followed and included as a package (and no longer
-        nofollow'd); a file goes in as data; a missing entry is ignored."""
+        nofollow'd); a missing entry is ignored."""
         (tmp_path / "pkg").mkdir()
-        (tmp_path / "notes.txt").write_text("x")
-        plan = self._plan(tmp_path, stdlib=self._stdlib(), installed=["pkg", "rich"], extra_dirs="pkg, notes.txt, missing")
+        plan = self._plan(tmp_path, stdlib=self._stdlib(), installed=["pkg", "rich"], extra_dirs="pkg, missing")
         assert ["--follow-import-to=pkg", "--include-package=pkg"] == plan.cmd[plan.cmd.index("--follow-import-to=pkg"):][:2]
-        assert f"--include-data-dir={tmp_path / 'notes.txt'}=notes.txt" in plan.cmd
         assert "--nofollow-import-to=pkg" not in plan.cmd and "--nofollow-import-to=rich" in plan.cmd
         assert not any("missing" in a for a in plan.cmd)
+
+    @pytest.mark.unit
+    def test_tc_nui_116_extra_files(self, tmp_path):
+        """TC-NUI-116: a .py file is one module (followed by its dotted name); any other
+        file is data, never followed and never given to --include-data-dir, which only
+        takes directories."""
+        (tmp_path / "tools").mkdir()
+        (tmp_path / "tools" / "helpers.py").write_text("x = 1")
+        (tmp_path / "notes.txt").write_text("x")
+        plan = self._plan(tmp_path, stdlib=self._stdlib(), installed=["tools.helpers", "rich"],
+                          extra_dirs="tools/helpers.py, notes.txt")
+        assert "--follow-import-to=tools.helpers" in plan.cmd and "--include-module=tools.helpers" in plan.cmd
+        assert "--nofollow-import-to=tools.helpers" not in plan.cmd
+        assert f"--include-data-files={tmp_path / 'notes.txt'}=notes.txt" in plan.cmd
+        assert not any("notes" in a for a in plan.cmd if a.startswith(("--follow-import-to", "--include-data-dir")))
 
     @pytest.mark.unit
     def test_tc_nui_114_invalid_module_names_are_not_passed(self, tmp_path):
