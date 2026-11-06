@@ -163,6 +163,13 @@ class Settings(BaseSettings):
     # copying package bytes. Leave empty to use the default user cache.
     bootstrap_uv_cache_dir: str = ""
 
+    # === Compile cache ===
+    # Nuitka's cache directory (NUITKA_CACHE_DIR), which holds the ccache store
+    # that lets a rebuild reuse unchanged C files. Empty (the default) leaves
+    # Nuitka's own choice: ~/.cache/Nuitka of the user running the service.
+    # Set it when that home is not persistent (a container) or too small.
+    nuitka_cache_dir: str = ""
+
     # === Workspace cleanup (git mode only) ===
     # Periodic background sweep of git_workspace_dir that deletes per-task
     # clones according to task status + age. Never touches running/pending.
