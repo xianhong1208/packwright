@@ -1,5 +1,6 @@
 """System monitoring API routes."""
 
+import os
 import sys
 from typing import Annotated
 
@@ -10,7 +11,9 @@ from collections import defaultdict
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.config import get_settings
 from app.database import get_db
+from app.services import compile_cache
 from app.services.system_stats import get_sampler
 from app.models.task import Task
 from app.services.permission import (
@@ -30,6 +33,16 @@ async def get_system_stats(
     """Current system resource usage: one snapshot shared by every viewer
     (app/services/system_stats)."""
     return await get_sampler().get()
+
+
+@router.get("/compile-cache")
+async def get_compile_cache(
+    current_user: Annotated[CurrentUser, Depends(get_current_user)],
+) -> dict:
+    """Whether builds reuse compiled C files (ccache), where the store is and
+    how big it has grown. Read for the same environment a build runs with."""
+    env = compile_cache.build_environment(os.environ, get_settings().nuitka_cache_dir)
+    return await compile_cache.cache_status(env)
 
 
 def _collect_build_environment() -> dict:
