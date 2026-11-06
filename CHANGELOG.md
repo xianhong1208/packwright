@@ -6,6 +6,8 @@ follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this proje
 
 ## [Unreleased]
 
+## [1.2.0] — 2026-11-06
+
 ### Added
 - **Projects.** The code the team builds again and again is now a project: its source, the settings new
   versions start from, and every build of it, grouped by version. **Projects** lists them; a project's
@@ -85,6 +87,19 @@ follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this proje
   ("Module 'starlette' was actively excluded from Nuitka compilation") and the start-up check failed the
   build. External and *One file* is New build's default. The guard is now turned off when packages are
   left to `libs/`.
+- **New build suggested folders that broke the program.** It ticks the folders it suggests; for a project
+  like MCP Gate it compiled the Alembic migrations in as Python (the program then could not find
+  `alembic/` and stopped), shipped `tests/` and `examples/`, and copied `docs/` and the frontend's sources
+  beside the binary. Top-level tests, examples, docs and benchmarks are now skipped, a folder with its own
+  `package.json` is left to the frontend step, and Alembic migrations (`env.py` beside `versions/`) are
+  copied as data.
+- **A program that could not start passed as "no GPU on the build host".** Any output containing "failed
+  to initialize" (for example "Failed to initialize database") was excused as a missing GPU, and the build
+  was marked completed. Only a failure that names a GPU (CUDA, ROCm, HIP, NVML) is excused now.
+- **Every build of a service left it running on the build host.** A onefile binary is a launcher that
+  starts the real program; the start-up check stopped only the launcher, so the program kept running and
+  held its port (the next build then failed with "port already in use"). The whole process group is
+  stopped now.
 - Quick build showed a project it had just recognised as "Could not tell from the files", without its
   backend settings, for one render after reading it: the page watched the project type, which is only on
   screen once the project is read, in a way that reports an absent field as empty. It also made a
@@ -264,6 +279,7 @@ role-based permissions.
 - Timezone-safe token expiry on SQLite; portable build statistics.
 - Git credentials feedback in the console; no pre-filled personal paths in New build.
 
-[Unreleased]: https://github.com/xianhong1208/packwright/compare/v1.1.0...dev
+[Unreleased]: https://github.com/xianhong1208/packwright/compare/v1.2.0...dev
+[1.2.0]: https://github.com/xianhong1208/packwright/compare/v1.1.0...v1.2.0
 [1.1.0]: https://github.com/xianhong1208/packwright/compare/v1.0.0...v1.1.0
 [1.0.0]: https://github.com/xianhong1208/packwright/releases/tag/v1.0.0
