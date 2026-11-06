@@ -61,6 +61,15 @@ export interface RepoDiagnosis {
   checks: RepoDiagnosisCheck[]
 }
 
+/** What scanning a Git repository at a ref returns. */
+export interface GitScanTree {
+  directories: string[]
+  dependency_groups: string[]
+  analysis?: ProjectAnalysis
+  /** The same fingerprints a local path gets from diagnoseRepo. */
+  checks?: RepoDiagnosisCheck[]
+}
+
 export interface GitPreviewFrontend {
   frontend_config: DetectedFrontendConfig
   // Map of .env* filename -> UTF-8 content (files > 100KB are omitted)

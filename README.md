@@ -9,6 +9,7 @@ Packwright was called *Build Center* up to v1.0.0. Names that live in existing d
 ## Key features
 
 - **Four build modes.** Backend-only (Nuitka), frontend-only (any Node package manager), full-stack (frontend bundled into the Nuitka build as data), and Docker output (the build packaged into an image and exported as `.tar.gz`).
+- **Quick build.** Point it at a folder or a Git URL and it reads the project: backend, frontend or full stack, the entry point, where `package.json` is, the Python version and dependency groups. One click starts the build; every setting is still there under *All settings*.
 - **Local path or Git URL sources.** Git mode clones the repo, bootstraps a `.venv` with `uv sync`, builds, and cleans the workspace afterward. SSRF-hardened URL validation, argv-only subprocess calls, and per-host clone timeouts.
 - **Git credentials managed in the console.** Add GitHub, GitLab and self-hosted tokens in the UI; they are stored encrypted and chosen automatically by the clone URL's host — no secrets in `.env`.
 - **Live logs and history.** Every build streams over WebSocket; finished builds keep a full record with the exact config that produced them, so a rebuild is deterministic.

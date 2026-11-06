@@ -6,6 +6,23 @@ follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this proje
 
 ## [Unreleased]
 
+### Added
+- **Quick build.** New build now opens on one screen that needs only a source: a folder on the server or
+  a Git repository and branch. Packwright reads the project (a Python entry point or pyproject.toml, a
+  package.json and where it is) and shows what it found row by row: backend, frontend or full stack, the
+  entry point, the frontend directory and build command, the Python version and dependency groups. A
+  wrong type is corrected in place; an unrecognised project has to be given one before it can start.
+  The settings people change most (packing, one file or a folder, the start-up check, a Docker image)
+  are changed in place, and every other one is listed with the value it will use and a *Change* link to
+  its step in the full wizard. *All settings* opens that wizard with everything already found filled
+  in; rebuilds go straight there. A source the server may not read says why. Git scans now return the
+  same fingerprints a local path gets.
+- **Animations that explain.** A first build is preceded by a short animation of what happens to the
+  code (on an empty home page and on Quick build before a source is given); found settings pop in as
+  they are read; and a running build shows a stage track whose current stage pulses and whose rail
+  fills as it advances, for every project type (it used to be backend-only). All of them hold still
+  when the system asks for reduced motion.
+
 ### Changed
 - **Builds share the cores.** A build that leaves CPU jobs on Auto used one compile job per core even
   when other builds were running, so three builds on a 128-core machine ran 384 compilers. Auto now uses
