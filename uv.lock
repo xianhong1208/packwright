@@ -506,9 +506,9 @@ wheels = [
 
 [[package]]
 name = "nuitka"
-version = "4.1.2"
+version = "4.3.4"
 source = { registry = "https://pypi.org/simple" }
-sdist = { url = "https://files.pythonhosted.org/packages/e6/2e/9ea398ca1a4fc458958fdf477ae18d3395bee8c9f8950ca6f0f039ea2585/nuitka-4.1.2.tar.gz", hash = "sha256:efc2359b171d7b63046ca8ec8dee57015c3466a9df74b68a049c2c1a7e93ecee", size = 4561050, upload-time = "2026-05-28T08:26:07.947Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/46/19/9e0a68ea7bf6124843eaf2163430edc80569d4ce33511928e3958c960fb3/nuitka-4.3.4.tar.gz", hash = "sha256:e98e0c9a3224b581cf8ec0fab92b039b90fb7fa78673550c22833a82de444b25", size = 4779496, upload-time = "2026-11-01T07:44:15.061Z" }
 
 [[package]]
 name = "opentelemetry-api"
@@ -574,7 +574,7 @@ requires-dist = [
     { name = "fastapi", specifier = ">=0.109.0" },
     { name = "gputil", specifier = ">=1.4.0" },
     { name = "httpx", specifier = ">=0.27.0" },
-    { name = "nuitka", specifier = ">=4.1.2" },
+    { name = "nuitka", specifier = ">=4.3.4" },
     { name = "psutil", specifier = ">=5.9.0" },
     { name = "psycopg2-binary", specifier = ">=2.9.9" },
     { name = "pydantic", specifier = ">=2.14.2" },
