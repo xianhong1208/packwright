@@ -9,12 +9,14 @@ import type {
   SourceType,
   GitRefs,
   ProjectAnalysis,
+  RepoDiagnosisCheck,
 } from '../../api/types'
 import { useFormDraft } from '../../hooks/useFormDraft'
 import { ALL_STEPS, activeSteps, clampStepIndex, type StepDef, type StepKey } from './steps'
 import { assembleTaskCreate } from './buildConfig'
 import { findPythonMismatch, pickDefaultRef } from './pythonVersion'
 import type { DepGroupsRead } from './depGroups'
+import { guessProject, nameFromSource, type ProjectGuess } from './quickPlan'
 
 export interface RebuildState {
   rebuild: boolean
@@ -153,6 +155,41 @@ export function useCreateTaskModel() {
   const [depGroups, setDepGroups] = useState<string[]>([])
   const [loadingDepGroups, setLoadingDepGroups] = useState(false)
   const [depGroupsRead, setDepGroupsRead] = useState<DepGroupsRead>('unread')
+
+  // Quick build: a source is all a first build needs. The project's fingerprints
+  // (diagnoseRepo locally, scan-tree for Git) fill in the type, entry point and
+  // frontend directory; "All settings" opens the full wizard on the same form, so
+  // nothing found here is lost. A rebuild already has its settings.
+  const [mode, setMode] = useState<'quick' | 'full'>(() => (isRebuild ? 'full' : 'quick'))
+  const [repoChecks, setRepoChecks] = useState<RepoDiagnosisCheck[] | null>(null)
+  // Why the source could not be read (not allowed, not there…). Kept apart from
+  // "nothing recognisable", which it used to be shown as.
+  const [repoError, setRepoError] = useState<string | null>(null)
+  const autoNameRef = useRef<string | null>(null)
+  const applyGuess = useCallback((checks: RepoDiagnosisCheck[], source: string): ProjectGuess => {
+    setRepoChecks(checks)
+    setRepoError(null)
+    const guess = guessProject(checks)
+    if (mode !== 'quick') return guess
+    // Never over something the person set themselves.
+    const fill = (name: string, value: unknown) => {
+      if (value !== null && value !== undefined && !form.isFieldTouched(name)) form.setFieldValue(name, value)
+    }
+    fill('project_type', guess.projectType)
+    fill('entry_point', guess.entryPoint)
+    // A Python project without a usual entry point: leave the field empty for the
+    // person to fill, rather than showing the form's main.py under "no main.py".
+    if (guess.projectType !== 'frontend_only' && guess.entryPoint === null && !form.isFieldTouched('entry_point')) {
+      form.setFieldValue('entry_point', '')
+    }
+    fill('frontend_dir', guess.frontendDir)
+    const name = (form.getFieldValue('project_name') as string | undefined) ?? ''
+    if (!name || name === autoNameRef.current) {
+      autoNameRef.current = nameFromSource(source)
+      form.setFieldValue('project_name', autoNameRef.current)
+    }
+    return guess
+  }, [form, mode])
 
   const hasBackend = projectType === 'backend_only' || projectType === 'fullstack'
   const showFrontendSettings = projectType === 'frontend_only' || projectType === 'fullstack'
@@ -401,6 +438,31 @@ export function useCreateTaskModel() {
     return () => clearTimeout(timer)
   }, [projectPath, currentPath, fetchDirectories, detectFrontendConfig, fetchEnvFiles, fetchPyprojectGroups, form, sourceType])
 
+  // Quick build, local path: fingerprint the folder, then run the detections that
+  // depend on the type — the path effect above ran before the type was known.
+  useEffect(() => {
+    if (mode !== 'quick' || sourceType === 'git') return
+    const path = ((projectPath as string | undefined) || '').trim()
+    if (!path.startsWith('/')) {
+      setRepoChecks(null)
+      setRepoError(null)
+      return
+    }
+    const timer = setTimeout(async () => {
+      try {
+        const { checks } = await taskApi.diagnoseRepo(path)
+        const guess = applyGuess(checks, path)
+        if (guess.projectType === 'backend_only' || guess.projectType === 'fullstack') void fetchPyprojectGroups(path)
+        if (guess.projectType === 'frontend_only' || guess.projectType === 'fullstack') void detectFrontendConfig(true)
+      } catch (err: unknown) {
+        const e = err as { response?: { data?: { detail?: string } } }
+        setRepoChecks(null)
+        setRepoError(e.response?.data?.detail ?? 'The server could not read this folder.')
+      }
+    }, 500)
+    return () => clearTimeout(timer)
+  }, [mode, sourceType, projectPath, applyGuess, fetchPyprojectGroups, detectFrontendConfig])
+
   // Git mode: debounce-fetch branches/tags when the git_url changes.
   const fetchGitRefs = useCallback(
     async (url: string) => {
@@ -475,6 +537,7 @@ export function useCreateTaskModel() {
       // pyproject dependency-groups parsed from the remote repo (git-mode parity)
       setDepGroups(result.dependency_groups)
       setDepGroupsRead('read')
+      if (result.checks) applyGuess(result.checks, url)
       const currentGroup = form.getFieldValue('dependency_group') as string | undefined
       if (currentGroup && !result.dependency_groups.includes(currentGroup)) {
         form.setFieldValue('dependency_group', undefined)
@@ -482,6 +545,7 @@ export function useCreateTaskModel() {
     } catch (err: unknown) {
       setDepGroupsRead('failed')
       const e = err as { response?: { data?: { detail?: string } } }
+      setRepoError(e.response?.data?.detail ?? 'The server could not read this repository.')
       notification.error({
         message: 'Could not scan the repo structure',
         description:
@@ -497,14 +561,15 @@ export function useCreateTaskModel() {
     } finally {
       setScanningTree(false)
     }
-  }, [form])
+  }, [form, applyGuess])
 
   // Auto-scan when the user has filled in URL + ref, debounced so that
   // rapid branch switching doesn't fire multiple requests. Only runs when
   // the project actually has a backend (extra_dirs/data_dirs are backend-only).
   useEffect(() => {
     if (sourceType !== 'git') return
-    if (!hasBackend) return
+    // Quick build reads the project type from this scan, so it cannot wait for one.
+    if (!hasBackend && mode !== 'quick') return
     const url = (gitUrl || '').trim()
     const ref = (gitRef || '').trim()
     const refType = gitRefType || 'branch'
@@ -513,7 +578,7 @@ export function useCreateTaskModel() {
     if (key === treeScannedFor) return
     const timer = setTimeout(() => { void handleScanGitTree() }, 800)
     return () => clearTimeout(timer)
-  }, [sourceType, hasBackend, gitUrl, gitRef, gitRefType, treeScannedFor, handleScanGitTree])
+  }, [sourceType, hasBackend, mode, gitUrl, gitRef, gitRefType, treeScannedFor, handleScanGitTree])
 
   // Git mode only: shallow-clone the repo and populate frontend config +
   // env file contents. Runs in parallel with scan_tree above, so fullstack
@@ -587,13 +652,14 @@ export function useCreateTaskModel() {
   // First-visit Tour — skipped if the user has already seen it.
   useEffect(() => {
     if (isRebuild) return // don't interrupt users returning to rebuild
+    if (mode === 'quick') return // the tour points at the full wizard's fields
     if (typeof window === 'undefined') return
     if (!localStorage.getItem(TOUR_STORAGE_KEY)) {
       // Delay slightly so form has rendered and refs can be measured
       const timer = setTimeout(() => setTourOpen(true), 400)
       return () => clearTimeout(timer)
     }
-  }, [isRebuild])
+  }, [isRebuild, mode])
 
   // Reset directory-related state when the user flips between source
   // modes mid-form, so stale selections / listings from the previous
@@ -626,6 +692,8 @@ export function useCreateTaskModel() {
     setEnvFiles([])
     setDepGroups([])
     setDepGroupsRead('unread')
+    setRepoChecks(null)
+    setRepoError(null)
     form.setFieldValue('dependency_group', undefined)
   }, [sourceType, form])
 
@@ -856,6 +924,10 @@ export function useCreateTaskModel() {
     loadingDepGroups,
     setLoadingDepGroups,
     depGroupsRead,
+    mode,
+    setMode,
+    repoChecks,
+    repoError,
     workspaceDir,
     setWorkspaceDir,
     draftSavedAt,
