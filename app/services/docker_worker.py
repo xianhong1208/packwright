@@ -62,9 +62,7 @@ async def _run_docker_build(
     await task_manager.append_log(task_id, "Docker found, preparing build...")
 
     # Determine image name
-    image_name = config.docker_image_name
-    if not image_name:
-        image_name = f"{project_path.name}:latest"
+    image_name = image_reference(config.docker_image_name, project_path.name, config.version)
 
     await task_manager.append_log(task_id, f"Image name: {image_name}")
 
@@ -359,6 +357,42 @@ def _sanitize_base_image(base_image: str | None) -> str:
     return image
 
 
+def docker_tag(version: str) -> str:
+    """A version as a Docker tag: [A-Za-z0-9_.-], at most 128, not starting with . or -."""
+    tag = re.sub(r"[^A-Za-z0-9_.-]", "_", version).lstrip(".-")[:128]
+    return tag or "latest"
+
+
+def image_reference(configured: str, folder_name: str, version: str) -> str:
+    """The image a build is tagged as.
+
+    Without a configured name: the folder's name, lowercased (Docker refuses
+    upper-case repository names, so "MCP_Center:latest" never built), tagged with
+    the version, or latest. A configured name without a tag gets the version as
+    its tag; one with a tag or digest is used as given.
+    """
+    tag = docker_tag(version) if version else "latest"
+    if not configured:
+        repo = re.sub(r"[^a-z0-9._-]+", "-", folder_name.lower()).strip("._-") or "app"
+        return f"{repo}:{tag}"
+    last = configured.rsplit("/", 1)[-1]
+    if ":" in last or "@" in configured or not version:
+        return configured
+    return f"{configured}:{tag}"
+
+
+def _version_block(version: str) -> str:
+    """Appended to the Dockerfile, so it lands in the final stage: the standard
+    version label, and the version where the program can read it."""
+    if not version:
+        return ""
+    return (
+        "\n# The version this image was built as (Packwright)\n"
+        f'LABEL org.opencontainers.image.version="{version}"\n'
+        f"ENV PACKWRIGHT_BUILD_VERSION={version}\n"
+    )
+
+
 def _generate_dockerfile(config: BuildConfig, precompiled: bool = False) -> str:
     """Generate Dockerfile based on project type and configuration.
 
@@ -370,10 +404,10 @@ def _generate_dockerfile(config: BuildConfig, precompiled: bool = False) -> str:
     port = config.docker_expose_port
 
     if project_type == ProjectType.FRONTEND_ONLY and not precompiled:
-        return _generate_frontend_dockerfile(config, port)
+        return _generate_frontend_dockerfile(config, port) + _version_block(config.version)
 
     # Backend and fullstack always use precompiled binary
-    return _generate_precompiled_dockerfile(config, base_image, port)
+    return _generate_precompiled_dockerfile(config, base_image, port) + _version_block(config.version)
 
 
 def _generate_frontend_dockerfile(config: BuildConfig, port: int) -> str:

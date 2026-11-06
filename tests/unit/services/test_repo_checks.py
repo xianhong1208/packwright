@@ -55,3 +55,15 @@ def test_tc_repo_004_missing_or_not_a_directory(tmp_path):
     (tmp_path / "file.txt").write_text("x")
     assert diagnose_repo(tmp_path / "nope") == {"checks": []}
     assert diagnose_repo(tmp_path / "file.txt") == {"checks": []}
+
+
+@pytest.mark.unit
+def test_tc_repo_005_a_local_project_reports_its_version(tmp_path):
+    """TC-REPO-005: diagnose reads the version from pyproject.toml, else from the
+    package.json it found (here in frontend/)."""
+    (tmp_path / "frontend").mkdir()
+    (tmp_path / "frontend" / "package.json").write_text('{"version": "0.3.1"}')
+    assert diagnose_repo(tmp_path)["version"] == {"value": "0.3.1", "source": "package.json"}
+
+    (tmp_path / "pyproject.toml").write_text('[project]\nname = "x"\nversion = "2.1.0"\n')
+    assert diagnose_repo(tmp_path)["version"] == {"value": "2.1.0", "source": "pyproject.toml"}

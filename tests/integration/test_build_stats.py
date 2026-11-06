@@ -34,8 +34,8 @@ def _stats(client, admin_tokens) -> dict:
 
 
 @pytest.mark.integration
-def test_tc_int_040_cancelled_builds_are_not_failures(client, admin_tokens):
-    """TC-INT-040: 2 passed, 1 failed, 3 cancelled is a 66.7% success rate, not 33.3%;
+def test_tc_int_045_cancelled_builds_are_not_failures(client, admin_tokens):
+    """TC-INT-045: 2 passed, 1 failed, 3 cancelled is a 66.7% success rate, not 33.3%;
     a project that was only ever cancelled has no rate rather than 0%."""
     for status in ("COMPLETED", "COMPLETED", "FAILED", "CANCELLED", "CANCELLED", "CANCELLED"):
         _insert("rate-mixed", status)
