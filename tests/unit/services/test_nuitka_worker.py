@@ -740,6 +740,20 @@ class TestBuildNuitkaCommand:
         assert "Found 2 packages in .venv to blacklist" in plan.log
 
     @pytest.mark.unit
+    def test_tc_nui_120_external_lets_excluded_packages_load_from_libs(self, tmp_path):
+        """TC-NUI-120: Nuitka 4 compiles an ImportError into the program for every
+        module it was told not to follow, which shadows libs/: an External build of
+        any project with a dependency compiled, then failed its first import. The
+        guard is turned off whenever something is nofollow'd, and only then."""
+        external = self._plan(tmp_path, stdlib=self._stdlib(), installed=["starlette"])
+        assert "--no-deployment-flag=excluded-module-usage" in external.cmd
+        assert external.cmd[-1] == str(tmp_path / "main.py")
+        nothing_excluded = self._plan(tmp_path, stdlib=self._stdlib(), installed=[])
+        full = self._plan(tmp_path, pack_mode="full", lazy=["pydantic"])
+        assert "--no-deployment-flag=excluded-module-usage" not in nothing_excluded.cmd
+        assert "--no-deployment-flag=excluded-module-usage" not in full.cmd
+
+    @pytest.mark.unit
     def test_tc_nui_111_external_without_scan_includes_all_stdlib(self, tmp_path):
         """TC-NUI-111: when site-packages could not be scanned, every valid stdlib
         module is included rather than too few."""

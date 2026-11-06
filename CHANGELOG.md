@@ -67,6 +67,12 @@ follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this proje
   frequency is re-read every 10 s, and the GPU probe is skipped on machines without nvidia-smi.
 
 ### Fixed
+- **External builds of any project with a dependency failed when started.** Nuitka 4 compiles an
+  ImportError into the program for every package it was told not to compile, and External mode tells it
+  exactly that so the packages can come from `libs/`; the program then refused its own `libs/`
+  ("Module 'starlette' was actively excluded from Nuitka compilation") and the start-up check failed the
+  build. External and *One file* is New build's default. The guard is now turned off when packages are
+  left to `libs/`.
 - Quick build showed a project it had just recognised as "Could not tell from the files", without its
   backend settings, for one render after reading it: the page watched the project type, which is only on
   screen once the project is read, in a way that reports an absent field as empty. It also made a
