@@ -144,7 +144,7 @@ journalctl -u packwright -f
 ### 自行註冊與核准
 
 登入頁的註冊功能永遠開放,但除了資料庫中的第一個帳號,**新註冊的帳號都是停用狀態**,登入會得到
-「not active yet」。管理員在 **People** 頁把帳號改成啟用才算核准。這是刻意的設計:核准帳號就是授予
+「not active yet」。管理員在 **Users** 頁把帳號改成啟用才算核准。這是刻意的設計:核准帳號就是授予
 在伺服器上執行程式碼的能力,見[信任模型](#核心假設建立建置--這台機器的-shell)。
 
 ### 登入與工作階段
@@ -598,7 +598,7 @@ gunzip -c packwright-<時間>.sql.gz | psql -h HOST -U USER -d DBNAME    # Postg
 (全新安裝)重來,或設定 `BOOTSTRAP_ADMIN_PASSWORD` 後用新的資料庫啟動;已經有其他管理員就請他重設。
 
 **註冊完登不進去**
-新帳號需要管理員在 **People** 頁啟用。
+新帳號需要管理員在 **Users** 頁啟用(頁面最上方的「waiting to be let in」)。
 
 **每次重啟所有人都被登出、Git 憑證失效**
 自動產生的金鑰沒能存下來:啟動 log 會有 `Could not save the generated …` 的警告,通常是

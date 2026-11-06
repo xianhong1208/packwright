@@ -320,7 +320,7 @@ export default function UserDetailPage() {
           style={{ color: 'var(--ink-muted)' }}
         >
           <ArrowLeftIcon />
-          Back to people
+          Back to users
         </Link>
 
         <div className="flex flex-wrap items-center justify-between gap-4">

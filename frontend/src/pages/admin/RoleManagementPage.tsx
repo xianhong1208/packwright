@@ -1,12 +1,10 @@
-import { useState, useEffect } from 'react'
-import { Table, Tag, Button, Modal, Form, Input, Select, Checkbox, message, Empty, Tooltip } from 'antd'
-import { ArrowsClockwiseIcon, LockIcon, PencilSimpleIcon, PlusIcon, ShieldCheckIcon, SpinnerIcon, TrashIcon, UsersIcon } from '../../components/ui/icons'
-import type { ColumnsType } from 'antd/es/table'
+import { useState, useEffect, useCallback } from 'react'
+import { Button, Modal, Form, Input, Select, Checkbox, message, Empty, Tooltip, Spin } from 'antd'
+import { ArrowsClockwiseIcon, LockIcon, PencilSimpleIcon, PlusIcon, ShieldCheckIcon, TrashIcon, UsersIcon } from '../../components/ui/icons'
 import { userApi } from '../../api/userApi'
 import type { Role, RoleCreate, RoleUpdate, PermissionCategory } from '../../api/types'
 import { useAuth } from '../../contexts/AuthContext'
 import PageHeader from '../../components/layout/PageHeader'
-import { parseUtc } from '../../utils/time'
 
 export default function RoleManagementPage() {
   const { hasPermission } = useAuth()
@@ -15,17 +13,17 @@ export default function RoleManagementPage() {
   const [roles, setRoles] = useState<Role[]>([])
   const [permissions, setPermissions] = useState<PermissionCategory[]>([])
   const [isLoading, setIsLoading] = useState(false)
+  // Users per role; only for someone who may list users.
+  const [memberCounts, setMemberCounts] = useState<Record<number, number>>({})
+  const canSeeUsers = hasPermission('user:view')
 
   // Modal state
   const [isModalOpen, setIsModalOpen] = useState(false)
   const [editingRole, setEditingRole] = useState<Role | null>(null)
   const [form] = Form.useForm()
 
-  useEffect(() => {
-    loadData()
-  }, [])
 
-  const loadData = async () => {
+  const loadData = useCallback(async () => {
     setIsLoading(true)
     try {
       const [rolesData, permsData] = await Promise.all([
@@ -34,12 +32,20 @@ export default function RoleManagementPage() {
       ])
       setRoles(rolesData)
       setPermissions(permsData)
+      if (canSeeUsers) {
+        const counts = await Promise.all(rolesData.map((r) => userApi.getUsersCount({ role_id: r.id }).then((c) => [r.id, c.count] as const)))
+        setMemberCounts(Object.fromEntries(counts))
+      }
     } catch {
       message.error('Failed to load data')
     } finally {
       setIsLoading(false)
     }
-  }
+  }, [canSeeUsers])
+
+  useEffect(() => {
+    void loadData()
+  }, [loadData])
 
   const handleCreate = () => {
     setEditingRole(null)
@@ -113,106 +119,19 @@ export default function RoleManagementPage() {
     }
   }
 
-  const columns: ColumnsType<Role> = [
-    {
-      title: 'Role',
-      key: 'role',
-      render: (_, record) => (
-        <div className="flex items-center gap-3">
-          <div className={`w-8 h-8 rounded-full flex items-center justify-center ${
-            record.is_system ? 'bg-signal-500/20' : 'bg-cyber-500/20'
-          }`}>
-            {record.is_system ? (
-              <LockIcon className="text-signal-400" />
-            ) : (
-              <UsersIcon className="text-cyber-400" />
-            )}
-          </div>
-          <div>
-            <div className="flex items-center gap-2">
-              <span style={{ color: 'var(--ink)', fontWeight: 500 }}>{record.display_name}</span>
-              {record.is_system && (
-                <Tooltip title="System role — cannot be deleted">
-                  <Tag color="gold" className="text-xs">System</Tag>
-                </Tooltip>
-              )}
-              {!record.is_active && (
-                <Tag color="red" className="text-xs">Disabled</Tag>
-              )}
-            </div>
-            <span className="text-xs" style={{ color: 'var(--ink-faint)', fontFamily: 'var(--font-mono)' }}>
-              {record.name}
-            </span>
-          </div>
-        </div>
-      ),
-    },
-    {
-      title: 'Permissions',
-      key: 'permissions',
-      render: (_, record) => {
-        const permCodes = record.permissions.map(p => p.code)
-        if (permCodes.includes('*:*')) {
-          return <Tag color="gold" icon={<ShieldCheckIcon />}>Full access</Tag>
-        }
-        return (
-          <div className="flex flex-wrap gap-1">
-            {record.permissions.slice(0, 3).map(p => (
-              <Tag key={p.code} className="text-xs">{p.code}</Tag>
-            ))}
-            {record.permissions.length > 3 && (
-              <Tooltip title={record.permissions.slice(3).map(p => p.code).join(', ')}>
-                <Tag className="text-xs">+{record.permissions.length - 3} more</Tag>
-              </Tooltip>
-            )}
-          </div>
-        )
-      },
-    },
-    {
-      title: 'Inherits from',
-      key: 'parent',
-      render: (_, record) => {
-        if (!record.parent_role_id) return <span style={{ color: 'var(--ink-faint)' }}>Nothing</span>
-        const parent = roles.find(r => r.id === record.parent_role_id)
-        return parent ? (
-          <Tag>{parent.display_name}</Tag>
-        ) : (
-          <span style={{ color: 'var(--ink-faint)' }}>-</span>
-        )
-      },
-    },
-    {
-      title: 'Created',
-      dataIndex: 'created_at',
-      key: 'created_at',
-      render: (time: string) => parseUtc(time).toLocaleDateString(),
-    },
-    {
-      title: 'Actions',
-      key: 'actions',
-      align: 'right',
-      render: (_, record) => (
-        <div className="flex justify-end gap-1.5">
-          {canManage && (
-            <>
-              <Tooltip title="Edit">
-                <Button aria-label={`Edit ${record.display_name}`} icon={<PencilSimpleIcon />} onClick={() => handleEdit(record)} />
-              </Tooltip>
-              {!record.is_system && (
-                <Tooltip title="Delete">
-                  <Button aria-label={`Delete ${record.display_name}`} danger icon={<TrashIcon />} onClick={() => handleDelete(record)} />
-                </Tooltip>
-              )}
-            </>
-          )}
-        </div>
-      ),
-    },
-  ]
+  // Permission code → category, for grouping a role's permissions on its card.
+  const categoryOf = new Map(permissions.flatMap((c) => c.permissions.map((p) => [p.code, c.category] as const)))
+  const grouped = (role: Role) => {
+    const groups = new Map<string, typeof role.permissions>()
+    for (const p of role.permissions) {
+      const cat = categoryOf.get(p.code) ?? p.category ?? 'Other'
+      groups.set(cat, [...(groups.get(cat) ?? []), p])
+    }
+    return [...groups.entries()]
+  }
 
   return (
-    <div>
+    <div className="max-w-5xl">
       <PageHeader
         title="Roles"
         lead="What each role is allowed to do. A role can inherit another's permissions."
@@ -230,21 +149,77 @@ export default function RoleManagementPage() {
         }
       />
 
-      {/* Roles table */}
-      <Table
-        scroll={{ x: 760 }}
-        dataSource={roles}
-        columns={columns}
-        rowKey="id"
-        loading={{
-          spinning: isLoading,
-          indicator: <SpinnerIcon className="text-cyber-400" />,
-        }}
-        pagination={false}
-        locale={{
-          emptyText: <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="No roles found" />,
-        }}
-      />
+      {isLoading && roles.length === 0 ? (
+        <div className="py-16 text-center"><Spin /></div>
+      ) : roles.length === 0 ? (
+        <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description={<span style={{ color: 'var(--ink-muted)' }}>No roles yet.</span>} />
+      ) : (
+        <div className="role-grid">
+          {roles.map((role) => {
+            const full = role.permissions.some((p) => p.code === '*:*')
+            const parent = role.parent_role_id ? roles.find((r) => r.id === role.parent_role_id) : null
+            const members = memberCounts[role.id]
+            return (
+              <article key={role.id} className="role-card" aria-labelledby={`role-${role.id}`}>
+                <header className="role-head">
+                  <span className="role-mark" data-system={role.is_system || undefined} aria-hidden="true">
+                    {role.is_system ? <LockIcon /> : <UsersIcon />}
+                  </span>
+                  <div className="min-w-0 flex-1">
+                    <h2 id={`role-${role.id}`} className="role-name">
+                      {role.display_name}
+                      {role.is_system && <span className="role-tag">Built in</span>}
+                      {!role.is_active && <span className="role-tag" data-off>Disabled</span>}
+                    </h2>
+                    <code className="role-code">{role.name}</code>
+                  </div>
+                  {canManage && (
+                    <div className="flex gap-1.5 flex-none">
+                      <Tooltip title="Edit">
+                        <Button aria-label={`Edit ${role.display_name}`} icon={<PencilSimpleIcon />} onClick={() => handleEdit(role)} />
+                      </Tooltip>
+                      {!role.is_system && (
+                        <Tooltip title="Delete">
+                          <Button aria-label={`Delete ${role.display_name}`} danger icon={<TrashIcon />} onClick={() => handleDelete(role)} />
+                        </Tooltip>
+                      )}
+                    </div>
+                  )}
+                </header>
+
+                {role.description && <p className="role-desc">{role.description}</p>}
+
+                <div className="build-meta mb-3">
+                  {members !== undefined && <span>{members === 1 ? '1 user' : `${members} users`}</span>}
+                  {parent && <span>Inherits from {parent.display_name}</span>}
+                  <span>{full ? 'Every permission' : `${role.permissions.length} ${role.permissions.length === 1 ? 'permission' : 'permissions'}`}</span>
+                </div>
+
+                {full ? (
+                  <p className="role-full"><ShieldCheckIcon /> Can do everything, including managing users and roles.</p>
+                ) : role.permissions.length === 0 ? (
+                  <p className="role-desc m-0">No permissions of its own{parent ? `; it has what ${parent.display_name} has.` : '.'}</p>
+                ) : (
+                  <dl className="role-perms">
+                    {grouped(role).map(([category, perms]) => (
+                      <div key={category} className="role-perm-group">
+                        <dt>{category.charAt(0).toUpperCase() + category.slice(1)}</dt>
+                        <dd>
+                          {perms.map((p) => (
+                            <Tooltip key={p.code} title={p.code}>
+                              <span className="role-perm">{p.name || p.code}</span>
+                            </Tooltip>
+                          ))}
+                        </dd>
+                      </div>
+                    ))}
+                  </dl>
+                )}
+              </article>
+            )
+          })}
+        </div>
+      )}
 
       {/* Create/Edit Modal */}
       <Modal
