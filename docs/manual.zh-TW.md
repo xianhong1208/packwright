@@ -225,6 +225,18 @@ LOCAL_SOURCE_ROOTS=/srv/projects,/data/builds
 ——放在產物旁邊,也包進執行檔裡(程式可以用 `os.path.join(os.path.dirname(__file__), "VERSION")` 讀到)。
 純前端建置會把 `VERSION` 放進輸出目錄,部署後可以從 `/VERSION` 看到。
 
+### 通知
+
+專案設定的 **Notifications** 分頁可以加上通知對象:Discord、Slack 的 incoming webhook,或任何接受
+JSON `POST` 的網址。每個對象可以各自選擇「建置失敗時」與「建置成功時」要不要通知(預設都會)。
+失敗的訊息附上錯誤診斷(問題與建議),成功的訊息附上是誰建置、花了多久。伺服器有設定 `PUBLIC_URL`
+時,訊息會附上建置頁面的連結。
+
+- 誰能改:專案建立者或有 `project:manage` 權限的人;有建置權限的人都看得到清單。
+- webhook 網址等同密碼,加密儲存,頁面上只顯示主機名稱與最後 4 個字元;要換網址就貼一個新的。
+- 加好之後按 **Send test** 確認訊息送得到;每個對象會顯示最後一次送出的結果,送不出去時會寫原因。
+- 通知在建置結束後才送,不佔建置名額;對方沒回應時會再試一次,不影響建置本身。
+
 ## New build
 
 左側工具列或頂端的 **New build**。
@@ -629,6 +641,9 @@ gunzip -c packwright-<時間>.sql.gz | psql -h HOST -U USER -d DBNAME    # Postg
 
 | 方法 | 路徑 | 權限 | 說明 |
 |---|---|---|---|
+| GET / POST | `/api/projects/{id}/notifications` | `task:create`(新增限建立者或 `project:manage`) | 專案的通知對象 |
+| PATCH / DELETE | `/api/projects/{id}/notifications/{nid}` | 建立者或 `project:manage` | 修改或移除通知對象 |
+| POST | `/api/projects/{id}/notifications/{nid}/test` | 建立者或 `project:manage` | 送出測試訊息 |
 | GET | `/api/monitoring/stats` | 登入 | CPU、記憶體、磁碟與編譯環境狀態 |
 | GET | `/api/monitoring/build-stats` | `history:view_own / history:view_all` | 首頁的建置統計 |
 | GET | `/health` | 公開 | 健康檢查與版本 |

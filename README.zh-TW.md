@@ -10,6 +10,7 @@ Packwright 在 v1.0.0 以前名為 *Build Center*。存在於既有資料中的�
 
 - **四種打包模式。** 純後端(Nuitka)、純前端(任一 Node 套件管理器)、全端(前端產出作為 data 一起編進 Nuitka),以及 Docker 輸出(打包成 image 並匯出 `.tar.gz`)。
 - **專案與版本。** 每次建置都歸到一個專案(同名稱同來源)。專案頁列出所有版本,一個對話框就能建置新版本;版本從 Git tag、pyproject.toml 或 package.json 讀出,會用在下載檔名、Docker image 的 tag,並寫進 `VERSION` 檔。專案由所有有建置權限的人共用。
+- **通知。** 專案可以把建置結果送到 Discord、Slack 或任何接收 JSON 的網址:失敗的附上診斷,成功的附上花了多久。不需要 mail server;webhook 網址加密儲存,存好之後不會再顯示。
 - **快速建置。** 指定資料夾或 Git URL,系統會自己讀出專案內容:後端、前端還是全端、進入點、`package.json` 在哪、Python 版本與依賴群組。按一下就開始建置;所有設定仍可在 *All settings* 調整。
 - **本機路徑或 Git URL 來源。** Git 模式會 clone repo、用 `uv sync` 建立 `.venv`、打包,完成後清理工作區。URL 驗證做了 SSRF 防護、subprocess 一律 argv 形式、每次 clone 有逾時上限。
 - **Git 憑證在管理台設定。** 在介面新增 GitHub、GitLab 與自架服務的 token;加密儲存,依 clone URL 的主機自動選用——`.env` 裡不放任何密鑰。
@@ -75,6 +76,7 @@ uv run python main.py         # 先套用 migration,再於 http://0.0.0.0:5018 �
 | `LOCAL_SOURCE_ROOTS` | *(空)* | 本機來源可讀取的絕對路徑前綴(CSV);留空則停用本機模式。 |
 | `UV_BIN` / `PRE_BUILD_PATH` | 自動 | uv 路徑與 subprocess PATH;留空自動偵測。 |
 | `MAX_CONCURRENT_BUILDS` | `3` | 同時進行的建置數,其餘排隊。 |
+| `PUBLIC_URL` | *(空)* | 大家開啟 Packwright 用的網址;建置通知會用它附上建置頁面的連結。 |
 | `TRUSTED_PROXY_IPS` | *(空)* | 可信任 `X-Forwarded-For` 的代理 IP;留空最安全。 |
 
 ## 儲存與資料

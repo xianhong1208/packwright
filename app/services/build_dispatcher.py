@@ -10,6 +10,7 @@ from pathlib import Path
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.schemas.task import BuildConfig, TaskStatus, ProjectType, SourceType
+from app.services import notifications
 from app.services.paths import safe_join
 from app.services.project_lock import get_project_lock, release_project_lock
 from app.services.task_manager import task_manager
@@ -691,6 +692,7 @@ async def start_build_task(task_id: str, config: BuildConfig) -> None:
                     await task_manager.update_task(
                         task_id, "status_msg", f"Clone failed: {e!s}"
                     )
+                notifications.notify_build_soon(task_id)
                 return
 
             # Clone + venv bootstrap can take many minutes — re-check cancel
@@ -729,6 +731,10 @@ async def start_build_task(task_id: str, config: BuildConfig) -> None:
             await task_manager.append_log(
                 task_id, f"(diagnosis step skipped: {e!s})"
             )
+
+        # After the diagnosis, so a failure message can say what went wrong.
+        # In the background: a slow webhook must not hold this build slot.
+        notifications.notify_build_soon(task_id)
 
         # Post-build disk reclamation for git-source tasks only. Runs even
         # if the build failed — we check status below. Never raises out.
