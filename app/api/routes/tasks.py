@@ -22,6 +22,7 @@ from pydantic import BaseModel as _PydBase
 from app.models.user import User
 from app.schemas.task import (
     BuildConfig,
+    BuildResult,
     HistoryItem,
     SourceType,
     TaskCreate,
@@ -771,6 +772,31 @@ async def get_task_logs(
     return {"task_id": task_id, "logs": logs}
 
 
+def _result_summary(raw_result: dict | None) -> BuildResult | None:
+    """The part of a build's result a list row shows: output size, smoke test,
+    failed stage and the first diagnosis.
+
+    Preflight checks, the error lines and the other diagnoses are for the detail
+    page; the Builds list asks for up to 1000 rows, and failed ones carry dozens of
+    log lines each. Like the config, a stored result that no longer validates
+    becomes None rather than failing the whole list.
+    """
+    if not raw_result or not isinstance(raw_result, dict):
+        return None
+    # Drop what the row does not show before validating, so a stored preflight
+    # check or error line that no longer fits the schema cannot cost the row its
+    # size and smoke test.
+    shown = {k: v for k, v in raw_result.items() if k not in ("preflight", "error_lines")}
+    diagnosis = shown.get("diagnosis")
+    if isinstance(diagnosis, list):
+        shown["diagnosis"] = diagnosis[:1]
+    try:
+        return BuildResult.model_validate(shown)
+    except ValidationError:
+        logger.warning("Stored build result does not validate; listing it without one", exc_info=True)
+        return None
+
+
 @router.get("/history", response_model=list[HistoryItem])
 async def get_history(
     db: DB,
@@ -810,6 +836,7 @@ async def get_history(
             status=TaskStatus(t.status),
             output_dir=t.output_dir or "",
             config=_config_for(t.config),
+            result=_result_summary(t.result),
         )
         for t in tasks
     ]
