@@ -15,6 +15,7 @@ import BackendStep from './createTask/sections/BackendStep'
 import FrontendStep from './createTask/sections/FrontendStep'
 import DockerStep from './createTask/sections/DockerStep'
 import CommandPreview from './projects/CommandPreview'
+import Notifications from './projects/Notifications'
 
 /** A project's settings — what new versions are built with — as tabs. */
 export default function ProjectSettingsPage() {
@@ -64,6 +65,7 @@ function Settings({ project }: { project: ProjectDetail }) {
     ...(showFrontendSettings ? [{ key: 'frontend', label: 'Frontend', children: <FrontendStep /> }] : []),
     { key: 'docker', label: 'Docker', children: <DockerStep /> },
     { key: 'commands', label: 'Commands', children: <CommandPreview /> },
+    { key: 'notifications', label: 'Notifications', children: <Notifications projectId={project.id} canEdit={project.can_edit} /> },
   ]
 
   return (
@@ -76,7 +78,8 @@ function Settings({ project }: { project: ProjectDetail }) {
         <Form form={form} layout="vertical" initialValues={initialValues(preset)}>
           {/* Every tab stays mounted so a field on a hidden tab is still validated and saved. */}
           <Tabs activeKey={tab} onChange={setTab} items={items.map((i) => ({ ...i, forceRender: true }))} />
-          <div className="settings-bar">
+          {/* Notifications save as they change; the defaults bar is for the other tabs. */}
+          <div className="settings-bar" hidden={tab === 'notifications'}>
             <span className="text-sm" style={{ color: 'var(--ink-faint)' }}>
               {project.can_edit ? 'Saved settings apply to the next build.' : `Only ${project.created_by} or a project manager can change these.`}
             </span>

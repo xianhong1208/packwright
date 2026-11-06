@@ -566,3 +566,20 @@ export interface SystemStats {
     temperature: number
   }>
 }
+
+export type NotificationKind = 'webhook' | 'discord' | 'slack'
+
+/** Where a project's build results are sent. The URL itself never comes back. */
+export interface ProjectNotification {
+  id: number
+  kind: NotificationKind
+  /** Host and last 4 characters of the URL, e.g. "hooks.slack.com …a1b2". */
+  url_hint: string
+  on_failed: boolean
+  on_passed: boolean
+  created_by: string
+  created_at: string
+  last_sent_at: string | null
+  last_ok: boolean | null
+  last_error: string | null
+}
