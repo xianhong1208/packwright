@@ -56,6 +56,9 @@ PERMISSIONS = [
     {"code": "history:view_own", "name": "View Own History", "description": "View own task history", "category": "history"},
     {"code": "history:view_all", "name": "View All History", "description": "View all users' task history", "category": "history"},
     {"code": "history:export", "name": "Export History", "description": "Export task history as CSV", "category": "history"},
+    # Project permissions
+    {"code": "project:*", "name": "All Project Permissions", "description": "Full access to projects", "category": "project"},
+    {"code": "project:manage", "name": "Manage Projects", "description": "Change or delete any project, not only your own", "category": "project"},
     # Role management permissions
     {"code": "role:*", "name": "All Role Permissions", "description": "Full access to role management", "category": "role"},
     {"code": "role:view", "name": "View Roles", "description": "View role list and details", "category": "role"},

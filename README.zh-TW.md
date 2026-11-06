@@ -9,6 +9,7 @@ Packwright 在 v1.0.0 以前名為 *Build Center*。存在於既有資料中的�
 ## 主要功能
 
 - **四種打包模式。** 純後端(Nuitka)、純前端(任一 Node 套件管理器)、全端(前端產出作為 data 一起編進 Nuitka),以及 Docker 輸出(打包成 image 並匯出 `.tar.gz`)。
+- **專案與版本。** 每次建置都歸到一個專案(同名稱同來源)。專案頁列出所有版本,一個對話框就能建置新版本;版本從 Git tag、pyproject.toml 或 package.json 讀出,會用在下載檔名、Docker image 的 tag,並寫進 `VERSION` 檔。專案由所有有建置權限的人共用。
 - **快速建置。** 指定資料夾或 Git URL,系統會自己讀出專案內容:後端、前端還是全端、進入點、`package.json` 在哪、Python 版本與依賴群組。按一下就開始建置;所有設定仍可在 *All settings* 調整。
 - **本機路徑或 Git URL 來源。** Git 模式會 clone repo、用 `uv sync` 建立 `.venv`、打包,完成後清理工作區。URL 驗證做了 SSRF 防護、subprocess 一律 argv 形式、每次 clone 有逾時上限。
 - **Git 憑證在管理台設定。** 在介面新增 GitHub、GitLab 與自架服務的 token;加密儲存,依 clone URL 的主機自動選用——`.env` 裡不放任何密鑰。

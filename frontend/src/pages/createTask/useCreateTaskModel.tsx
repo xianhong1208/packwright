@@ -1,8 +1,8 @@
 import { useState, useEffect, useCallback, useMemo, useRef } from 'react'
 import { useNavigate, useLocation } from 'react-router-dom'
-import { Form, Button, message, notification, Tag, Tooltip } from 'antd'
+import { Form, Button, Modal, message, notification, Tag, Tooltip } from 'antd'
 import { useMutation, useQueryClient } from '@tanstack/react-query'
-import { taskApi } from '../../api/client'
+import { projectApi, taskApi } from '../../api/client'
 import type {
   BuildConfig,
   ProjectType,
@@ -10,8 +10,10 @@ import type {
   GitRefs,
   ProjectAnalysis,
   RepoDiagnosisCheck,
+  DetectedVersion,
 } from '../../api/types'
 import { useFormDraft } from '../../hooks/useFormDraft'
+import { parseUtc } from '../../utils/time'
 import { ALL_STEPS, activeSteps, clampStepIndex, type StepDef, type StepKey } from './steps'
 import { assembleTaskCreate } from './buildConfig'
 import { findPythonMismatch, pickDefaultRef } from './pythonVersion'
@@ -165,9 +167,15 @@ export function useCreateTaskModel() {
   // Why the source could not be read (not allowed, not there…). Kept apart from
   // "nothing recognisable", which it used to be shown as.
   const [repoError, setRepoError] = useState<string | null>(null)
+  // Where the version in the form came from, when the project said it.
+  const [versionSource, setVersionSource] = useState<string | null>(null)
   const autoNameRef = useRef<string | null>(null)
-  const applyGuess = useCallback((checks: RepoDiagnosisCheck[], source: string): ProjectGuess => {
+  const applyGuess = useCallback((checks: RepoDiagnosisCheck[], source: string, version?: DetectedVersion | null): ProjectGuess => {
     setRepoChecks(checks)
+    if (version && !form.isFieldTouched('version')) {
+      form.setFieldValue('version', version.value)
+      setVersionSource(version.source)
+    }
     setRepoError(null)
     const guess = guessProject(checks)
     if (mode !== 'quick') return guess
@@ -450,8 +458,8 @@ export function useCreateTaskModel() {
     }
     const timer = setTimeout(async () => {
       try {
-        const { checks } = await taskApi.diagnoseRepo(path)
-        const guess = applyGuess(checks, path)
+        const { checks, version } = await taskApi.diagnoseRepo(path)
+        const guess = applyGuess(checks, path, version)
         if (guess.projectType === 'backend_only' || guess.projectType === 'fullstack') void fetchPyprojectGroups(path)
         if (guess.projectType === 'frontend_only' || guess.projectType === 'fullstack') void detectFrontendConfig(true)
       } catch (err: unknown) {
@@ -537,7 +545,7 @@ export function useCreateTaskModel() {
       // pyproject dependency-groups parsed from the remote repo (git-mode parity)
       setDepGroups(result.dependency_groups)
       setDepGroupsRead('read')
-      if (result.checks) applyGuess(result.checks, url)
+      if (result.checks) applyGuess(result.checks, url, result.version)
       const currentGroup = form.getFieldValue('dependency_group') as string | undefined
       if (currentGroup && !result.dependency_groups.includes(currentGroup)) {
         form.setFieldValue('dependency_group', undefined)
@@ -747,17 +755,31 @@ export function useCreateTaskModel() {
     try { localStorage.setItem(TOUR_STORAGE_KEY, '1') } catch { /* ignore */ }
   }, [])
 
-  const handleManualSubmit = () => {
+  const handleManualSubmit = async () => {
     // Assembly lives in ./createTask/buildConfig with per-field tests: every
     // field falls back to a default, so a mistake here does not raise — it
     // silently builds with settings the user never chose.
-    createMutation.mutate(
-      assembleTaskCreate({
-        values: form.getFieldsValue(true),
-        selectedDirs,
-        selectedDataDirs,
-      }),
-    )
+    const request = assembleTaskCreate({
+      values: form.getFieldsValue(true),
+      selectedDirs,
+      selectedDataDirs,
+    })
+    const version = request.config.version ?? ''
+    if (version) {
+      // Building a version that already passed is allowed, but rarely meant.
+      const earlier = await projectApi.sameVersion(request.project_name, version).catch(() => [])
+      const passed = earlier.find((b) => b.status === 'completed')
+      if (passed) {
+        Modal.confirm({
+          title: `${request.project_name} ${version} already passed`,
+          content: `It was built on ${parseUtc(passed.start_time).toLocaleDateString()} by ${passed.user_name}. Build it again?`,
+          okText: 'Build again',
+          onOk: () => createMutation.mutate(request),
+        })
+        return
+      }
+    }
+    createMutation.mutate(request)
   }
 
   const handleDirToggle = (dir: string, checked: boolean) => {
@@ -797,7 +819,7 @@ export function useCreateTaskModel() {
     try {
       switch (currentStepKey) {
         case 'basic': {
-          const common = ['project_name', 'project_type', 'source_type']
+          const common = ['project_name', 'version', 'project_type', 'source_type']
           const currentSource = (form.getFieldValue('source_type') || 'local') as SourceType
           const sourceSpecific =
             currentSource === 'git' ? ['git_url', 'git_ref'] : ['project_path']
@@ -928,6 +950,7 @@ export function useCreateTaskModel() {
     setMode,
     repoChecks,
     repoError,
+    versionSource,
     workspaceDir,
     setWorkspaceDir,
     draftSavedAt,

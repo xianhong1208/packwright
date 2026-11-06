@@ -40,6 +40,9 @@ class PermissionCode(str, Enum):
     ROLE_VIEW = "role:view"
     ROLE_MANAGE = "role:manage"
 
+    # Project permissions (changing or deleting any project, not only your own)
+    PROJECT_MANAGE = "project:manage"
+
 
 # Default permission sets for roles
 DEFAULT_ADMIN_PERMISSIONS = [p.value for p in PermissionCode]

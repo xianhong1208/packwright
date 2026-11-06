@@ -11,6 +11,10 @@ import type {
   GitPreviewFrontend,
   ProjectAnalysis,
   GitScanTree,
+  ProjectSummary,
+  ProjectDetail,
+  SameVersionBuild,
+  BuildConfig,
 } from './types'
 
 // Token storage utilities (synced with AuthContext)
@@ -368,6 +372,22 @@ export const taskApi = {
     )
     return `/api/download/${encodeURIComponent(response.data.ticket)}`
   },
+}
+
+export const projectApi = {
+  list: async (): Promise<ProjectSummary[]> => (await api.get<ProjectSummary[]>('/projects')).data,
+  get: async (id: number): Promise<ProjectDetail> => (await api.get<ProjectDetail>(`/projects/${id}`)).data,
+  update: async (id: number, body: { name?: string; config?: BuildConfig }): Promise<ProjectDetail> =>
+    (await api.put<ProjectDetail>(`/projects/${id}`, body)).data,
+  remove: async (id: number): Promise<void> => {
+    await api.delete(`/projects/${id}`)
+  },
+  /** Build a new version with the project's settings, and these changes for this build only. */
+  build: async (id: number, body: { version: string; overrides?: Partial<BuildConfig> }): Promise<TaskResponse> =>
+    (await api.post<TaskResponse>(`/projects/${id}/builds`, body)).data,
+  /** Earlier builds of a version, to ask before building it again. */
+  sameVersion: async (projectName: string, version: string): Promise<SameVersionBuild[]> =>
+    (await api.get<SameVersionBuild[]>('/history/versions', { params: { project_name: projectName, version } })).data,
 }
 
 export default api

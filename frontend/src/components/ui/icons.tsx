@@ -13,6 +13,7 @@ import {
   ArrowRightIcon as ArrowRight,
   ArrowUpIcon as ArrowUp,
   ArrowsClockwiseIcon as ArrowsClockwise,
+  CaretDownIcon as CaretDown,
   CheckIcon as Check,
   CheckCircleIcon as CheckCircle,
   CircleNotchIcon as CircleNotch,
@@ -43,6 +44,7 @@ import {
   LockIcon as Lock,
   MagnifyingGlassIcon as MagnifyingGlass,
   MinusCircleIcon as MinusCircle,
+  PackageIcon as Package,
   PauseIcon as Pause,
   PencilSimpleIcon as PencilSimple,
   PlusIcon as Plus,
@@ -97,6 +99,7 @@ export const ArrowLineDownIcon = wrap(ArrowLineDown, 'ArrowLineDownIcon')
 export const ArrowRightIcon = wrap(ArrowRight, 'ArrowRightIcon')
 export const ArrowUpIcon = wrap(ArrowUp, 'ArrowUpIcon')
 export const ArrowsClockwiseIcon = wrap(ArrowsClockwise, 'ArrowsClockwiseIcon')
+export const CaretDownIcon = wrap(CaretDown, 'CaretDownIcon')
 export const CheckIcon = wrap(Check, 'CheckIcon')
 export const CheckCircleIcon = wrap(CheckCircle, 'CheckCircleIcon')
 export const ClockIcon = wrap(Clock, 'ClockIcon')
@@ -126,6 +129,7 @@ export const ListIcon = wrap(List, 'ListIcon')
 export const LockIcon = wrap(Lock, 'LockIcon')
 export const MagnifyingGlassIcon = wrap(MagnifyingGlass, 'MagnifyingGlassIcon')
 export const MinusCircleIcon = wrap(MinusCircle, 'MinusCircleIcon')
+export const PackageIcon = wrap(Package, 'PackageIcon')
 export const PauseIcon = wrap(Pause, 'PauseIcon')
 export const PencilSimpleIcon = wrap(PencilSimple, 'PencilSimpleIcon')
 export const PlusIcon = wrap(Plus, 'PlusIcon')

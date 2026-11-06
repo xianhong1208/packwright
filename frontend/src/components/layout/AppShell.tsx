@@ -1,7 +1,7 @@
 import { Suspense, useEffect, useMemo, useState, type ComponentType } from 'react'
 import { Outlet, useLocation, useNavigate } from 'react-router-dom'
 import { Button, Drawer, Dropdown, Input, Modal, Spin, Tooltip } from 'antd'
-import { ClockCounterClockwiseIcon, ClockIcon, GaugeIcon, GearIcon, HouseIcon, KeyIcon, ListIcon, MagnifyingGlassIcon, PlusIcon, ShieldCheckIcon, SignOutIcon, UsersIcon } from '../ui/icons'
+import { ClockCounterClockwiseIcon, ClockIcon, GaugeIcon, GearIcon, HouseIcon, KeyIcon, ListIcon, MagnifyingGlassIcon, PlusIcon, ShieldCheckIcon, SignOutIcon, UsersIcon, PackageIcon } from '../ui/icons'
 import type { IconProps } from '../ui/icons'
 import Mark from '../ui/Mark'
 import { useQuery } from '@tanstack/react-query'
@@ -23,6 +23,7 @@ interface NavItem {
 const MAIN_NAV: NavItem[] = [
   { path: '/', label: 'On the bench', Icon: HouseIcon },
   { path: '/create', label: 'New build', Icon: PlusIcon },
+  { path: '/projects', label: 'Projects', Icon: PackageIcon, match: (p) => p.startsWith('/projects') },
   { path: '/history', label: 'Builds', Icon: ClockCounterClockwiseIcon, match: (p) => p.startsWith('/history') || p.startsWith('/task') },
   { path: '/monitor', label: 'Machine', Icon: GaugeIcon },
 ]

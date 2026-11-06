@@ -200,6 +200,25 @@ LOCAL_SOURCE_ROOTS=/srv/projects,/data/builds
 
 ---
 
+## 專案與版本(Projects)
+
+每次建置都會歸到一個**專案**:建置時指定的專案,或「名稱相同、來源(資料夾路徑或 Git URL)也相同」的
+既有專案;找不到就在第一次建置時自動建立。同名但來源不同的會變成「名稱 (2)」,不會把兩份程式碼的建置
+混在一起。升級到這個版本時,既有的建置紀錄會用同樣的規則自動歸檔。
+
+- **Projects** 頁列出所有專案,最近有建置的在前。
+- 專案頁依**版本**列出建置:每個版本的最新結果、建置次數,以及下載該版本最後一次成功的產物。
+- **Build a new version**:Git 專案可以選 branch 或 tag;版本會自動讀出(tag 本身、`pyproject.toml` 的
+  `[project].version`、或 `package.json` 的 `version`),可以修改;打包方式、單檔或資料夾、試跑、Docker
+  可以只改這一次。這個版本以前成功過的話會提醒(仍然可以照建)。
+- 專案由所有有建置權限(`task:create`)的人共用;改名、刪除限建立者與有 `project:manage` 權限的人。
+  刪除專案不會刪掉它的建置。
+
+版本會被蓋進產物:下載檔名(`shop-1.2.0.tar.gz`)、Docker image 的 tag(`shop:1.2.0`,並加上
+`org.opencontainers.image.version` label 與 `PACKWRIGHT_BUILD_VERSION` 環境變數),以及 `VERSION` 檔
+——放在產物旁邊,也包進執行檔裡(程式可以用 `os.path.join(os.path.dirname(__file__), "VERSION")` 讀到)。
+純前端建置會把 `VERSION` 放進輸出目錄,部署後可以從 `/VERSION` 看到。
+
 ## New build
 
 左側工具列或頂端的 **New build**。
