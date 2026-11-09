@@ -21,7 +21,7 @@ from typing import Any
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.services.paths import safe_join
+from app.services.paths import UnsafePathError, safe_join
 from app.config import get_settings
 from app.schemas.task import BuildConfig, PackMode
 from app.services.source_guard import SourceGuard
@@ -1373,8 +1373,14 @@ async def run_nuitka_build(task_id: str, config: BuildConfig, db: AsyncSession) 
         output_dir.mkdir(parents=True, exist_ok=True)
         await task_manager.append_log(task_id, f"Output directory: {output_dir}")
 
-        # Build Nuitka command
-        entry_point = project_path / config.entry_point
+        # Build Nuitka command. safe_join: the loader is written into this file,
+        # and it is compiled and shipped, so it has to be the project's own (the
+        # route checks the name; this also catches a symlink in a Git clone).
+        try:
+            entry_point = safe_join(project_path, config.entry_point)
+        except UnsafePathError as e:
+            preflight.append({"label": "Entry point exists", "passed": False, "detail": str(e), "critical": True})
+            raise ValueError(f"Entry point refused: {e}") from e
         entry_ok = entry_point.exists()
         preflight.append({
             "label": "Entry point exists",

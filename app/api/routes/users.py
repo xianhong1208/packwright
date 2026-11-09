@@ -33,6 +33,7 @@ from app.services.permission import (
     get_all_permissions,
     get_user_permissions,
     has_permission,
+    resolve_role_permissions,
 )
 
 router = APIRouter(prefix="/api/users", tags=["users"])
@@ -56,6 +57,76 @@ async def _ensure_not_outranked(db: AsyncSession, actor: CurrentUser, target_id:
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Cannot manage an account with permissions beyond your own (requires role:manage)",
         )
+
+
+async def _permissions_for_codes(db: AsyncSession, codes: list[str]) -> list[Permission]:
+    """The permission rows for ``codes``; 400 naming any code that does not exist.
+
+    Unknown codes used to be dropped without a word, so a typo in an API call
+    produced a role quietly missing the permission it was meant to grant.
+    """
+    wanted = set(codes)
+    if not wanted:
+        return []
+    result = await db.execute(select(Permission).where(Permission.code.in_(wanted)))
+    found = list(result.scalars().all())
+    unknown = sorted(wanted - {p.code for p in found})
+    if unknown:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Unknown permission codes: {', '.join(unknown)}",
+        )
+    return found
+
+
+async def _ensure_no_inheritance_loop(db: AsyncSession, role_id: int, parent_id: int) -> None:
+    """Refuse a parent whose own ancestry already contains ``role_id``.
+
+    resolve_role_permissions stops at a revisited role, so a loop does not hang a
+    request, but it makes what a role grants depend on where the walk starts, and
+    nobody setting it up means that.
+    """
+    seen: set[int] = set()
+    current: int | None = parent_id
+    while current is not None and current not in seen:
+        if current == role_id:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Parent role would create an inheritance loop",
+            )
+        seen.add(current)
+        current = (
+            await db.execute(select(Role.parent_role_id).where(Role.id == current))
+        ).scalar_one_or_none()
+
+
+async def _ensure_a_role_manager_remains(db: AsyncSession) -> None:
+    """Refuse a role change that leaves no active account holding role:manage.
+
+    Deleting or deactivating a system role was refused, but emptying its
+    permissions was not: one PUT with an empty list took every permission from
+    the admin role, and with it the only way to give them back. Whatever the
+    change (permissions, parent, deactivation), someone must still be able to
+    undo it. Runs after the change is flushed and before it is committed.
+    """
+    await db.flush()
+    roles = (
+        await db.execute(
+            select(Role)
+            .join(User, User.role_id == Role.id)
+            .where(User.is_active.is_(True))
+            .distinct()
+            .options(selectinload(Role.permissions))
+        )
+    ).scalars().all()
+    for role in roles:
+        if has_permission(await resolve_role_permissions(db, role), PermissionCode.ROLE_MANAGE.value):
+            return
+    await db.rollback()
+    raise HTTPException(
+        status_code=status.HTTP_400_BAD_REQUEST,
+        detail="This change would leave no active account able to manage roles",
+    )
 
 
 # ===== User List & Details =====
@@ -448,13 +519,7 @@ async def create_role(
                 detail="Parent role not found",
             )
 
-    # Get permissions by codes
-    permissions = []
-    if data.permission_codes:
-        result = await db.execute(
-            select(Permission).where(Permission.code.in_(data.permission_codes))
-        )
-        permissions = list(result.scalars().all())
+    permissions = await _permissions_for_codes(db, data.permission_codes)
 
     # Create role
     role = Role(
@@ -565,6 +630,7 @@ async def update_role(
                     status_code=status.HTTP_400_BAD_REQUEST,
                     detail="Parent role not found",
                 )
+            await _ensure_no_inheritance_loop(db, role_id, data.parent_role_id)
             role.parent_role_id = data.parent_role_id
         else:
             role.parent_role_id = None
@@ -576,11 +642,9 @@ async def update_role(
 
     # Update permissions if provided
     if data.permission_codes is not None:
-        result = await db.execute(
-            select(Permission).where(Permission.code.in_(data.permission_codes))
-        )
-        role.permissions = list(result.scalars().all())
+        role.permissions = await _permissions_for_codes(db, data.permission_codes)
 
+    await _ensure_a_role_manager_remains(db)
     await db.commit()
     await db.refresh(role)
 

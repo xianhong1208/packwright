@@ -6,6 +6,22 @@ follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this proje
 
 ## [Unreleased]
 
+### Fixed
+- A role change can no longer lock everyone out. Deleting or deactivating a built-in role was refused, but
+  emptying its permissions was not: one `PUT /api/users/roles/1` with an empty list took every permission
+  from the admin role, and with it the only way to give them back. A role change (permissions, parent or
+  deactivation) that would leave no active account holding `role:manage` is now refused. Parent roles can
+  no longer form a loop, and unknown permission codes are refused with their names instead of being
+  dropped silently.
+
+### Security
+- The entry point must be a file inside the project. Output, data, extra-code and frontend directories were
+  confined to the project, but the entry point was not: `entry_point="../../elsewhere/app.py"` on a local
+  build was accepted, the libs loader was written into that file outside `LOCAL_SOURCE_ROOTS`, and it was
+  compiled and packaged. Builds (local and Git, including a project's new versions and settings) and the
+  project analysis now refuse an absolute, `..` or symlinked-out entry point with 400, and the Nuitka worker
+  checks the resolved path again before touching it, which also covers a symlink committed to a Git repo.
+
 ### Security
 - Git no longer uses the server's own git login. Clones, ref listings and scans ran with the service
   account's `HOME`, so its `~/.gitconfig` and `/etc/gitconfig` applied, credential helpers included: with
