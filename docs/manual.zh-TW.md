@@ -197,6 +197,14 @@ LOCAL_SOURCE_ROOTS=/srv/projects,/data/builds
 本機模式在原地建置,產物寫進專案底下的輸出目錄(預設 `dist`)。External 模式會暫時在進入點檔案
 插入一小段載入 `libs/` 的程式碼,建置結束後還原。
 
+- **每次建置前會清空輸出目錄**,所以產物裡不會混進前幾次建置留下的檔案(例如資料夾模式的產物裡
+  多出上一次 One-file 的執行檔與 `libs/`)。輸出目錄如果就是專案資料夾本身,或裡面有建置會讀的東西
+  (進入點、程式 / 資料 / 前端目錄、`.venv`、`.git`、`pyproject.toml`),就不清空,建置記錄會寫明原因。
+  不要把自己的檔案放在輸出目錄裡。
+- 建置成功後,輸出會另存一份到 `GIT_WORKSPACE_DIR/<task-id>/<輸出目錄>`(同一個檔案系統時用 hard
+  link,不多佔空間),下載的是這一份,不是專案資料夾當下的內容 —— 之後同一個資料夾再建置,也不會
+  改變前一次建置下載到的東西。這份保留期限同 Git 模式(`WORKSPACE_SUCCESS_TTL_DAYS`)。
+
 ### Git URL
 
 1. **驗證網址**:只接受 `http(s)`;拒絕網址內嵌帳密、`localhost`,以及指向 loopback、私有網段、
@@ -390,8 +398,9 @@ Queued → Preflight → Compile → Bundle → Verify
 - 在詳情頁或 **Builds** 頁按 **Download output**。瀏覽器原生下載,不會先把整個檔案讀進網頁記憶體。
 - 實作上前端先換一張**下載票證**(30 分鐘有效、只綁定這個建置與這個使用者、不能呼叫其他 API),
   兌換時會重新檢查帳號是否仍啟用、權限是否仍在。
-- 非 Docker 產物是從工作區或專案的輸出目錄即時打包的,所以**工作區被清掉後就無法下載**:
-  Git 模式的成功建置預設保留 `WORKSPACE_SUCCESS_TTL_DAYS`(7 天)。
+- 非 Docker 產物是從這次建置的工作區即時打包的(本機模式是建置完成時另存的那一份),所以
+  **工作區被清掉後就無法下載**:成功建置預設保留 `WORKSPACE_SUCCESS_TTL_DAYS`(7 天)。
+  這個版本以前的本機建置沒有另存,仍從專案的輸出目錄打包。
 - 腳本可以直接呼叫 `GET /api/history/{id}/download`(帶 `Authorization` header)。
 
 ---
@@ -557,6 +566,7 @@ data/
 | 對象 | 保留 |
 |---|---|
 | Git 模式成功建置(非 Docker) | 完成時立刻只留下輸出;`WORKSPACE_SUCCESS_TTL_DAYS`(7 天)後刪除。**這也是可下載的期限** |
+| 本機模式成功建置(非 Docker)另存的輸出 | `WORKSPACE_SUCCESS_TTL_DAYS`(7 天)。專案資料夾裡的輸出不會被清理 |
 | Git 模式成功建置(Docker) | 完成時立刻刪除工作區(image 檔已另存) |
 | 失敗 / 取消的建置 | `WORKSPACE_FAILED_TTL_DAYS`(30 天),留著方便除錯 |
 | 找不到對應紀錄的目錄 | `WORKSPACE_ORPHAN_TTL_DAYS`(2 天) |

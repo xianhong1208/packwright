@@ -6,6 +6,17 @@ follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this proje
 
 ## [Unreleased]
 
+### Fixed
+- A local-mode build's download is now that build's output and nothing else. The output directory in the
+  project folder was never emptied, so it collected every earlier build's files (a folder build's archive
+  also held the one-file binary and `libs/` of the build before it, and a Docker build copied them into
+  the image), and Download packed the folder when it was clicked, so a build downloaded after another
+  build of the same folder served the other build's binary. The output directory is now emptied before a
+  local build (unless it is the project itself or holds anything the build reads; the log says so), and a
+  successful build's output is kept under `GIT_WORKSPACE_DIR/<task-id>/` (hard links on the same
+  filesystem) and downloaded from there until `WORKSPACE_SUCCESS_TTL_DAYS` expires it. Builds from
+  before this change still download from the folder.
+
 ## [1.3.0] — 2026-11-09
 
 ### Fixed

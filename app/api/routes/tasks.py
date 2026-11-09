@@ -1166,15 +1166,22 @@ def _serve_task_output(task) -> Response:
     if not task.config:
         raise HTTPException(status_code=400, detail="Task has no config")
 
+    from app.services.artifacts import KEPT_OUTPUT_KEY
     from app.services.paths import (
         UnsafePathError,
         docker_export_path,
+        git_workspace,
         legacy_docker_export_path,
         safe_join,
         task_source_root,
     )
 
     project_path = task_source_root(task.task_id, task.config)
+    kept = bool((task.result or {}).get(KEPT_OUTPUT_KEY))
+    if kept:
+        # A local build's own copy of its output (artifacts.py), not the folder,
+        # which by now may hold a later build's files.
+        project_path = git_workspace(task.task_id)
     output_dir_name = task.config.get("output_dir", "dist")
     try:
         output_path = safe_join(project_path, output_dir_name)
@@ -1210,6 +1217,11 @@ def _serve_task_output(task) -> Response:
         )
 
     if not output_path.exists() or not output_path.is_dir():
+        if kept:
+            raise HTTPException(
+                status_code=404,
+                detail="This build's output has been cleaned up (WORKSPACE_SUCCESS_TTL_DAYS); build it again",
+            )
         raise HTTPException(status_code=404, detail="Output directory not found")
 
     # Stream the .tar.gz to the client AS IT IS BUILT, rather than building the

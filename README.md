@@ -86,7 +86,7 @@ Everything is environment-driven, and nothing is required. `.env.example` lists 
 | `JWT_SECRET_KEY` | auto | Session signing key; generated to `.env` on first start if empty. |
 | `SETTINGS_ENCRYPTION_KEY` | auto | Encrypts stored Git tokens; generated to `.env` if empty. |
 | `CORS_ORIGINS` | dev ports | CSV of browser origins allowed to call the API. |
-| `GIT_WORKSPACE_DIR` | `./data/workspace` | Where clones and build workspaces live (and where non-Docker outputs are downloaded from). |
+| `GIT_WORKSPACE_DIR` | `./data/workspace` | Where clones and build workspaces live, and where each non-Docker build's output is kept and downloaded from (local builds included). |
 | `DOCKER_IMAGES_DIR` | `./data/docker_images` | Where exported Docker images (`.tar.gz`) are written. |
 | `NUITKA_CACHE_DIR` | *(empty → `~/.cache/Nuitka`)* | Nuitka's cache, including the ccache store that makes rebuilds faster. |
 | `LOCAL_SOURCE_ROOTS` | *(empty)* | CSV of absolute prefixes a local-source build may read; empty disables local mode. |

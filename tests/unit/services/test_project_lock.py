@@ -162,6 +162,8 @@ class TestDispatchReleasesItsLock:
 
         mocker.patch.object(build_dispatcher.task_manager, "update_task", mocker.AsyncMock())
         mocker.patch.object(build_dispatcher, "_dispatch_locked", mocker.AsyncMock())
+        mocker.patch.object(build_dispatcher, "_empty_output_dir", mocker.AsyncMock())
+        mocker.patch.object(build_dispatcher, "_keep_output", mocker.AsyncMock())
         config = mocker.Mock()
         config.model_copy.return_value = mocker.Mock(project_path="/srv/projects/released")
         before = tracked_path_count()

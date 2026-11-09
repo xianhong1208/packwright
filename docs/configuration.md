@@ -154,7 +154,7 @@ tune how clients are identified and how fast builds can be submitted.
 |---|---|---|
 | `GITLAB_TOKEN` | *(unset)* | Legacy single access token, used only when no Git credential stored in the console (Settings → Git credentials) matches the repository host. May be left unset; prefer console-managed credentials. |
 | `GITLAB_TOKEN_HOST` | `gitlab.com` | The one exact host name `GITLAB_TOKEN` may be sent to. Set it to your server's name for a self-hosted GitLab; the token is never sent to any other host. |
-| `GIT_WORKSPACE_DIR` | `./data/workspace` (relative to the launch directory) | Where Git-mode builds clone into: one directory per task holding the clone, its `.venv` and the build output. Non-Docker outputs are downloaded from here, so it must persist between restarts. Set an absolute path to move it to a larger disk. |
+| `GIT_WORKSPACE_DIR` | `./data/workspace` (relative to the launch directory) | Where Git-mode builds clone into: one directory per task holding the clone, its `.venv` and the build output. A successful local-mode build keeps its own copy of the output here too (hard links when on the same filesystem as the project). Non-Docker outputs are downloaded from here, so it must persist between restarts. Set an absolute path to move it to a larger disk. |
 | `GIT_ALLOWED_HOSTS` | *(empty)* | Comma-separated host names (or IP addresses) Git URLs may point at. **Empty allows any `http`/`https` host**, except IP literals in loopback, private, link-local and other reserved ranges. When set, only the listed hosts are allowed, and listing an internal IP address explicitly permits it. `localhost` is always rejected. |
 | `GIT_CLONE_TIMEOUT` | `600` | Maximum seconds a `git clone` may take before the build fails. |
 | `LOCAL_SOURCE_ROOTS` | *(empty)* | Comma-separated absolute directory prefixes that local-path builds (and the directory browser in the build wizard) may read. **Empty disables local-source mode** so only Git URLs can be built. List only directories you trust every user with `task:create` to read. |
@@ -183,7 +183,7 @@ age. It first runs about a minute after start-up and never touches running or qu
 | Variable | Default | Description |
 |---|---|---|
 | `WORKSPACE_CLEANUP_ENABLED` | `true` | Run the periodic workspace sweep. Disabling it means workspaces accumulate until deleted by hand. |
-| `WORKSPACE_SUCCESS_TTL_DAYS` | `7` | Days after a successful build ends before its workspace is deleted. Because a non-Docker output is downloaded from its workspace, **this is also how long that output stays downloadable**. |
+| `WORKSPACE_SUCCESS_TTL_DAYS` | `7` | Days after a successful build ends before its workspace (for a local-mode build, its kept copy of the output) is deleted. Because a non-Docker output is downloaded from there, **this is also how long that output stays downloadable**. |
 | `WORKSPACE_FAILED_TTL_DAYS` | `30` | Days to keep the workspace of a failed or cancelled build, longer by default so there is time to investigate. |
 | `WORKSPACE_ORPHAN_TTL_DAYS` | `2` | Days to keep directories under `GIT_WORKSPACE_DIR` that have no matching build in history (usually left by an interrupted clone), judged by modification time. |
 | `WORKSPACE_CLEANUP_INTERVAL_HOURS` | `6` | Hours between sweeps (minimum 1). The same loop also runs the Docker-image and refresh-token cleanups. |
