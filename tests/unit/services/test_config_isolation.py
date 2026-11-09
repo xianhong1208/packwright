@@ -138,14 +138,24 @@ class TestSubmittedConfigIsNotMutated:
     async def test_tc_cfg_005_the_lock_still_keys_on_the_project_path(
         self, dispatched, mocker: MockerFixture
     ):
-        """TC-CFG-005: dispatch_build — copying does not change what is serialised.
+        """TC-CFG-005: start_build_task — copying does not change what is serialised.
 
         The lock is keyed by resolved path, not by object identity, so two
-        builds of one directory must still collide after the copy.
+        builds of one directory must still collide after the copy. (It is taken
+        before the build slot now, by start_build_task.)
         """
+        import contextlib
+
         spy = mocker.spy(build_dispatcher, "get_project_lock")
+        mocker.patch.object(build_dispatcher.task_manager, "get_task", mocker.AsyncMock(return_value=None))
+
+        @contextlib.asynccontextmanager
+        async def session():
+            yield None
+
+        mocker.patch("app.database.async_session", session)
         submitted = BuildConfig(project_path="/srv/projects/x")
 
-        await build_dispatcher.dispatch_build("t1", submitted, db=None)
+        await build_dispatcher.start_build_task("t1", submitted)
 
         assert spy.call_args.args[0] == "/srv/projects/x"
