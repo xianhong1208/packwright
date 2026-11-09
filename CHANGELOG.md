@@ -36,6 +36,15 @@ follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this proje
   repositories: the request is retried once without it, and a build's log says the credential needs
   updating. A private repository still fails with the original error.
 
+- Browsing no longer signs you out. The API allowed 60 requests a minute per address, which one person
+  reached in about 20 page loads (a page makes one to five calls), and a 429 on the session check sent a
+  signed-in person to the sign-in page. The allowance is now 300 a minute and 6000 an hour, set with the new
+  `RATE_LIMIT_PER_MINUTE` and `RATE_LIMIT_PER_HOUR`, and a rate-limited session check waits as long as the
+  server asks (up to 90 s, with a note on the loading screen) and tries again instead.
+- Building a project's new version is rate limited like any other build submission. `POST
+  /api/projects/{id}/builds` had no limit, while `POST /api/tasks` refused the 21st build a minute; both now
+  share `BUILD_SUBMIT_PER_MINUTE`.
+
 ## [1.3.0] — 2026-11-09
 
 ### Fixed
