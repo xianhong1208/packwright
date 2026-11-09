@@ -6,6 +6,14 @@ follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this proje
 
 ## [Unreleased]
 
+### Security
+- The entry point must be a file inside the project. Output, data, extra-code and frontend directories were
+  confined to the project, but the entry point was not: `entry_point="../../elsewhere/app.py"` on a local
+  build was accepted, the libs loader was written into that file outside `LOCAL_SOURCE_ROOTS`, and it was
+  compiled and packaged. Builds (local and Git, including a project's new versions and settings) and the
+  project analysis now refuse an absolute, `..` or symlinked-out entry point with 400, and the Nuitka worker
+  checks the resolved path again before touching it, which also covers a symlink committed to a Git repo.
+
 ## [1.3.0] — 2026-11-09
 
 ### Fixed

@@ -122,3 +122,75 @@ class TestSubdirectoryContainment:
         break real projects.
         """
         _check(project_path=SAFE_ROOT, data_dirs="app/static, app/templates")
+
+
+class TestEntryPointContainment:
+    """The entry point gets the libs loader written into it and is compiled and
+    shipped; entry_point="../../elsewhere/app.py" edited and packaged a file
+    outside the allowed roots."""
+
+    @pytest.mark.unit
+    @pytest.mark.parametrize("value", ["../../qa/qa.py", "/etc/passwd", "src/../../../x.py", "..", ".", ""])
+    def test_tc_pth_023_local_entry_point_cannot_escape(self, value):
+        """TC-PTH-023: create_task — a local entry point outside the project (or the
+        project folder itself) is refused with 400."""
+        with pytest.raises(HTTPException) as exc:
+            _check(project_path=SAFE_ROOT, entry_point=value)
+        assert exc.value.status_code == 400
+        assert "Entry point" in exc.value.detail
+
+    @pytest.mark.unit
+    @pytest.mark.parametrize("value", ["../../etc/hostname", "/etc/passwd", "a/../../b.py"])
+    def test_tc_pth_024_git_entry_point_cannot_escape(self, value):
+        """TC-PTH-024: create_task — in Git mode the name is checked lexically, like the
+        directory names (the clone does not exist yet)."""
+        with pytest.raises(HTTPException) as exc:
+            _check(source_type=SourceType.GIT, git_url="https://gitlab/x.git", git_ref="main", entry_point=value)
+        assert exc.value.status_code == 400
+
+    @pytest.mark.unit
+    @pytest.mark.parametrize("value", ["main.py", "src/app/main.py", "./main.py"])
+    def test_tc_pth_025_entry_points_inside_are_fine(self, value):
+        """TC-PTH-025: create_task — nested and ./ entry points inside the project pass."""
+        _check(project_path=SAFE_ROOT, entry_point=value)
+        _check(source_type=SourceType.GIT, git_url="https://gitlab/x.git", git_ref="main", entry_point=value)
+
+    @pytest.mark.unit
+    def test_tc_pth_026_a_symlink_out_of_the_project_is_refused(self, tmp_path, monkeypatch):
+        """TC-PTH-026: create_task — the local check resolves symlinks: main.py linking
+        to a file elsewhere is outside the project."""
+        monkeypatch.setattr("app.api.routes.tasks._allowed_path_prefixes", lambda: (str(tmp_path) + "/",))
+        project = tmp_path / "project"
+        project.mkdir()
+        (tmp_path / "elsewhere.py").write_text("print('x')")
+        (project / "main.py").symlink_to(tmp_path / "elsewhere.py")
+
+        with pytest.raises(HTTPException):
+            _check(project_path=str(project), entry_point="main.py")
+
+    @pytest.mark.unit
+    @pytest.mark.asyncio
+    async def test_tc_pth_028_analysis_does_not_read_an_entry_point_elsewhere(self, tmp_path, monkeypatch):
+        """TC-PTH-028: analyze-project parses the entry point's imports and returns them;
+        an entry point outside the project is refused instead of read."""
+        from app.api.routes.tasks import analyze_project
+
+        monkeypatch.setattr("app.api.routes.tasks._allowed_path_prefixes", lambda: (str(tmp_path) + "/",))
+        project = tmp_path / "project"
+        project.mkdir()
+        (tmp_path / "secret.py").write_text("import internal_billing\n")
+
+        with pytest.raises(HTTPException) as exc:
+            await analyze_project(current_user=None, path=str(project), entry_point="../secret.py")
+        assert exc.value.status_code == 400
+
+    @pytest.mark.unit
+    def test_tc_pth_029_frontend_builds_ignore_the_entry_point(self):
+        """TC-PTH-029: create_task — a frontend-only build never reads the entry point,
+        so a blank or stale value there does not refuse it; a full-stack build compiles
+        it, so it is checked."""
+        _check(project_path=SAFE_ROOT, project_type="frontend_only", entry_point="")
+        _check(source_type=SourceType.GIT, git_url="https://gitlab/x.git", git_ref="main",
+               project_type="frontend_only", entry_point="../old.py")
+        with pytest.raises(HTTPException):
+            _check(project_path=SAFE_ROOT, project_type="fullstack", entry_point="../old.py")
