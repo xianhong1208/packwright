@@ -6,6 +6,8 @@ follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this proje
 
 ## [Unreleased]
 
+## [1.3.0] — 2026-11-09
+
 ### Fixed
 - The frontend test run sometimes failed with `window is not defined` although every test passed. React
   work queued outside `act()` (antd's message countdown sets state on every animation frame) could run
@@ -294,7 +296,8 @@ role-based permissions.
 - Timezone-safe token expiry on SQLite; portable build statistics.
 - Git credentials feedback in the console; no pre-filled personal paths in New build.
 
-[Unreleased]: https://github.com/xianhong1208/packwright/compare/v1.2.0...dev
+[Unreleased]: https://github.com/xianhong1208/packwright/compare/v1.3.0...dev
+[1.3.0]: https://github.com/xianhong1208/packwright/compare/v1.2.0...v1.3.0
 [1.2.0]: https://github.com/xianhong1208/packwright/compare/v1.1.0...v1.2.0
 [1.1.0]: https://github.com/xianhong1208/packwright/compare/v1.0.0...v1.1.0
 [1.0.0]: https://github.com/xianhong1208/packwright/releases/tag/v1.0.0
