@@ -6,6 +6,20 @@ follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this proje
 
 ## [Unreleased]
 
+### Security
+- Git no longer uses the server's own git login. Clones, ref listings and scans ran with the service
+  account's `HOME`, so its `~/.gitconfig` and `/etc/gitconfig` applied, credential helpers included: with
+  `gh auth git-credential` configured there, anyone allowed to build could clone whatever that GitHub login
+  could reach, and a failed login made git tell the helper to erase the credential. git now runs with no
+  system or global configuration, no credential helper and an empty `HOME` (so no `~/.netrc` either); only
+  the credentials stored in Packwright are sent. Proxy and CA settings reach git through `HTTPS_PROXY`,
+  `NO_PROXY`, `GIT_SSL_CAINFO`, `SSL_CERT_FILE` and similar variables instead of git configuration.
+
+### Fixed
+- A stored Git credential the host refuses (expired, revoked) no longer blocks that host's public
+  repositories: the request is retried once without it, and a build's log says the credential needs
+  updating. A private repository still fails with the original error.
+
 ## [1.3.0] — 2026-11-09
 
 ### Fixed
