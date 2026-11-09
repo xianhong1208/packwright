@@ -28,6 +28,7 @@ from app.services.source_guard import SourceGuard
 from app.services.task_manager import task_manager
 from app.services.process_runner import run_step
 from app.services import compile_cache
+from app.services.build_env import build_environment
 
 settings = get_settings()
 logger = logging.getLogger(__name__)
@@ -503,6 +504,7 @@ async def get_valid_std_libs_for(python_exe: str) -> tuple[list[str], set[str]]:
             python_exe, "-c", _STDLIB_PROBE,
             stdout=asyncio.subprocess.PIPE,
             stderr=asyncio.subprocess.PIPE,
+            env=build_environment(),
         )
         stdout, stderr = await proc.communicate()
         if proc.returncode == 0:
@@ -1347,6 +1349,7 @@ async def run_nuitka_build(task_id: str, config: BuildConfig, db: AsyncSession) 
             nuitka_python, "-m", "nuitka", "--version",
             stdout=asyncio.subprocess.PIPE,
             stderr=asyncio.subprocess.PIPE,
+            env=build_environment(),
         )
         stdout, stderr = await check_proc.communicate()
 
@@ -1452,7 +1455,7 @@ async def run_nuitka_build(task_id: str, config: BuildConfig, db: AsyncSession) 
         await task_manager.append_log(task_id, f"Command: {' '.join(nuitka_cmd)}")
 
         # Build environment for Nuitka process
-        nuitka_env = compile_cache.build_environment(os.environ, settings.nuitka_cache_dir)
+        nuitka_env = compile_cache.build_environment(build_environment(), settings.nuitka_cache_dir)
         nuitka_env["TERM"] = "xterm-256color"
         ccache = compile_cache.ccache_binary(nuitka_env)
         if ccache:

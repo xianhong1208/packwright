@@ -13,6 +13,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.schemas.task import BuildConfig, ProjectType, PackMode
 from app.services.source_guard import SourceGuard
 from app.services.task_manager import task_manager
+from app.services.build_env import build_environment
 from app.services.process_runner import run_step
 
 
@@ -731,7 +732,7 @@ async def _run_docker_command(task_id: str, cmd: list[str], cwd: Path) -> bool:
     try:
         result = await run_step(
             task_id, cmd, cwd=cwd, on_output=consume,
-            env={**os.environ, "TERM": "xterm-256color", "DOCKER_BUILDKIT": "1"},
+            env=build_environment({"TERM": "xterm-256color", "DOCKER_BUILDKIT": "1"}),
         )
     except OSError as e:
         await task_manager.append_log(task_id, f"Error running Docker command: {e}")

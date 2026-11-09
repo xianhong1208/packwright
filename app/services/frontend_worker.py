@@ -2,7 +2,6 @@
 
 import asyncio
 import hashlib
-import os
 import re
 from pathlib import Path
 
@@ -11,6 +10,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.schemas.task import BuildConfig, FrontendBuildTool
 from app.services.source_guard import SourceGuard
 from app.services.task_manager import task_manager
+from app.services.build_env import build_environment
 from app.services.process_runner import is_cancelled, run_step
 
 # Hard ceiling per install/build step so a hung npm/yarn (network stall, an
@@ -314,7 +314,7 @@ async def _run_command(
     try:
         result = await run_step(
             task_id, cmd, cwd=cwd, timeout=timeout,
-            env={**os.environ, "TERM": "xterm-256color", "CI": "true"},
+            env=build_environment({"TERM": "xterm-256color", "CI": "true"}),
         )
     except OSError as e:  # e.g. the tool vanished between the PATH check and here
         await task_manager.append_log(task_id, f"Error running command: {e}")

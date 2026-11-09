@@ -31,8 +31,11 @@ Run Packwright on a dedicated host or VM, behind HTTPS, and only for people you 
   history, unmasked, by design: the history is how users see how a working build was configured,
   and anyone who can read it can already run a build. Treat the database and its backups as
   secrets.
-- **Builds run as the service user** with its environment. Prefer a dedicated, unprivileged service
-  account over root.
+- **Builds run as the service user.** They do not inherit the service's environment — only the
+  basics, proxy and CA settings, tool configuration and what `BUILD_ENV_PASSTHROUGH` lists — so
+  `JWT_SECRET_KEY` or `SETTINGS_ENCRYPTION_KEY` passed through systemd or a container stays out of
+  them. They can still read any file that account can, including `.env` and the database. Prefer a
+  dedicated, unprivileged service account over root, and keep secrets readable only by it.
 - **First start.** Without `BOOTSTRAP_ADMIN_PASSWORD`, a random admin password is printed once in the
   startup log; sign in and change it.
 - **Behind a proxy.** `X-Forwarded-For` is honoured only from addresses in `TRUSTED_PROXY_IPS`; leave

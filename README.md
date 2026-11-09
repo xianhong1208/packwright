@@ -91,6 +91,7 @@ Everything is environment-driven, and nothing is required. `.env.example` lists 
 | `NUITKA_CACHE_DIR` | *(empty → `~/.cache/Nuitka`)* | Nuitka's cache, including the ccache store that makes rebuilds faster. |
 | `LOCAL_SOURCE_ROOTS` | *(empty)* | CSV of absolute prefixes a local-source build may read; empty disables local mode. |
 | `UV_BIN` / `PRE_BUILD_PATH` | auto | uv binary and subprocess PATH; auto-detected when empty. |
+| `BUILD_ENV_PASSTHROUGH` | *(empty)* | CSV of extra host variables builds may see. Builds get only the basics, proxy/CA settings and tool configuration (`NPM_CONFIG_*`, `DOCKER_*`, …), never the service's secrets. |
 | `MAX_CONCURRENT_BUILDS` | `3` | Simultaneous builds; the rest wait in the queue. |
 | `PUBLIC_URL` | *(empty)* | The address people open Packwright at; build notifications link to the build with it. |
 | `TRUSTED_PROXY_IPS` | *(empty)* | Proxy IPs whose `X-Forwarded-For` may be trusted; empty is safest. |

@@ -481,6 +481,18 @@ Packwright 的工作就是**執行目標專案的程式碼**:Git 模式會 clone
 
 請把 Packwright 跑在隔離的主機上。完整說明與回報漏洞的方式見 [SECURITY.md](../SECURITY.md)。
 
+### 建置看得到哪些主機環境變數
+
+前端建置、Docker 建置與 Nuitka 編譯都會執行專案自己的程式碼,所以**不會**繼承服務的整個環境:
+只拿得到 `PATH`、`HOME`、語系、`TZ`、`TMPDIR`、`TERM`、proxy(`HTTP(S)_PROXY`、`NO_PROXY`,含小寫)、
+CA 憑證設定(`SSL_CERT_FILE`、`NODE_EXTRA_CA_CERTS` 等)、`CC`/`CXX`,以及開頭為 `NPM_CONFIG_`、`YARN_`、
+`PNPM_`、`COREPACK_`、`BUN_`、`DOCKER_`、`BUILDKIT_`、`CCACHE_`、`NUITKA_` 的變數。用 systemd 或容器帶入的
+`JWT_SECRET_KEY`、`SETTINGS_ENCRYPTION_KEY` 因此不會被建置拿到。
+
+建置還需要主機上的其他變數時,寫進 `BUILD_ENV_PASSTHROUGH`(逗號分隔的名稱);只有某個專案要用的值,
+放在該專案的建置設定裡。注意建置仍以服務帳號執行,讀得到該帳號能讀的檔案(包括 `.env`),
+所以服務請用專用、非 root 的帳號跑。
+
 ### 建置設定裡的環境變數
 
 使用者常把正式環境的 `.env` 內容貼進建置設定(前端 env、Docker 環境變數),這些內容會隨建置紀錄

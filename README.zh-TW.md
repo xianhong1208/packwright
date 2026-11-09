@@ -91,6 +91,7 @@ uv run python main.py         # 先套用 migration,再於 http://0.0.0.0:5018 �
 | `NUITKA_CACHE_DIR` | *(空 → `~/.cache/Nuitka`)* | Nuitka 的快取,包含讓重建變快的 ccache 儲存區。 |
 | `LOCAL_SOURCE_ROOTS` | *(空)* | 本機來源可讀取的絕對路徑前綴(CSV);留空則停用本機模式。 |
 | `UV_BIN` / `PRE_BUILD_PATH` | 自動 | uv 路徑與 subprocess PATH;留空自動偵測。 |
+| `BUILD_ENV_PASSTHROUGH` | *(空)* | 額外讓建置看得到的主機環境變數(CSV)。建置只拿得到基本變數、proxy/CA 設定與工具設定(`NPM_CONFIG_*`、`DOCKER_*` 等),拿不到服務自己的密鑰。 |
 | `MAX_CONCURRENT_BUILDS` | `3` | 同時進行的建置數,其餘排隊。 |
 | `PUBLIC_URL` | *(空)* | 大家開啟 Packwright 用的網址;建置通知會用它附上建置頁面的連結。 |
 | `TRUSTED_PROXY_IPS` | *(空)* | 可信任 `X-Forwarded-For` 的代理 IP;留空最安全。 |
