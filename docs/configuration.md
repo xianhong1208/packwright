@@ -139,14 +139,18 @@ very first account in the database, which becomes an active administrator).
 
 ## Rate limiting
 
-The rate limiter is always on (60 requests per minute and 1000 per hour per client, with
-stricter limits on sign-in, registration and password-recovery endpoints). These settings
-tune how clients are identified and how fast builds can be submitted.
+The rate limiter is always on: per client address, `RATE_LIMIT_PER_MINUTE` and
+`RATE_LIMIT_PER_HOUR` API requests, with stricter limits on sign-in, registration and
+password-recovery endpoints and on build submission. Static files and the console itself are
+never counted, nor is the build list the dashboard polls. These settings tune how clients are
+identified and how much they may do.
 
 | Variable | Default | Description |
 |---|---|---|
 | `TRUSTED_PROXY_IPS` | *(empty)* | Comma-separated IP addresses of reverse proxies whose `X-Forwarded-For` header is believed. **Empty means `X-Forwarded-For` is never trusted** and every request is attributed to its real peer address, the safe setting for a directly exposed service. Set it to your proxy's address (for example `127.0.0.1` for nginx on the same host) only when a proxy really sits in front; the rightmost forwarded address is then used. This also determines the IP recorded in the audit log and login history. |
-| `BUILD_SUBMIT_PER_MINUTE` | `20` | Per-client cap on build submissions (`POST /api/tasks`) per minute. `MAX_CONCURRENT_BUILDS` limits how many builds run at once; this limits how fast the queue can grow. |
+| `BUILD_SUBMIT_PER_MINUTE` | `20` | Per-client cap on build submissions per minute: `POST /api/tasks` and a project's *Build a new version* (`POST /api/projects/{id}/builds`) together. `MAX_CONCURRENT_BUILDS` limits how many builds run at once; this limits how fast the queue can grow. |
+| `RATE_LIMIT_PER_MINUTE` | `300` | API requests a client address may make per minute outside the endpoints above. A page of the console makes one to five (Roles one per role), and everyone behind one NAT or proxy address shares the allowance, so keep it well above a person's browsing. When the console's session check is refused, it waits and asks again instead of signing the person out. |
+| `RATE_LIMIT_PER_HOUR` | `6000` | The same, per hour. |
 
 ## Git source mode
 

@@ -400,3 +400,53 @@ class TestOnlyApiSurfacesAreLimited:
         ]
 
         assert statuses == [200, 429]
+
+
+class TestPathAliases:
+    """POST /api/projects/{id}/builds starts a build just like POST /api/tasks, and had
+    no limit of its own: the 21st build a minute was refused on one URL and accepted on
+    the other."""
+
+    @staticmethod
+    async def _call_next(_request):
+        return Response(status_code=201)
+
+    def _mw(self):
+        return _middleware(
+            requests_per_minute=100,
+            path_limits={"POST /api/tasks": 3},
+            path_aliases={"POST /api/projects/*/builds": "POST /api/tasks"},
+            excluded_prefixes={"/api/tasks"},
+        )
+
+    @pytest.mark.unit
+    @pytest.mark.asyncio
+    async def test_tc_rl_045_an_alias_shares_the_limit_and_the_count(self, mocker):
+        """TC-RL-045: dispatch — project builds and task submissions spend one allowance."""
+        mw = self._mw()
+        paths = ["/api/tasks", "/api/projects/7/builds", "/api/projects/8/builds", "/api/projects/7/builds",
+                 "/api/tasks"]
+
+        statuses = [
+            (await mw.dispatch(_make_request(mocker, method="POST", path=p), self._call_next)).status_code
+            for p in paths
+        ]
+
+        assert statuses == [201, 201, 201, 429, 429]
+
+    @pytest.mark.unit
+    @pytest.mark.parametrize(
+        ("method", "path", "expected"),
+        [
+            ("POST", "/api/projects/7/builds", "POST /api/tasks"),
+            ("POST", "/api/projects/7/builds/", "POST /api/tasks"),
+            ("GET", "/api/projects/7/builds", None),        # another verb
+            ("POST", "/api/projects/builds", None),         # "*" is one segment, not none
+            ("POST", "/api/projects//builds", None),        # nor an empty one
+            ("POST", "/api/projects/7/8/builds", None),     # nor two
+            ("POST", "/api/projects/7/builds/x", None),
+        ],
+    )
+    def test_tc_rl_046_alias_patterns_match_one_segment_and_one_verb(self, method, path, expected):
+        """TC-RL-046: _get_path_key — "*" stands for exactly one segment, and the verb must match."""
+        assert self._mw()._get_path_key(method, path) == expected

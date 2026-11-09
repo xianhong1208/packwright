@@ -518,7 +518,11 @@ CA 憑證設定(`SSL_CERT_FILE`、`NODE_EXTRA_CA_CERTS` 等)、`CC`/`CXX`,以及
   位址;只有實際連線來自列出的代理時才採信,而且取**最右邊**的值(nginx 是把真實位址附加在後面)。
 - uvicorn 內建的 proxy headers 處理刻意關閉,`TRUSTED_PROXY_IPS` 是唯一的判斷點。放在代理後面卻沒設定
   時,所有人會被算成同一個 IP、限流過嚴:這是刻意選擇的失敗方向,會立刻被發現,而不是靜默失效。
-- 登入、註冊等端點有限流;送出建置(`POST /api/tasks`)另有每分鐘上限 `BUILD_SUBMIT_PER_MINUTE`。
+- 每個用戶端位址每分鐘 `RATE_LIMIT_PER_MINUTE`(300)、每小時 `RATE_LIMIT_PER_HOUR`(6000)次 API 呼叫;
+  同一個 NAT 或代理後面的人共用。網頁本身、靜態檔與 Dashboard 輪詢的建置清單不計。
+- 登入、註冊等端點有更嚴的限流;送出建置(`POST /api/tasks` 與專案的 Build a new version)合計另有每分鐘上限
+  `BUILD_SUBMIT_PER_MINUTE`。
+- 被限流時,開頁面的登入狀態檢查會等一下再問,不會把人登出。
 - 登入記錄與稽核日誌的 IP 走同一套判斷,攻擊者無法在登入歷史裡寫入任意 IP。
 
 ### WebSocket 認證
