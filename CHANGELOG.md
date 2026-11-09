@@ -6,6 +6,14 @@ follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this proje
 
 ## [Unreleased]
 
+### Security
+- Builds no longer inherit the service's whole environment. Frontend builds, Docker builds and the Nuitka
+  compile run the project's own code, and under a systemd `EnvironmentFile=` or a container
+  `environment:` block that environment holds `JWT_SECRET_KEY` and `SETTINGS_ENCRYPTION_KEY` — enough
+  for anyone who may start a build to sign an admin token and decrypt every stored Git credential. They
+  now get only the basics, proxy and CA settings, tool configuration (`NPM_CONFIG_*`, `YARN_*`,
+  `DOCKER_*`, `CCACHE_*`, …) and the names listed in the new `BUILD_ENV_PASSTHROUGH` setting.
+
 ## [1.2.0] — 2026-11-06
 
 ### Added

@@ -162,6 +162,11 @@ class Settings(BaseSettings):
     # same filesystem as git_workspace_dir so uv can hardlink instead of
     # copying package bytes. Leave empty to use the default user cache.
     bootstrap_uv_cache_dir: str = ""
+    # Extra host environment variables a build may see, comma-separated (e.g.
+    # "ARTIFACTORY_URL,SENTRY_AUTH_TOKEN"). Builds get only the basics, proxy and
+    # CA settings and tool configuration (app/services/build_env.py); list here
+    # what else your builds read from the host.
+    build_env_passthrough: str = ""
 
     # === Compile cache ===
     # Nuitka's cache directory (NUITKA_CACHE_DIR), which holds the ccache store
@@ -246,6 +251,11 @@ class Settings(BaseSettings):
     def subprocess_path(self) -> str:
         """PATH for build subprocesses: the configured value, else the current PATH."""
         return self.pre_build_path or os.environ.get("PATH", "")
+
+    @property
+    def build_env_passthrough_names(self) -> list[str]:
+        """BUILD_ENV_PASSTHROUGH as a list of names."""
+        return [n.strip() for n in self.build_env_passthrough.split(",") if n.strip()]
 
     @property
     def cors_origin_list(self) -> list[str]:
