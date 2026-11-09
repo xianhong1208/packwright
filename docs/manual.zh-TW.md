@@ -307,7 +307,7 @@ Docker 環境變數除外),回來時還原;**Clear draft** 可以清掉。
 | 欄位 | 說明 |
 |---|---|
 | Python version | 預設自動偵測。偵測依據是專案 `.venv` 裡編譯好的 `.so` 的 ABI 標籤,而不是宣告檔 |
-| Entry point | 主程式,相對於專案根目錄(預設 `main.py`) |
+| Entry point | 主程式,相對於專案根目錄(預設 `main.py`)。必須是專案裡的檔案:絕對路徑、`..`、或指向專案外的符號連結都會被拒絕(400) |
 | Binary name | 執行檔名稱;留空時取進入點的檔名(`main.py` → `main`) |
 | Nuitka pack mode | **External**(建議):第三方套件放在執行檔旁的 `libs/`,編譯快;**Full**:全部編進執行檔,非常慢 |
 | Single-file binary | 輸出單一執行檔或資料夾 |
