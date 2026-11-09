@@ -6,6 +6,12 @@ follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this proje
 
 ## [Unreleased]
 
+### Fixed
+- A build waiting for its folder no longer holds a build slot. Builds of one local folder run one at a time,
+  but the second one took a slot first and then waited for the folder, so with the default three slots,
+  three builds of one project stopped every other build on the server. A local build now waits for its
+  folder first ("Queued — another build of this folder is running"), then for a slot.
+
 ## [1.3.0] — 2026-11-09
 
 ### Fixed

@@ -138,6 +138,8 @@ journalctl -u packwright -f
 
 任務狀態、WebSocket 連線與建置名額都在行程記憶體裡,**不能開多個 uvicorn worker**,第二個 worker
 看不到第一個的任務。同時進行的建置數由 `MAX_CONCURRENT_BUILDS`(預設 3)限制,超過的會排隊。
+同一個本機資料夾一次只建置一個;第二個會先等那個資料夾空出來(「another build of this folder is running」),
+等的時候不佔建置名額,其他專案照常開始。
 
 ### 放在反向代理後面
 
