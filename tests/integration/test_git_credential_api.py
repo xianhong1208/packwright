@@ -41,5 +41,5 @@ def test_tc_int_074_hosts_are_normalised_and_short_tokens_hidden(client, admin_t
     assert again["token_hint"] is None
     # The default host still applies when none is given.
     gh = client.post("/api/settings/git-credentials", headers=_h(admin_tokens),
-                     json={"provider": "github", "token": "ghp_0123456789abcdef0123"})
+                     json={"provider": "github", "token": "github-token-0123456789"})
     assert gh.status_code == 201 and gh.json()["host"] == "github.com"
