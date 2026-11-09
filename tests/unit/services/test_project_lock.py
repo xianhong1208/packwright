@@ -152,22 +152,18 @@ class TestDispatchReleasesItsLock:
     @pytest.mark.unit
     @pytest.mark.asyncio
     async def test_tc_lck_030_dispatch_leaves_no_lock_entry(self, mocker):
-        """TC-LCK-030: dispatch_build drops the project's lock entry afterwards.
+        """TC-LCK-030: a build's turn for its folder drops the lock entry afterwards.
 
         release_project_lock() only drops an unheld lock, and it was called
-        inside the `async with` that held it, so every dispatch left an entry
-        (one per git task, since each gets a fresh workspace path).
+        inside the `async with` that held it, so every dispatch left an entry.
         """
         from app.services import build_dispatcher
 
         mocker.patch.object(build_dispatcher.task_manager, "update_task", mocker.AsyncMock())
-        mocker.patch.object(build_dispatcher, "_dispatch_locked", mocker.AsyncMock())
-        mocker.patch.object(build_dispatcher, "_empty_output_dir", mocker.AsyncMock())
-        mocker.patch.object(build_dispatcher, "_keep_output", mocker.AsyncMock())
-        config = mocker.Mock()
-        config.model_copy.return_value = mocker.Mock(project_path="/srv/projects/released")
+        mocker.patch.object(build_dispatcher.task_manager, "append_log", mocker.AsyncMock())
         before = tracked_path_count()
 
-        await build_dispatcher.dispatch_build("t", config, db=object())
+        async with build_dispatcher._project_turn("t", "/srv/projects/released"):
+            assert tracked_path_count() == before + 1
 
         assert tracked_path_count() == before
