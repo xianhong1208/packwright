@@ -21,6 +21,7 @@ import {
   type GitProvider,
 } from '../../api/gitCredentialsApi'
 import { parseUtc, timeAgo } from '../../utils/time'
+import { hostProblem } from './gitHost'
 
 const { Text } = Typography
 
@@ -145,6 +146,8 @@ export default function GitCredentialsPage() {
         <ul className="cred-list" aria-label="Git credentials">
           {credentials.map((cred) => {
             const meta = PROVIDER_META[cred.provider]
+            // Saved before hosts were checked: it can never match a clone URL.
+            const unusable = hostProblem(cred.host) !== null
             return (
               <li key={cred.id} className="cred-card">
                 <span className="cred-mark" aria-hidden="true">{meta.icon}</span>
@@ -160,7 +163,14 @@ export default function GitCredentialsPage() {
                         : 'not used yet'}
                     </span>
                   </div>
-                  <p className="cred-use">Used by builds that clone from <code>https://{cred.host}/…</code></p>
+                  {unusable ? (
+                    <p className="cred-use" data-unusable="true">
+                      This host never matches a Git URL, so no build uses it. Delete it and add the host name
+                      only, for example <code>gitlab.example.com</code>.
+                    </p>
+                  ) : (
+                    <p className="cred-use">Used by builds that clone from <code>https://{cred.host}/…</code></p>
+                  )}
                 </div>
                 <div className="flex gap-1.5 flex-none">
                   <Tooltip title="Edit">
@@ -242,7 +252,8 @@ export default function GitCredentialsPage() {
                       if (provider === 'generic' && !value?.trim()) {
                         return Promise.reject(new Error('A host is required for self-hosted providers'))
                       }
-                      return Promise.resolve()
+                      const problem = hostProblem(value)
+                      return problem ? Promise.reject(new Error(problem)) : Promise.resolve()
                     },
                   },
                 ]}

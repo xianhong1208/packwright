@@ -212,7 +212,10 @@ LOCAL_SOURCE_ROOTS=/srv/projects,/data/builds
 管理員在左側工具列的 **Git credentials** 設定存取權杖(需要 `user:manage` 權限):
 
 - 供應商可選 **GitHub**、**GitLab** 或 **Other (self-hosted)**;每個主機一組。
-- 權杖用 `SETTINGS_ENCRYPTION_KEY` 加密儲存,API 不會回傳,介面只顯示末四碼。
+- 主機只填主機名稱或 IP(例如 `gitlab.example.com`),不要 `https://`、路徑或 port:憑證是依 clone 網址的
+  主機名稱比對的,其他寫法永遠對不到,會被拒絕(400)。`localhost` 也會被拒絕(Git 網址本來就不能指向它)。
+  以前存進去、永遠對不到的主機,列表上會標示出來,刪掉重加即可。
+- 權杖用 `SETTINGS_ENCRYPTION_KEY` 加密儲存,API 不會回傳,介面只顯示末四碼(短於 16 字元的權杖不顯示)。
 - clone 時依網址的主機自動選用,只在呼叫 git 的那一刻以 HTTP header 的形式交給 git,
   不會寫進網址、資料庫的建置設定或日誌。
 - `.env` 的 `GITLAB_TOKEN` 仍可作為後備,但只會送給 `GITLAB_TOKEN_HOST`(預設 `gitlab.com`)。

@@ -3,7 +3,7 @@ import api from './client'
 export type GitProvider = 'gitlab' | 'github' | 'generic'
 
 // A stored Git credential as returned by the API. The token itself is never
-// returned — only a masked hint (last 4 chars).
+// returned — only a masked hint (last 4 chars; none for a token under 16).
 export interface GitCredential {
   id: number
   provider: GitProvider

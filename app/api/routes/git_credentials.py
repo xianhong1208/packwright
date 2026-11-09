@@ -1,8 +1,8 @@
 """Console API for managing per-host Git credentials (admin only).
 
 Tokens are write-only: accepted on create/update, never returned. Responses
-expose a masked hint (last 4 chars) so an operator can recognise which token is
-stored without revealing it.
+expose a masked hint (last 4 chars, none for a token shorter than 16) so an
+operator can recognise which token is stored without revealing it.
 """
 
 from fastapi import APIRouter, Depends, HTTPException, status
@@ -35,6 +35,8 @@ async def create_git_credential(
     """Add a Git credential for a host. GitLab/GitHub default their host when omitted."""
     try:
         return await git_credentials.create_credential(db, data, created_by=current_user.id)
+    except git_credentials.InvalidHostError as e:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
     except ValueError as e:
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(e))
 

@@ -6,6 +6,14 @@ follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this proje
 
 ## [Unreleased]
 
+### Fixed
+- A Git credential's host is checked. `https://x.com/`, `localhost`, `a b.com` or a host with a port were
+  accepted, could never match a clone URL (credentials are found by its host name), and the page then said
+  builds clone from `https://https://x.com//`. They are now refused with a message saying what to enter, the
+  form checks as you type, the host is stored in lower case without a trailing dot, and credentials saved
+  earlier with such a host are marked on the page. A token shorter than 16 characters no longer shows its
+  last four as a hint, which for a four-character token was all of it.
+
 ## [1.3.0] — 2026-11-09
 
 ### Fixed
