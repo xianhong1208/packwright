@@ -27,6 +27,13 @@ class RateLimitConfig:
     # polled constantly by the dashboard, while task CREATION is expensive.
     path_limits: dict[str, int] = field(default_factory=dict)
 
+    # Other routes that spend a path_limits key's budget, as method-qualified
+    # patterns where "*" stands for one path segment:
+    # {"POST /api/projects/*/builds": "POST /api/tasks"}. A route that does the
+    # same expensive thing under another URL shares the limit and the count
+    # (otherwise it doubles the allowance, or bypasses it altogether).
+    path_aliases: dict[str, str] = field(default_factory=dict)
+
     # Reverse-proxy addresses whose X-Forwarded-For header may be believed.
     # Empty (default) = never trust XFF; key on the real peer address.
     trusted_proxies: set[str] = field(default_factory=set)
@@ -52,6 +59,15 @@ class RateLimitConfig:
 
     # Whether to include rate limit headers in response
     include_headers: bool = True
+
+
+def _matches(pattern: str, method: str, path: str) -> bool:
+    """``"POST /api/projects/*/builds"`` against a request; "*" is one non-empty segment."""
+    want_method, _, want_path = pattern.partition(" ")
+    if want_method != method:
+        return False
+    want, got = want_path.strip("/").split("/"), path.strip("/").split("/")
+    return len(want) == len(got) and all(w == g or (w == "*" and g) for w, g in zip(want, got))
 
 
 class RateLimitMiddleware(BaseHTTPMiddleware):
@@ -97,6 +113,10 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
         method_key = f"{method} {path}"
         if method_key in self.config.path_limits:
             return method_key
+
+        for pattern, target in self.config.path_aliases.items():
+            if _matches(pattern, method, path):
+                return target
 
         if path in self.config.path_limits:
             return path

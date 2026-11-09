@@ -218,6 +218,12 @@ LOCAL_SOURCE_ROOTS=/srv/projects,/data/builds
 - clone 時依網址的主機自動選用,只在呼叫 git 的那一刻以 HTTP header 的形式交給 git,
   不會寫進網址、資料庫的建置設定或日誌。
 - `.env` 的 `GITLAB_TOKEN` 仍可作為後備,但只會送給 `GITLAB_TOKEN_HOST`(預設 `gitlab.com`)。
+- **只會用這裡存的憑證**。伺服器帳號自己的 git 設定與登入(`~/.gitconfig`、`/etc/gitconfig` 裡的
+  credential helper,例如 `gh auth git-credential`,以及 `~/.netrc`)一律不讀:以前它們會替任何人輸入的
+  網址回答,等於讓所有能建置的人 clone 伺服器帳號看得到的私有 repo。要走 proxy 或私有 CA,改用環境變數
+  (`HTTPS_PROXY`、`NO_PROXY`、`GIT_SSL_CAINFO`、`SSL_CERT_FILE` 等),不要寫在服務帳號的 git 設定裡。
+- 存的憑證被主機拒絕(過期、撤銷)時,會再匿名試一次:公開 repo 照樣能 clone,建置記錄會提醒更新憑證;
+  私有 repo 則照常失敗。
 
 使用者**不需要也不應該**把帳密寫進 Git URL,這種網址會被驗證擋下。
 
@@ -309,7 +315,7 @@ Docker 環境變數除外),回來時還原;**Clear draft** 可以清掉。
 | 欄位 | 說明 |
 |---|---|
 | Python version | 預設自動偵測。偵測依據是專案 `.venv` 裡編譯好的 `.so` 的 ABI 標籤,而不是宣告檔 |
-| Entry point | 主程式,相對於專案根目錄(預設 `main.py`) |
+| Entry point | 主程式,相對於專案根目錄(預設 `main.py`)。必須是專案裡的檔案:絕對路徑、`..`、或指向專案外的符號連結都會被拒絕(400) |
 | Binary name | 執行檔名稱;留空時取進入點的檔名(`main.py` → `main`) |
 | Nuitka pack mode | **External**(建議):第三方套件放在執行檔旁的 `libs/`,編譯快;**Full**:全部編進執行檔,非常慢 |
 | Single-file binary | 輸出單一執行檔或資料夾 |
@@ -451,6 +457,13 @@ docker run --rm --env-file .env my-service:latest
 
 萬用字元 `resource:*`、`*:action`、`*:*` 也可以使用。
 
+為了不讓角色設定把所有人鎖在外面,以下變更會被拒絕(400):
+
+- 讓系統裡**再也沒有任何啟用中的帳號擁有 `role:manage`**(例如把 `admin` 角色的權限清空、
+  停用唯一管理者的角色)。要縮減 `admin`,先讓另一個啟用中的帳號透過別的角色擁有 `role:manage`。
+- 父角色形成循環(A 繼承 B、B 又繼承 A,任何深度)。
+- 不存在的權限碼(以前會被默默丟掉)。
+
 ---
 
 ## 個人安全設定
@@ -520,7 +533,11 @@ CA 憑證設定(`SSL_CERT_FILE`、`NODE_EXTRA_CA_CERTS` 等)、`CC`/`CXX`,以及
   位址;只有實際連線來自列出的代理時才採信,而且取**最右邊**的值(nginx 是把真實位址附加在後面)。
 - uvicorn 內建的 proxy headers 處理刻意關閉,`TRUSTED_PROXY_IPS` 是唯一的判斷點。放在代理後面卻沒設定
   時,所有人會被算成同一個 IP、限流過嚴:這是刻意選擇的失敗方向,會立刻被發現,而不是靜默失效。
-- 登入、註冊等端點有限流;送出建置(`POST /api/tasks`)另有每分鐘上限 `BUILD_SUBMIT_PER_MINUTE`。
+- 每個用戶端位址每分鐘 `RATE_LIMIT_PER_MINUTE`(300)、每小時 `RATE_LIMIT_PER_HOUR`(6000)次 API 呼叫;
+  同一個 NAT 或代理後面的人共用。網頁本身、靜態檔與 Dashboard 輪詢的建置清單不計。
+- 登入、註冊等端點有更嚴的限流;送出建置(`POST /api/tasks` 與專案的 Build a new version)合計另有每分鐘上限
+  `BUILD_SUBMIT_PER_MINUTE`。
+- 被限流時,開頁面的登入狀態檢查會等一下再問,不會把人登出。
 - 登入記錄與稽核日誌的 IP 走同一套判斷,攻擊者無法在登入歷史裡寫入任意 IP。
 
 ### WebSocket 認證

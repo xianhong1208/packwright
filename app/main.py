@@ -124,8 +124,12 @@ app.add_middleware(
 
 # Rate limiting configuration
 rate_limit_config = RateLimitConfig(
-    requests_per_minute=60,
-    requests_per_hour=1000,
+    # 60 a minute was reached by one person in about 20 page loads (a page makes
+    # one to five calls; Roles makes one per role), and a 429 on the session
+    # check sent them to the sign-in page. Everyone behind one NAT or proxy
+    # address also shares this allowance.
+    requests_per_minute=settings.rate_limit_per_minute,
+    requests_per_hour=settings.rate_limit_per_hour,
     path_limits={
         "/auth/login": 10,       # Stricter limit for login
         "/auth/register": 5,    # Stricter limit for registration
@@ -145,6 +149,9 @@ rate_limit_config = RateLimitConfig(
         # free, and takes precedence over that exclusion.
         "POST /api/tasks": settings.build_submit_per_minute,
     },
+    # Building a project's new version starts a build just the same, and had no
+    # limit at all: it shares POST /api/tasks's allowance and count.
+    path_aliases={"POST /api/projects/*/builds": "POST /api/tasks"},
     excluded_paths={"/health", "/docs", "/openapi.json", "/redoc", "/ws"},
     excluded_prefixes={"/api/tasks", "/api/monitoring"},
     # Empty unless TRUSTED_PROXY_IPS is set — X-Forwarded-For is ignored by

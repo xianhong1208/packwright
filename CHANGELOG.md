@@ -7,6 +7,44 @@ follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this proje
 ## [Unreleased]
 
 ### Fixed
+- A role change can no longer lock everyone out. Deleting or deactivating a built-in role was refused, but
+  emptying its permissions was not: one `PUT /api/users/roles/1` with an empty list took every permission
+  from the admin role, and with it the only way to give them back. A role change (permissions, parent or
+  deactivation) that would leave no active account holding `role:manage` is now refused. Parent roles can
+  no longer form a loop, and unknown permission codes are refused with their names instead of being
+  dropped silently.
+
+### Security
+- The entry point must be a file inside the project. Output, data, extra-code and frontend directories were
+  confined to the project, but the entry point was not: `entry_point="../../elsewhere/app.py"` on a local
+  build was accepted, the libs loader was written into that file outside `LOCAL_SOURCE_ROOTS`, and it was
+  compiled and packaged. Builds (local and Git, including a project's new versions and settings) and the
+  project analysis now refuse an absolute, `..` or symlinked-out entry point with 400, and the Nuitka worker
+  checks the resolved path again before touching it, which also covers a symlink committed to a Git repo.
+
+### Security
+- Git no longer uses the server's own git login. Clones, ref listings and scans ran with the service
+  account's `HOME`, so its `~/.gitconfig` and `/etc/gitconfig` applied, credential helpers included: with
+  `gh auth git-credential` configured there, anyone allowed to build could clone whatever that GitHub login
+  could reach, and a failed login made git tell the helper to erase the credential. git now runs with no
+  system or global configuration, no credential helper and an empty `HOME` (so no `~/.netrc` either); only
+  the credentials stored in Packwright are sent. Proxy and CA settings reach git through `HTTPS_PROXY`,
+  `NO_PROXY`, `GIT_SSL_CAINFO`, `SSL_CERT_FILE` and similar variables instead of git configuration.
+
+### Fixed
+- A stored Git credential the host refuses (expired, revoked) no longer blocks that host's public
+  repositories: the request is retried once without it, and a build's log says the credential needs
+  updating. A private repository still fails with the original error.
+
+- Browsing no longer signs you out. The API allowed 60 requests a minute per address, which one person
+  reached in about 20 page loads (a page makes one to five calls), and a 429 on the session check sent a
+  signed-in person to the sign-in page. The allowance is now 300 a minute and 6000 an hour, set with the new
+  `RATE_LIMIT_PER_MINUTE` and `RATE_LIMIT_PER_HOUR`, and a rate-limited session check waits as long as the
+  server asks (up to 90 s, with a note on the loading screen) and tries again instead.
+- Building a project's new version is rate limited like any other build submission. `POST
+  /api/projects/{id}/builds` had no limit, while `POST /api/tasks` refused the 21st build a minute; both now
+  share `BUILD_SUBMIT_PER_MINUTE`.
+
 - A build waiting for its folder no longer holds a build slot. Builds of one local folder run one at a time,
   but the second one took a slot first and then waited for the folder, so with the default three slots,
   three builds of one project stopped every other build on the server. A local build now waits for its

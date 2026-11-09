@@ -128,6 +128,11 @@ class Settings(BaseSettings):
     # CPU, so this is the expensive endpoint to protect — MAX_CONCURRENT_BUILDS
     # bounds what runs at once but not how deep the queue grows.
     build_submit_per_minute: int = 20
+    # Requests a client address may make to the API per minute / per hour, outside
+    # the endpoints with their own limit (sign-in, registration, build submission).
+    # Everyone behind one NAT or proxy address shares it.
+    rate_limit_per_minute: int = 300
+    rate_limit_per_hour: int = 6000
 
     # === Git source mode ===
     # Legacy single-token fallback. Git credentials are now managed in the console

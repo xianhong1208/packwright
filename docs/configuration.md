@@ -139,14 +139,18 @@ very first account in the database, which becomes an active administrator).
 
 ## Rate limiting
 
-The rate limiter is always on (60 requests per minute and 1000 per hour per client, with
-stricter limits on sign-in, registration and password-recovery endpoints). These settings
-tune how clients are identified and how fast builds can be submitted.
+The rate limiter is always on: per client address, `RATE_LIMIT_PER_MINUTE` and
+`RATE_LIMIT_PER_HOUR` API requests, with stricter limits on sign-in, registration and
+password-recovery endpoints and on build submission. Static files and the console itself are
+never counted, nor is the build list the dashboard polls. These settings tune how clients are
+identified and how much they may do.
 
 | Variable | Default | Description |
 |---|---|---|
 | `TRUSTED_PROXY_IPS` | *(empty)* | Comma-separated IP addresses of reverse proxies whose `X-Forwarded-For` header is believed. **Empty means `X-Forwarded-For` is never trusted** and every request is attributed to its real peer address, the safe setting for a directly exposed service. Set it to your proxy's address (for example `127.0.0.1` for nginx on the same host) only when a proxy really sits in front; the rightmost forwarded address is then used. This also determines the IP recorded in the audit log and login history. |
-| `BUILD_SUBMIT_PER_MINUTE` | `20` | Per-client cap on build submissions (`POST /api/tasks`) per minute. `MAX_CONCURRENT_BUILDS` limits how many builds run at once; this limits how fast the queue can grow. |
+| `BUILD_SUBMIT_PER_MINUTE` | `20` | Per-client cap on build submissions per minute: `POST /api/tasks` and a project's *Build a new version* (`POST /api/projects/{id}/builds`) together. `MAX_CONCURRENT_BUILDS` limits how many builds run at once; this limits how fast the queue can grow. |
+| `RATE_LIMIT_PER_MINUTE` | `300` | API requests a client address may make per minute outside the endpoints above. A page of the console makes one to five (Roles one per role), and everyone behind one NAT or proxy address shares the allowance, so keep it well above a person's browsing. When the console's session check is refused, it waits and asks again instead of signing the person out. |
+| `RATE_LIMIT_PER_HOUR` | `6000` | The same, per hour. |
 
 ## Git source mode
 
@@ -155,6 +159,7 @@ tune how clients are identified and how fast builds can be submitted.
 | `GITLAB_TOKEN` | *(unset)* | Legacy single access token, used only when no Git credential stored in the console (Settings → Git credentials) matches the repository host. May be left unset; prefer console-managed credentials. |
 | `GITLAB_TOKEN_HOST` | `gitlab.com` | The one exact host name `GITLAB_TOKEN` may be sent to. Set it to your server's name for a self-hosted GitLab; the token is never sent to any other host. |
 | `GIT_WORKSPACE_DIR` | `./data/workspace` (relative to the launch directory) | Where Git-mode builds clone into: one directory per task holding the clone, its `.venv` and the build output. Non-Docker outputs are downloaded from here, so it must persist between restarts. Set an absolute path to move it to a larger disk. |
+| `HTTPS_PROXY`, `HTTP_PROXY`, `NO_PROXY`, `ALL_PROXY` (and lower-case), `GIT_SSL_CAINFO`, `GIT_SSL_CAPATH`, `SSL_CERT_FILE`, `SSL_CERT_DIR`, `CURL_CA_BUNDLE` | *(unset)* | Passed to git when set. git runs without the service account's configuration — no `/etc/gitconfig`, no `~/.gitconfig`, no credential helper, an empty `HOME` (so no `~/.netrc`) — so that only the credentials stored in Packwright are ever sent. A proxy or private CA set in that git configuration therefore no longer applies; set these variables instead. |
 | `GIT_ALLOWED_HOSTS` | *(empty)* | Comma-separated host names (or IP addresses) Git URLs may point at. **Empty allows any `http`/`https` host**, except IP literals in loopback, private, link-local and other reserved ranges. When set, only the listed hosts are allowed, and listing an internal IP address explicitly permits it. `localhost` is always rejected. |
 | `GIT_CLONE_TIMEOUT` | `600` | Maximum seconds a `git clone` may take before the build fails. |
 | `LOCAL_SOURCE_ROOTS` | *(empty)* | Comma-separated absolute directory prefixes that local-path builds (and the directory browser in the build wizard) may read. **Empty disables local-source mode** so only Git URLs can be built. List only directories you trust every user with `task:create` to read. |
