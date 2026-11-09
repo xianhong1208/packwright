@@ -6,6 +6,14 @@ follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this proje
 
 ## [Unreleased]
 
+### Fixed
+- A role change can no longer lock everyone out. Deleting or deactivating a built-in role was refused, but
+  emptying its permissions was not: one `PUT /api/users/roles/1` with an empty list took every permission
+  from the admin role, and with it the only way to give them back. A role change (permissions, parent or
+  deactivation) that would leave no active account holding `role:manage` is now refused. Parent roles can
+  no longer form a loop, and unknown permission codes are refused with their names instead of being
+  dropped silently.
+
 ## [1.3.0] — 2026-11-09
 
 ### Fixed
