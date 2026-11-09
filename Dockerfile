@@ -66,7 +66,9 @@ RUN UV_PYTHON_DOWNLOADS=never uv sync --locked --no-dev --no-install-project --n
 # One Nuitka venv per Python version a build can target (3.12, 3.13, 3.14): an
 # executable is bound to the Python that compiled it.
 COPY --chown=packwright:packwright scripts/setup_nuitka_venvs.sh scripts/
-RUN UV_CACHE_DIR=/tmp/uv-cache bash scripts/setup_nuitka_venvs.sh && rm -rf /tmp/uv-cache
+# The interpreters come from GitHub releases (python-build-standalone), which
+# answer 504 now and then under load: retry harder than uv's default 3.
+RUN UV_CACHE_DIR=/tmp/uv-cache UV_HTTP_RETRIES=10 bash scripts/setup_nuitka_venvs.sh && rm -rf /tmp/uv-cache
 
 COPY --chown=packwright:packwright main.py alembic.ini ./
 COPY --chown=packwright:packwright alembic/ alembic/
