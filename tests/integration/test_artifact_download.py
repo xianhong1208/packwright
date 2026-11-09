@@ -21,13 +21,13 @@ def _db_file() -> str:
     return os.environ["DATABASE_URL"].split(":///", 1)[1]
 
 
-def _completed_task(config: dict) -> str:
+def _completed_task(config: dict, result: dict | None = None) -> str:
     task_id = str(uuid.uuid4())
     with sqlite3.connect(_db_file()) as con:
         con.execute(
-            "INSERT INTO history (task_id, user_name, project_name, python_version, start_time, status, config)"
-            " VALUES (?, 'admin', 'demo', '3.12', '2026-11-05 00:00:00', 'COMPLETED', ?)",
-            (task_id, json.dumps(config)),
+            "INSERT INTO history (task_id, user_name, project_name, python_version, start_time, status, config,"
+            " result) VALUES (?, 'admin', 'demo', '3.12', '2026-11-05 00:00:00', 'COMPLETED', ?, ?)",
+            (task_id, json.dumps(config), json.dumps(result) if result is not None else None),
         )
     return task_id
 
@@ -101,3 +101,57 @@ def test_tc_int_024_git_mode_rejects_climbing_directory_names(client, admin_toke
     with pytest.raises(HTTPException) as exc:
         _validate_build_config_paths(cfg)
     assert exc.value.status_code == 400
+
+
+def _names(response) -> list[str]:
+    return sorted(tarfile.open(fileobj=io.BytesIO(response.content), mode="r:gz").getnames())
+
+
+@pytest.mark.integration
+def test_tc_int_066_a_local_build_downloads_its_own_output(client, admin_tokens, tmp_path):
+    """TC-INT-066: a local build whose output was kept downloads that copy, not the
+    folder, which by then holds a later build's files."""
+    project = tmp_path / "project"
+    (project / "dist" / "main.dist").mkdir(parents=True)
+    (project / "dist" / "main.dist" / "main").write_bytes(b"later folder build")
+    task_id = _completed_task({"source_type": "local", "project_path": str(project), "output_dir": "dist"},
+                              {"output_kept": True})
+    kept = git_workspace(task_id) / "dist"
+    kept.mkdir(parents=True)
+    (kept / "main").write_bytes(b"this one-file build")
+
+    r = _download(client, admin_tokens, task_id)
+
+    assert r.status_code == 200
+    assert _names(r) == ["dist", "dist/main"]
+
+
+@pytest.mark.integration
+def test_tc_int_067_an_expired_copy_is_not_replaced_by_the_folder(client, admin_tokens, tmp_path):
+    """TC-INT-067: once the kept copy is swept, the download says so instead of
+    serving whatever the folder holds now."""
+    project = tmp_path / "project"
+    (project / "dist").mkdir(parents=True)
+    (project / "dist" / "main").write_bytes(b"another build")
+    task_id = _completed_task({"source_type": "local", "project_path": str(project), "output_dir": "dist"},
+                              {"output_kept": True})
+
+    r = _download(client, admin_tokens, task_id)
+
+    assert r.status_code == 404
+    assert "cleaned up" in r.json()["detail"]
+
+
+@pytest.mark.integration
+def test_tc_int_068_builds_from_before_still_download(client, admin_tokens, tmp_path):
+    """TC-INT-068: a local build finished before outputs were kept still downloads its
+    folder, as it did."""
+    project = tmp_path / "project"
+    (project / "dist").mkdir(parents=True)
+    (project / "dist" / "main").write_bytes(b"old build")
+    task_id = _completed_task({"source_type": "local", "project_path": str(project), "output_dir": "dist"})
+
+    r = _download(client, admin_tokens, task_id)
+
+    assert r.status_code == 200
+    assert _names(r) == ["dist", "dist/main"]

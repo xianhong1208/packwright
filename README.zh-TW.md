@@ -86,7 +86,7 @@ uv run python main.py         # 先套用 migration,再於 http://0.0.0.0:5018 �
 | `JWT_SECRET_KEY` | 自動 | Session 簽章金鑰;留空則首次啟動產生並寫入 `.env`。 |
 | `SETTINGS_ENCRYPTION_KEY` | 自動 | 加密儲存的 Git token;留空則自動產生寫入 `.env`。 |
 | `CORS_ORIGINS` | 開發埠 | 允許呼叫 API 的瀏覽器來源(CSV)。 |
-| `GIT_WORKSPACE_DIR` | `./data/workspace` | clone 與建置工作區位置(非 Docker 產物也從這裡下載)。 |
+| `GIT_WORKSPACE_DIR` | `./data/workspace` | clone 與建置工作區位置;每次非 Docker 建置的產物(含本機建置)都另存在這裡,下載也從這裡。 |
 | `DOCKER_IMAGES_DIR` | `./data/docker_images` | 匯出的 Docker image(`.tar.gz`)寫入位置。 |
 | `NUITKA_CACHE_DIR` | *(空 → `~/.cache/Nuitka`)* | Nuitka 的快取,包含讓重建變快的 ccache 儲存區。 |
 | `LOCAL_SOURCE_ROOTS` | *(空)* | 本機來源可讀取的絕對路徑前綴(CSV);留空則停用本機模式。 |

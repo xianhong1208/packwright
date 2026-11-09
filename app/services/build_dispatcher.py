@@ -80,8 +80,15 @@ async def dispatch_build(task_id: str, config: BuildConfig, db: AsyncSession) ->
     config = config.model_copy(deep=True)
 
     # The caller holds the project lock (start_build_task, _project_turn) for a
-    # local build; a Git build has a workspace of its own.
+    # local build; a Git build has a workspace of its own. Emptying the output
+    # directory and keeping a copy of it run under that same lock, so no other
+    # build of the folder can write in between (see artifacts.py).
+    local = config.source_type != SourceType.GIT
+    if local:
+        await _empty_output_dir(task_id, config)
     await _dispatch_locked(task_id, config, db)
+    if local:
+        await _keep_output(task_id, config, db)
 
 
 @contextlib.asynccontextmanager
@@ -118,6 +125,40 @@ async def _project_turn(task_id: str, project_path: str):
         # when nobody holds or waits for it, and inside the block this task
         # still held it, so entries were never removed.
         release_project_lock(project_path)
+
+
+async def _empty_output_dir(task_id: str, config: BuildConfig) -> None:
+    """Start a local build from an empty output directory (see artifacts.py)."""
+    from app.services import artifacts
+
+    try:
+        line = await asyncio.to_thread(artifacts.clear_output_dir, Path(config.project_path), config)
+    except OSError as e:
+        line = f"Could not empty the output directory ({e!s}); files from earlier builds may remain"
+    if line:
+        await task_manager.append_log(task_id, line)
+
+
+async def _keep_output(task_id: str, config: BuildConfig, db: AsyncSession) -> None:
+    """Copy a completed local build's output to its own directory (see artifacts.py).
+
+    Docker builds are served from their exported image, which is already theirs.
+    """
+    from app.services import artifacts
+
+    current = await task_manager.get_task(task_id)
+    if config.docker_enabled or current is None or current.status != TaskStatus.COMPLETED:
+        return
+    try:
+        kept = await asyncio.to_thread(artifacts.keep_output, task_id, Path(config.project_path), config)
+    except (OSError, ValueError) as e:
+        await task_manager.append_log(
+            task_id, f"Could not keep a copy of the output ({e!s}); Download packs the folder as it is then"
+        )
+        return
+    if kept is not None:
+        await task_manager.merge_result(task_id, {artifacts.KEPT_OUTPUT_KEY: True}, db)
+        await task_manager.append_log(task_id, f"Output kept for download: {kept}")
 
 
 async def _dispatch_locked(task_id: str, config: BuildConfig, db: AsyncSession) -> None:
