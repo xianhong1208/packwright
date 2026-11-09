@@ -6,6 +6,13 @@ follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this proje
 
 ## [Unreleased]
 
+### Fixed
+- The frontend test run sometimes failed with `window is not defined` although every test passed. React
+  work queued outside `act()` (antd's message countdown sets state on every animation frame) could run
+  after Vitest had removed jsdom's globals. Tests now run in `test-env/settledJsdom.ts`, Vitest's jsdom
+  environment with a teardown that stops jsdom's timers, lets the work already queued finish, and only
+  then removes the globals.
+
 ### Security
 - Builds no longer inherit the service's whole environment. Frontend builds, Docker builds and the Nuitka
   compile run the project's own code, and under a systemd `EnvironmentFile=` or a container
