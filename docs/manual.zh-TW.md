@@ -216,6 +216,12 @@ LOCAL_SOURCE_ROOTS=/srv/projects,/data/builds
 - clone 時依網址的主機自動選用,只在呼叫 git 的那一刻以 HTTP header 的形式交給 git,
   不會寫進網址、資料庫的建置設定或日誌。
 - `.env` 的 `GITLAB_TOKEN` 仍可作為後備,但只會送給 `GITLAB_TOKEN_HOST`(預設 `gitlab.com`)。
+- **只會用這裡存的憑證**。伺服器帳號自己的 git 設定與登入(`~/.gitconfig`、`/etc/gitconfig` 裡的
+  credential helper,例如 `gh auth git-credential`,以及 `~/.netrc`)一律不讀:以前它們會替任何人輸入的
+  網址回答,等於讓所有能建置的人 clone 伺服器帳號看得到的私有 repo。要走 proxy 或私有 CA,改用環境變數
+  (`HTTPS_PROXY`、`NO_PROXY`、`GIT_SSL_CAINFO`、`SSL_CERT_FILE` 等),不要寫在服務帳號的 git 設定裡。
+- 存的憑證被主機拒絕(過期、撤銷)時,會再匿名試一次:公開 repo 照樣能 clone,建置記錄會提醒更新憑證;
+  私有 repo 則照常失敗。
 
 使用者**不需要也不應該**把帳密寫進 Git URL,這種網址會被驗證擋下。
 
@@ -307,7 +313,7 @@ Docker 環境變數除外),回來時還原;**Clear draft** 可以清掉。
 | 欄位 | 說明 |
 |---|---|
 | Python version | 預設自動偵測。偵測依據是專案 `.venv` 裡編譯好的 `.so` 的 ABI 標籤,而不是宣告檔 |
-| Entry point | 主程式,相對於專案根目錄(預設 `main.py`) |
+| Entry point | 主程式,相對於專案根目錄(預設 `main.py`)。必須是專案裡的檔案:絕對路徑、`..`、或指向專案外的符號連結都會被拒絕(400) |
 | Binary name | 執行檔名稱;留空時取進入點的檔名(`main.py` → `main`) |
 | Nuitka pack mode | **External**(建議):第三方套件放在執行檔旁的 `libs/`,編譯快;**Full**:全部編進執行檔,非常慢 |
 | Single-file binary | 輸出單一執行檔或資料夾 |
@@ -448,6 +454,13 @@ docker run --rm --env-file .env my-service:latest
 | `role:view` / `role:manage` | 查看 / 管理角色 |
 
 萬用字元 `resource:*`、`*:action`、`*:*` 也可以使用。
+
+為了不讓角色設定把所有人鎖在外面,以下變更會被拒絕(400):
+
+- 讓系統裡**再也沒有任何啟用中的帳號擁有 `role:manage`**(例如把 `admin` 角色的權限清空、
+  停用唯一管理者的角色)。要縮減 `admin`,先讓另一個啟用中的帳號透過別的角色擁有 `role:manage`。
+- 父角色形成循環(A 繼承 B、B 又繼承 A,任何深度)。
+- 不存在的權限碼(以前會被默默丟掉)。
 
 ---
 
