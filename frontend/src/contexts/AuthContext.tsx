@@ -2,7 +2,7 @@ import { createContext, useContext, useState, useEffect, useCallback, useRef, ty
 import type { User, TokenResponse } from '../api/types'
 import { refreshTokens, TOKENS_REFRESHED_EVENT } from '../api/client'
 import { clearFormDraft } from '../hooks/useFormDraft'
-import { SIGNED_OUT_EVENT, isSessionRejected } from './session'
+import { SESSION_CHECK_MAX_WAIT, SIGNED_OUT_EVENT, isSessionRejected, retryAfterSeconds } from './session'
 
 interface AuthContextType {
   user: User | null
@@ -17,6 +17,8 @@ interface AuthContextType {
   hasPermission: (code: string) => boolean
   hasAnyPermission: (...codes: string[]) => boolean
   error: string | null
+  /** Set while the session check waits out a rate limit, for the loading screen. */
+  notice: string | null
 }
 
 const AuthContext = createContext<AuthContextType | null>(null)
@@ -74,6 +76,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [permissions, setPermissions] = useState<Set<string>>(new Set())
   const [isLoading, setIsLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
+  const [notice, setNotice] = useState<string | null>(null)
   const refreshTimeoutRef = useRef<number | null>(null)
 
   // Schedule token refresh before expiry
@@ -162,11 +165,25 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
 
     try {
-      const res = await fetch(`${API_BASE}/me`, {
-        headers: {
-          Authorization: `Bearer ${tokenManager.getAccessToken()}`,
-        },
-      })
+      const fetchMe = () =>
+        fetch(`${API_BASE}/me`, {
+          headers: {
+            Authorization: `Bearer ${tokenManager.getAccessToken()}`,
+          },
+        })
+      let res = await fetchMe()
+      // A 429 says nothing about the session. It used to fall through to
+      // "Cannot reach the server", leaving no user, so the protected routes sent
+      // a signed-in person to the sign-in page. Wait out the limit and ask again.
+      let waited = 0
+      while (res.status === 429 && waited < SESSION_CHECK_MAX_WAIT) {
+        const seconds = retryAfterSeconds(res.headers.get('Retry-After'))
+        setNotice(`Packwright is busy (too many requests from this address). Checking your session again in ${seconds} s…`)
+        await new Promise((resolve) => setTimeout(resolve, seconds * 1000))
+        waited += seconds
+        res = await fetchMe()
+      }
+      setNotice(null)
 
       if (res.ok) {
         const userData: User = await res.json()
@@ -185,6 +202,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         }
       } else if (res.status === 401 || res.status === 403) {
         tokenManager.clearTokens()
+      } else if (res.status === 429) {
+        setError('Too many requests from this address. Your session is kept; reload in a minute.')
       } else {
         setError('Cannot reach the server. Your session is kept; reload once it is back.')
       }
@@ -360,6 +379,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         hasPermission,
         hasAnyPermission,
         error,
+        notice,
       }}
     >
       {children}

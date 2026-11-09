@@ -283,6 +283,18 @@ class TestAdminPasswordReset:
 
 
 class TestRoleAdministration:
+    @pytest.fixture(autouse=True)
+    def lenient_role_checks(self, mocker: MockerFixture):
+        """The fake session replays results and cannot answer the role guards'
+        own queries (unknown codes, last role manager); those have their own
+        tests against the real app in tests/integration/test_role_guards.py."""
+
+        async def permissions_for_codes(db, codes):
+            return list((await db.execute(None)).scalars().all()) if codes else []
+
+        mocker.patch.object(users_route, "_permissions_for_codes", side_effect=permissions_for_codes)
+        mocker.patch.object(users_route, "_ensure_a_role_manager_remains", mocker.AsyncMock())
+
     @pytest.mark.unit
     @pytest.mark.asyncio
     async def test_tc_aud_030_creation_records_the_granted_permissions(self, audit):

@@ -79,33 +79,86 @@ async def dispatch_build(task_id: str, config: BuildConfig, db: AsyncSession) ->
     # Git mode never had this: _prepare_git_workspace already returns a copy.
     config = config.model_copy(deep=True)
 
-    # Serialise per project directory across BOTH workers.
-    #
-    # nuitka_worker used to take this lock itself, covering only its own
-    # inject/restore of the entry point. docker_worker does the same kind of
-    # thing — backs up and overwrites .dockerignore, writes
-    # Dockerfile.generated, replaces the project's frontend .env, then restores
-    # all three — and held no lock at all. MAX_CONCURRENT_BUILDS caps how many
-    # builds run, not which project they touch, so two tasks on one local path
-    # interleaved and destroyed each other's backups. See project_lock.py.
-    #
-    # Held here rather than inside a worker so it spans the whole
-    # prepare -> build -> restore window, including the fullstack chain where
-    # frontend, nuitka and docker workers run in sequence over the same files.
-    lock = get_project_lock(config.project_path)
+    # The caller holds the project lock (start_build_task, _project_turn) for a
+    # local build; a Git build has a workspace of its own. Emptying the output
+    # directory and keeping a copy of it run under that same lock, so no other
+    # build of the folder can write in between (see artifacts.py).
+    local = config.source_type != SourceType.GIT
+    if local:
+        await _empty_output_dir(task_id, config)
+    await _dispatch_locked(task_id, config, db)
+    if local:
+        await _keep_output(task_id, config, db)
+
+
+@contextlib.asynccontextmanager
+async def _project_turn(task_id: str, project_path: str):
+    """Wait until no other build is using this project directory, then hold it.
+
+    Serialises per project directory across ALL workers. nuitka_worker used to
+    take this lock itself, covering only its own inject/restore of the entry
+    point. docker_worker does the same kind of thing — backs up and overwrites
+    .dockerignore, writes Dockerfile.generated, replaces the project's frontend
+    .env, then restores all three — and held no lock at all.
+    MAX_CONCURRENT_BUILDS caps how many builds run, not which project they
+    touch, so two tasks on one local path interleaved and destroyed each
+    other's backups. See project_lock.py.
+
+    Taken before the build slot, not inside it: a build waiting for its folder
+    used to hold a slot while it waited, so with three slots, three builds of
+    one folder stopped every other build on the server.
+    """
+    lock = get_project_lock(project_path)
     if lock.locked():
+        await task_manager.update_task(
+            task_id, "status_msg", "Queued — another build of this folder is running..."
+        )
         await task_manager.append_log(
             task_id,
             "Another build is running for this project — waiting for it to finish...",
         )
     try:
         async with lock:
-            await _dispatch_locked(task_id, config, db)
+            yield
     finally:
         # Outside the `async with`: release_project_lock() drops the entry only
         # when nobody holds or waits for it, and inside the block this task
         # still held it, so entries were never removed.
-        release_project_lock(config.project_path)
+        release_project_lock(project_path)
+
+
+async def _empty_output_dir(task_id: str, config: BuildConfig) -> None:
+    """Start a local build from an empty output directory (see artifacts.py)."""
+    from app.services import artifacts
+
+    try:
+        line = await asyncio.to_thread(artifacts.clear_output_dir, Path(config.project_path), config)
+    except OSError as e:
+        line = f"Could not empty the output directory ({e!s}); files from earlier builds may remain"
+    if line:
+        await task_manager.append_log(task_id, line)
+
+
+async def _keep_output(task_id: str, config: BuildConfig, db: AsyncSession) -> None:
+    """Copy a completed local build's output to its own directory (see artifacts.py).
+
+    Docker builds are served from their exported image, which is already theirs.
+    """
+    from app.services import artifacts
+
+    current = await task_manager.get_task(task_id)
+    if config.docker_enabled or current is None or current.status != TaskStatus.COMPLETED:
+        return
+    try:
+        kept = await asyncio.to_thread(artifacts.keep_output, task_id, Path(config.project_path), config)
+    except (OSError, ValueError) as e:
+        await task_manager.append_log(
+            task_id, f"Could not keep a copy of the output ({e!s}); Download packs the folder as it is then"
+        )
+        return
+    if kept is not None:
+        await task_manager.merge_result(task_id, {artifacts.KEPT_OUTPUT_KEY: True}, db)
+        await task_manager.append_log(task_id, f"Output kept for download: {kept}")
 
 
 async def _dispatch_locked(task_id: str, config: BuildConfig, db: AsyncSession) -> None:
@@ -598,7 +651,7 @@ async def _prepare_git_workspace(task_id: str, config: BuildConfig) -> BuildConf
     )
 
     try:
-        await git_service.clone_repo(
+        anonymous = await git_service.clone_repo(
             url=config.git_url,
             ref=config.git_ref,
             ref_type=config.git_ref_type,
@@ -614,6 +667,12 @@ async def _prepare_git_workspace(task_id: str, config: BuildConfig) -> BuildConf
         await task_manager.append_log(task_id, f"Clone failed: {e}")
         raise
 
+    if anonymous:
+        await task_manager.append_log(
+            task_id,
+            "The stored Git credential for this host was refused; cloned without it. "
+            "Update it under Git credentials.",
+        )
     await task_manager.append_log(task_id, f"Clone completed: {target}")
 
     # Auto venv bootstrap — installs Python dependencies so nuitka_worker
@@ -650,18 +709,12 @@ async def _prepare_git_workspace(task_id: str, config: BuildConfig) -> BuildConf
 async def start_build_task(task_id: str, config: BuildConfig) -> None:
     """Start a build task in the background.
 
-    Acquires a build slot from the semaphore before dispatching.
-    If all slots are occupied, the task waits in "Queued" state.
-    For git-source tasks, the repo is cloned into a fresh per-task
-    workspace AFTER the slot is acquired but BEFORE dispatch.
+    A local build first waits its turn for the project folder, then for a build
+    slot from the semaphore; if all slots are occupied, the task waits in
+    "Queued" state. For git-source tasks, the repo is cloned into a fresh
+    per-task workspace AFTER the slot is acquired but BEFORE dispatch.
     """
-    from app.database import async_session
-
     sem = _get_semaphore()
-
-    # Signal queued status before waiting for a slot
-    await task_manager.update_task(task_id, "status_msg", "Queued — waiting for build slot...")
-    await task_manager.append_log(task_id, "Waiting for available build slot...")
 
     async def _is_cancelled() -> bool:
         """True if the user cancelled while we were doing slow prep work
@@ -669,6 +722,24 @@ async def start_build_task(task_id: str, config: BuildConfig) -> None:
         a killable process, so status is the only cancel signal we have."""
         current = await task_manager.get_task(task_id)
         return current is None or current.status == TaskStatus.CANCELLED
+
+    async with contextlib.AsyncExitStack() as turn:
+        if config.source_type != SourceType.GIT:
+            # The folder first, then a slot (see _project_turn).
+            await turn.enter_async_context(_project_turn(task_id, config.project_path))
+            if await _is_cancelled():
+                await task_manager.append_log(task_id, "Task was cancelled while queued — build skipped")
+                return
+        await _run_in_slot(task_id, config, sem, _is_cancelled)
+
+
+async def _run_in_slot(task_id: str, config: BuildConfig, sem: asyncio.Semaphore, _is_cancelled) -> None:
+    """Wait for a build slot, then prepare, build and report. See start_build_task."""
+    from app.database import async_session
+
+    # Signal queued status before waiting for a slot
+    await task_manager.update_task(task_id, "status_msg", "Queued — waiting for build slot...")
+    await task_manager.append_log(task_id, "Waiting for available build slot...")
 
     async with sem, _holding_slot():
         # The user may have cancelled while this task sat in the queue —

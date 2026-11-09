@@ -138,6 +138,8 @@ journalctl -u packwright -f
 
 任務狀態、WebSocket 連線與建置名額都在行程記憶體裡,**不能開多個 uvicorn worker**,第二個 worker
 看不到第一個的任務。同時進行的建置數由 `MAX_CONCURRENT_BUILDS`(預設 3)限制,超過的會排隊。
+同一個本機資料夾一次只建置一個;第二個會先等那個資料夾空出來(「another build of this folder is running」),
+等的時候不佔建置名額,其他專案照常開始。
 
 ### 放在反向代理後面
 
@@ -197,6 +199,14 @@ LOCAL_SOURCE_ROOTS=/srv/projects,/data/builds
 本機模式在原地建置,產物寫進專案底下的輸出目錄(預設 `dist`)。External 模式會暫時在進入點檔案
 插入一小段載入 `libs/` 的程式碼,建置結束後還原。
 
+- **每次建置前會清空輸出目錄**,所以產物裡不會混進前幾次建置留下的檔案(例如資料夾模式的產物裡
+  多出上一次 One-file 的執行檔與 `libs/`)。輸出目錄如果就是專案資料夾本身,或裡面有建置會讀的東西
+  (進入點、程式 / 資料 / 前端目錄、`.venv`、`.git`、`pyproject.toml`),就不清空,建置記錄會寫明原因。
+  不要把自己的檔案放在輸出目錄裡。
+- 建置成功後,輸出會另存一份到 `GIT_WORKSPACE_DIR/<task-id>/<輸出目錄>`(同一個檔案系統時用 hard
+  link,不多佔空間),下載的是這一份,不是專案資料夾當下的內容 —— 之後同一個資料夾再建置,也不會
+  改變前一次建置下載到的東西。這份保留期限同 Git 模式(`WORKSPACE_SUCCESS_TTL_DAYS`)。
+
 ### Git URL
 
 1. **驗證網址**:只接受 `http(s)`;拒絕網址內嵌帳密、`localhost`,以及指向 loopback、私有網段、
@@ -219,6 +229,12 @@ LOCAL_SOURCE_ROOTS=/srv/projects,/data/builds
 - clone 時依網址的主機自動選用,只在呼叫 git 的那一刻以 HTTP header 的形式交給 git,
   不會寫進網址、資料庫的建置設定或日誌。
 - `.env` 的 `GITLAB_TOKEN` 仍可作為後備,但只會送給 `GITLAB_TOKEN_HOST`(預設 `gitlab.com`)。
+- **只會用這裡存的憑證**。伺服器帳號自己的 git 設定與登入(`~/.gitconfig`、`/etc/gitconfig` 裡的
+  credential helper,例如 `gh auth git-credential`,以及 `~/.netrc`)一律不讀:以前它們會替任何人輸入的
+  網址回答,等於讓所有能建置的人 clone 伺服器帳號看得到的私有 repo。要走 proxy 或私有 CA,改用環境變數
+  (`HTTPS_PROXY`、`NO_PROXY`、`GIT_SSL_CAINFO`、`SSL_CERT_FILE` 等),不要寫在服務帳號的 git 設定裡。
+- 存的憑證被主機拒絕(過期、撤銷)時,會再匿名試一次:公開 repo 照樣能 clone,建置記錄會提醒更新憑證;
+  私有 repo 則照常失敗。
 
 使用者**不需要也不應該**把帳密寫進 Git URL,這種網址會被驗證擋下。
 
@@ -310,7 +326,7 @@ Docker 環境變數除外),回來時還原;**Clear draft** 可以清掉。
 | 欄位 | 說明 |
 |---|---|
 | Python version | 預設自動偵測。偵測依據是專案 `.venv` 裡編譯好的 `.so` 的 ABI 標籤,而不是宣告檔 |
-| Entry point | 主程式,相對於專案根目錄(預設 `main.py`) |
+| Entry point | 主程式,相對於專案根目錄(預設 `main.py`)。必須是專案裡的檔案:絕對路徑、`..`、或指向專案外的符號連結都會被拒絕(400) |
 | Binary name | 執行檔名稱;留空時取進入點的檔名(`main.py` → `main`) |
 | Nuitka pack mode | **External**(建議):第三方套件放在執行檔旁的 `libs/`,編譯快;**Full**:全部編進執行檔,非常慢 |
 | Single-file binary | 輸出單一執行檔或資料夾 |
@@ -393,8 +409,9 @@ Queued → Preflight → Compile → Bundle → Verify
 - 在詳情頁或 **Builds** 頁按 **Download output**。瀏覽器原生下載,不會先把整個檔案讀進網頁記憶體。
 - 實作上前端先換一張**下載票證**(30 分鐘有效、只綁定這個建置與這個使用者、不能呼叫其他 API),
   兌換時會重新檢查帳號是否仍啟用、權限是否仍在。
-- 非 Docker 產物是從工作區或專案的輸出目錄即時打包的,所以**工作區被清掉後就無法下載**:
-  Git 模式的成功建置預設保留 `WORKSPACE_SUCCESS_TTL_DAYS`(7 天)。
+- 非 Docker 產物是從這次建置的工作區即時打包的(本機模式是建置完成時另存的那一份),所以
+  **工作區被清掉後就無法下載**:成功建置預設保留 `WORKSPACE_SUCCESS_TTL_DAYS`(7 天)。
+  這個版本以前的本機建置沒有另存,仍從專案的輸出目錄打包。
 - 腳本可以直接呼叫 `GET /api/history/{id}/download`(帶 `Authorization` header)。
 
 ---
@@ -451,6 +468,13 @@ docker run --rm --env-file .env my-service:latest
 | `role:view` / `role:manage` | 查看 / 管理角色 |
 
 萬用字元 `resource:*`、`*:action`、`*:*` 也可以使用。
+
+為了不讓角色設定把所有人鎖在外面,以下變更會被拒絕(400):
+
+- 讓系統裡**再也沒有任何啟用中的帳號擁有 `role:manage`**(例如把 `admin` 角色的權限清空、
+  停用唯一管理者的角色)。要縮減 `admin`,先讓另一個啟用中的帳號透過別的角色擁有 `role:manage`。
+- 父角色形成循環(A 繼承 B、B 又繼承 A,任何深度)。
+- 不存在的權限碼(以前會被默默丟掉)。
 
 ---
 
@@ -521,7 +545,11 @@ CA 憑證設定(`SSL_CERT_FILE`、`NODE_EXTRA_CA_CERTS` 等)、`CC`/`CXX`,以及
   位址;只有實際連線來自列出的代理時才採信,而且取**最右邊**的值(nginx 是把真實位址附加在後面)。
 - uvicorn 內建的 proxy headers 處理刻意關閉,`TRUSTED_PROXY_IPS` 是唯一的判斷點。放在代理後面卻沒設定
   時,所有人會被算成同一個 IP、限流過嚴:這是刻意選擇的失敗方向,會立刻被發現,而不是靜默失效。
-- 登入、註冊等端點有限流;送出建置(`POST /api/tasks`)另有每分鐘上限 `BUILD_SUBMIT_PER_MINUTE`。
+- 每個用戶端位址每分鐘 `RATE_LIMIT_PER_MINUTE`(300)、每小時 `RATE_LIMIT_PER_HOUR`(6000)次 API 呼叫;
+  同一個 NAT 或代理後面的人共用。網頁本身、靜態檔與 Dashboard 輪詢的建置清單不計。
+- 登入、註冊等端點有更嚴的限流;送出建置(`POST /api/tasks` 與專案的 Build a new version)合計另有每分鐘上限
+  `BUILD_SUBMIT_PER_MINUTE`。
+- 被限流時,開頁面的登入狀態檢查會等一下再問,不會把人登出。
 - 登入記錄與稽核日誌的 IP 走同一套判斷,攻擊者無法在登入歷史裡寫入任意 IP。
 
 ### WebSocket 認證
@@ -560,6 +588,7 @@ data/
 | 對象 | 保留 |
 |---|---|
 | Git 模式成功建置(非 Docker) | 完成時立刻只留下輸出;`WORKSPACE_SUCCESS_TTL_DAYS`(7 天)後刪除。**這也是可下載的期限** |
+| 本機模式成功建置(非 Docker)另存的輸出 | `WORKSPACE_SUCCESS_TTL_DAYS`(7 天)。專案資料夾裡的輸出不會被清理 |
 | Git 模式成功建置(Docker) | 完成時立刻刪除工作區(image 檔已另存) |
 | 失敗 / 取消的建置 | `WORKSPACE_FAILED_TTL_DAYS`(30 天),留著方便除錯 |
 | 找不到對應紀錄的目錄 | `WORKSPACE_ORPHAN_TTL_DAYS`(2 天) |

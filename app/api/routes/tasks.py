@@ -25,6 +25,7 @@ from app.schemas.task import (
     BuildConfig,
     BuildResult,
     HistoryItem,
+    ProjectType,
     SourceType,
     TaskCreate,
     TaskResponse,
@@ -146,6 +147,11 @@ def _validate_build_config_paths(config: BuildConfig) -> None:
     there — lexically, because the clone does not exist yet. They are just as
     caller-supplied as in local mode and feed the same rmtree. The workers join
     them with paths.safe_join() as well.
+
+    The entry point is held to the same rule. External and Single-file builds
+    write a loader into it, and it is compiled and packaged, so
+    entry_point="../../elsewhere/app.py" edited and shipped a file outside the
+    allowed roots (or, in Git mode, outside the clone).
     """
     if config.source_type == SourceType.GIT:
         from app.services.paths import is_safe_relative
@@ -159,6 +165,8 @@ def _validate_build_config_paths(config: BuildConfig) -> None:
                         detail=(f"{field} '{name.strip()}' must be a directory inside the project: "
                                 "no absolute paths and no '..'."),
                     )
+        if _compiles(config) and not is_safe_relative(config.entry_point):
+            raise HTTPException(status_code=400, detail=_entry_point_outside(config.entry_point))
         return
 
     project_root = _validate_allowed_path(config.project_path)
@@ -186,6 +194,26 @@ def _validate_build_config_paths(config: BuildConfig) -> None:
     _require_inside(config.data_dirs, "Data directory")
     _require_inside(config.extra_dirs, "Extra code directory")
     _require_inside(config.frontend_dir, "Frontend directory")
+    # One file, not a comma list. resolve() follows a symlink, so a link in the
+    # project pointing elsewhere is refused too.
+    if _compiles(config) and not _entry_point_inside(project_root, config.entry_point):
+        raise HTTPException(status_code=400, detail=_entry_point_outside(config.entry_point))
+
+
+def _compiles(config: BuildConfig) -> bool:
+    """True when the build compiles the entry point (a frontend-only build ignores it)."""
+    return config.project_type in (ProjectType.BACKEND_ONLY, ProjectType.FULLSTACK)
+
+
+def _entry_point_inside(project_root: Path, entry_point: str) -> bool:
+    name = (entry_point or "").strip()
+    candidate = (project_root / name).resolve()
+    return bool(name) and candidate != project_root and candidate.is_relative_to(project_root)
+
+
+def _entry_point_outside(entry_point: str) -> str:
+    return (f"Entry point '{(entry_point or '').strip()}' must be a file inside the project, "
+            "relative to the project path: '..' and absolute paths are not allowed.")
 
 
 def _validate_allowed_path(path: str) -> Path:
@@ -286,6 +314,9 @@ async def analyze_project(
     project_path = _validate_allowed_path(path)
     if not project_path.exists() or not project_path.is_dir():
         raise HTTPException(status_code=404, detail="Path does not exist")
+    # The entry point's imports are parsed and returned: not for a file elsewhere.
+    if not _entry_point_inside(project_path, entry_point):
+        raise HTTPException(status_code=400, detail=_entry_point_outside(entry_point))
 
     analysis = await asyncio.to_thread(
         analyze_project_layout, str(project_path), entry_point
@@ -1166,15 +1197,22 @@ def _serve_task_output(task) -> Response:
     if not task.config:
         raise HTTPException(status_code=400, detail="Task has no config")
 
+    from app.services.artifacts import KEPT_OUTPUT_KEY
     from app.services.paths import (
         UnsafePathError,
         docker_export_path,
+        git_workspace,
         legacy_docker_export_path,
         safe_join,
         task_source_root,
     )
 
     project_path = task_source_root(task.task_id, task.config)
+    kept = bool((task.result or {}).get(KEPT_OUTPUT_KEY))
+    if kept:
+        # A local build's own copy of its output (artifacts.py), not the folder,
+        # which by now may hold a later build's files.
+        project_path = git_workspace(task.task_id)
     output_dir_name = task.config.get("output_dir", "dist")
     try:
         output_path = safe_join(project_path, output_dir_name)
@@ -1210,6 +1248,11 @@ def _serve_task_output(task) -> Response:
         )
 
     if not output_path.exists() or not output_path.is_dir():
+        if kept:
+            raise HTTPException(
+                status_code=404,
+                detail="This build's output has been cleaned up (WORKSPACE_SUCCESS_TTL_DAYS); build it again",
+            )
         raise HTTPException(status_code=404, detail="Output directory not found")
 
     # Stream the .tar.gz to the client AS IT IS BUILT, rather than building the

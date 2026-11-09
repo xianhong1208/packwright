@@ -70,9 +70,9 @@ Console (React + antd)  ──HTTP / WebSocket──▶  FastAPI
                           artifacts + Docker image .tar.gz
 ```
 
-- **Sources.** A build is either a *local path* (confined to `LOCAL_SOURCE_ROOTS`) or a *Git URL*. Git mode validates the URL (no `file://`, `ssh://`, localhost, link-local or credential-bearing URLs), clones at a specific branch/tag, and — for Python projects — bootstraps a `.venv` before building.
+- **Sources.** A build is either a *local path* (confined to `LOCAL_SOURCE_ROOTS`) or a *Git URL*. Git mode validates the URL (no `file://`, `ssh://`, localhost, link-local or credential-bearing URLs), clones at a specific branch/tag, and — for Python projects — bootstraps a `.venv` before building. git sends only the credentials stored in Packwright, never the server account's own git configuration or login.
 - **Token injection.** For a private repo the token for that host is looked up, decrypted, and handed to `git` only for that call, as an HTTP auth header scoped to the repository's origin (through `GIT_CONFIG_*` environment variables, so it is not on the command line either). It never appears in the URL, the stored build config or the log, and the API never returns it.
-- **Concurrency.** `MAX_CONCURRENT_BUILDS` bounds simultaneous builds (of every kind) behind a semaphore, and the rest queue; the process is intentionally single-worker because task state, WebSocket connections and the build semaphore live in process memory.
+- **Concurrency.** `MAX_CONCURRENT_BUILDS` bounds simultaneous builds (of every kind) behind a semaphore, and the rest queue; builds of one local folder run one at a time and wait for it without holding a slot; the process is intentionally single-worker because task state, WebSocket connections and the build semaphore live in process memory.
 - **Cleanup.** A background loop deletes per-task workspaces and exported images by status and age, and (optionally) shrinks a successful build's workspace to just its output.
 
 ## Configuration
@@ -86,7 +86,7 @@ Everything is environment-driven, and nothing is required. `.env.example` lists 
 | `JWT_SECRET_KEY` | auto | Session signing key; generated to `.env` on first start if empty. |
 | `SETTINGS_ENCRYPTION_KEY` | auto | Encrypts stored Git tokens; generated to `.env` if empty. |
 | `CORS_ORIGINS` | dev ports | CSV of browser origins allowed to call the API. |
-| `GIT_WORKSPACE_DIR` | `./data/workspace` | Where clones and build workspaces live (and where non-Docker outputs are downloaded from). |
+| `GIT_WORKSPACE_DIR` | `./data/workspace` | Where clones and build workspaces live, and where each non-Docker build's output is kept and downloaded from (local builds included). |
 | `DOCKER_IMAGES_DIR` | `./data/docker_images` | Where exported Docker images (`.tar.gz`) are written. |
 | `NUITKA_CACHE_DIR` | *(empty → `~/.cache/Nuitka`)* | Nuitka's cache, including the ccache store that makes rebuilds faster. |
 | `LOCAL_SOURCE_ROOTS` | *(empty)* | CSV of absolute prefixes a local-source build may read; empty disables local mode. |
@@ -95,6 +95,7 @@ Everything is environment-driven, and nothing is required. `.env.example` lists 
 | `MAX_CONCURRENT_BUILDS` | `3` | Simultaneous builds; the rest wait in the queue. |
 | `PUBLIC_URL` | *(empty)* | The address people open Packwright at; build notifications link to the build with it. |
 | `TRUSTED_PROXY_IPS` | *(empty)* | Proxy IPs whose `X-Forwarded-For` may be trusted; empty is safest. |
+| `RATE_LIMIT_PER_MINUTE` / `RATE_LIMIT_PER_HOUR` | `300` / `6000` | API requests one client address may make (everyone behind one NAT or proxy shares it); sign-in, registration and build submission have their own, stricter limits. |
 
 ## Storage & data
 
