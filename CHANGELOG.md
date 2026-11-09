@@ -6,6 +6,8 @@ follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this proje
 
 ## [Unreleased]
 
+## [1.3.1] — 2026-11-09
+
 ### Fixed
 - A role change can no longer lock everyone out. Deleting or deactivating a built-in role was refused, but
   emptying its permissions was not: one `PUT /api/users/roles/1` with an empty list took every permission
@@ -13,29 +15,9 @@ follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this proje
   deactivation) that would leave no active account holding `role:manage` is now refused. Parent roles can
   no longer form a loop, and unknown permission codes are refused with their names instead of being
   dropped silently.
-
-### Security
-- The entry point must be a file inside the project. Output, data, extra-code and frontend directories were
-  confined to the project, but the entry point was not: `entry_point="../../elsewhere/app.py"` on a local
-  build was accepted, the libs loader was written into that file outside `LOCAL_SOURCE_ROOTS`, and it was
-  compiled and packaged. Builds (local and Git, including a project's new versions and settings) and the
-  project analysis now refuse an absolute, `..` or symlinked-out entry point with 400, and the Nuitka worker
-  checks the resolved path again before touching it, which also covers a symlink committed to a Git repo.
-
-### Security
-- Git no longer uses the server's own git login. Clones, ref listings and scans ran with the service
-  account's `HOME`, so its `~/.gitconfig` and `/etc/gitconfig` applied, credential helpers included: with
-  `gh auth git-credential` configured there, anyone allowed to build could clone whatever that GitHub login
-  could reach, and a failed login made git tell the helper to erase the credential. git now runs with no
-  system or global configuration, no credential helper and an empty `HOME` (so no `~/.netrc` either); only
-  the credentials stored in Packwright are sent. Proxy and CA settings reach git through `HTTPS_PROXY`,
-  `NO_PROXY`, `GIT_SSL_CAINFO`, `SSL_CERT_FILE` and similar variables instead of git configuration.
-
-### Fixed
 - A stored Git credential the host refuses (expired, revoked) no longer blocks that host's public
   repositories: the request is retried once without it, and a build's log says the credential needs
   updating. A private repository still fails with the original error.
-
 - Browsing no longer signs you out. The API allowed 60 requests a minute per address, which one person
   reached in about 20 page loads (a page makes one to five calls), and a 429 on the session check sent a
   signed-in person to the sign-in page. The allowance is now 300 a minute and 6000 an hour, set with the new
@@ -44,12 +26,10 @@ follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this proje
 - Building a project's new version is rate limited like any other build submission. `POST
   /api/projects/{id}/builds` had no limit, while `POST /api/tasks` refused the 21st build a minute; both now
   share `BUILD_SUBMIT_PER_MINUTE`.
-
 - A build waiting for its folder no longer holds a build slot. Builds of one local folder run one at a time,
   but the second one took a slot first and then waited for the folder, so with the default three slots,
   three builds of one project stopped every other build on the server. A local build now waits for its
   folder first ("Queued — another build of this folder is running"), then for a slot.
-
 - A local-mode build's download is now that build's output and nothing else. The output directory in the
   project folder was never emptied, so it collected every earlier build's files (a folder build's archive
   also held the one-file binary and `libs/` of the build before it, and a Docker build copied them into
@@ -59,13 +39,27 @@ follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this proje
   successful build's output is kept under `GIT_WORKSPACE_DIR/<task-id>/` (hard links on the same
   filesystem) and downloaded from there until `WORKSPACE_SUCCESS_TTL_DAYS` expires it. Builds from
   before this change still download from the folder.
-
 - A Git credential's host is checked. `https://x.com/`, `localhost`, `a b.com` or a host with a port were
   accepted, could never match a clone URL (credentials are found by its host name), and the page then said
   builds clone from `https://https://x.com//`. They are now refused with a message saying what to enter, the
   form checks as you type, the host is stored in lower case without a trailing dot, and credentials saved
   earlier with such a host are marked on the page. A token shorter than 16 characters no longer shows its
   last four as a hint, which for a four-character token was all of it.
+
+### Security
+- The entry point must be a file inside the project. Output, data, extra-code and frontend directories were
+  confined to the project, but the entry point was not: `entry_point="../../elsewhere/app.py"` on a local
+  build was accepted, the libs loader was written into that file outside `LOCAL_SOURCE_ROOTS`, and it was
+  compiled and packaged. Builds (local and Git, including a project's new versions and settings) and the
+  project analysis now refuse an absolute, `..` or symlinked-out entry point with 400, and the Nuitka worker
+  checks the resolved path again before touching it, which also covers a symlink committed to a Git repo.
+- Git no longer uses the server's own git login. Clones, ref listings and scans ran with the service
+  account's `HOME`, so its `~/.gitconfig` and `/etc/gitconfig` applied, credential helpers included: with
+  `gh auth git-credential` configured there, anyone allowed to build could clone whatever that GitHub login
+  could reach, and a failed login made git tell the helper to erase the credential. git now runs with no
+  system or global configuration, no credential helper and an empty `HOME` (so no `~/.netrc` either); only
+  the credentials stored in Packwright are sent. Proxy and CA settings reach git through `HTTPS_PROXY`,
+  `NO_PROXY`, `GIT_SSL_CAINFO`, `SSL_CERT_FILE` and similar variables instead of git configuration.
 
 ## [1.3.0] — 2026-11-09
 
@@ -357,7 +351,8 @@ role-based permissions.
 - Timezone-safe token expiry on SQLite; portable build statistics.
 - Git credentials feedback in the console; no pre-filled personal paths in New build.
 
-[Unreleased]: https://github.com/xianhong1208/packwright/compare/v1.3.0...dev
+[Unreleased]: https://github.com/xianhong1208/packwright/compare/v1.3.1...dev
+[1.3.1]: https://github.com/xianhong1208/packwright/compare/v1.3.0...v1.3.1
 [1.3.0]: https://github.com/xianhong1208/packwright/compare/v1.2.0...v1.3.0
 [1.2.0]: https://github.com/xianhong1208/packwright/compare/v1.1.0...v1.2.0
 [1.1.0]: https://github.com/xianhong1208/packwright/compare/v1.0.0...v1.1.0
