@@ -651,7 +651,7 @@ async def _prepare_git_workspace(task_id: str, config: BuildConfig) -> BuildConf
     )
 
     try:
-        await git_service.clone_repo(
+        anonymous = await git_service.clone_repo(
             url=config.git_url,
             ref=config.git_ref,
             ref_type=config.git_ref_type,
@@ -667,6 +667,12 @@ async def _prepare_git_workspace(task_id: str, config: BuildConfig) -> BuildConf
         await task_manager.append_log(task_id, f"Clone failed: {e}")
         raise
 
+    if anonymous:
+        await task_manager.append_log(
+            task_id,
+            "The stored Git credential for this host was refused; cloned without it. "
+            "Update it under Git credentials.",
+        )
     await task_manager.append_log(task_id, f"Clone completed: {target}")
 
     # Auto venv bootstrap — installs Python dependencies so nuitka_worker

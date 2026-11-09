@@ -60,12 +60,17 @@ window.addEventListener(SIGNED_OUT_EVENT, () => {
 
 // Protected route wrapper
 function ProtectedRoute() {
-  const { isAuthenticated, isLoading } = useAuth()
+  const { isAuthenticated, isLoading, notice } = useAuth()
 
   if (isLoading) {
     return (
-      <div className="min-h-screen flex items-center justify-center">
+      <div className="min-h-screen flex flex-col items-center justify-center gap-4 px-4">
         <Spin size="large" />
+        {notice && (
+          <p role="status" className="max-w-sm text-center text-sm" style={{ color: 'var(--ink-muted)' }}>
+            {notice}
+          </p>
+        )}
       </div>
     )
   }

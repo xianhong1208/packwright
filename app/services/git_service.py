@@ -15,6 +15,12 @@ SECURITY INVARIANTS (do not violate):
        link-local, userinfo in URL, '..' in path) are rejected.
     4. Long-running operations (ls-remote, clone) are wrapped in
        asyncio.wait_for() with timeouts; timed-out processes are killed.
+    5. git never reads the host's configuration or credentials: no system or
+       global config, no credential helper, an empty HOME (so no ~/.netrc
+       either). The service account's git login (e.g. `gh auth git-credential`
+       in ~/.gitconfig) used to answer for any URL a user typed, so anyone
+       allowed to build could clone whatever that login could reach. Only
+       Packwright's own stored credentials, scoped by host, are ever sent.
 """
 
 from __future__ import annotations
@@ -23,6 +29,7 @@ import asyncio
 from collections.abc import Callable
 import base64
 import ipaddress
+import logging
 import os
 import re
 import shutil
@@ -37,6 +44,8 @@ from urllib.parse import urlparse
 # (see app/services/nuitka_worker.py). Using an alias keeps call sites short
 # and avoids ambiguity with shell-based launchers.
 _spawn = asyncio.create_subprocess_exec
+
+logger = logging.getLogger(__name__)
 
 
 # ---------- URL validation ----------
@@ -221,26 +230,37 @@ def validate_git_ref(ref: str) -> None:
 _PROVIDER_USERINFO_USER = {"github": "x-access-token", "gitlab": "oauth2", "generic": "oauth2"}
 
 
-def _auth_env(url: str, token: str | None, provider: str = "gitlab") -> dict[str, str]:
-    """Environment that makes git send the token to this repository's host only.
+def _auth_config(url: str, token: str | None, provider: str = "gitlab") -> list[tuple[str, str]]:
+    """The config entry that makes git send the token to this repository's host only.
 
     Equivalent to ``git -c http.<origin>/.extraHeader="Authorization: Basic ..."``
-    but through GIT_CONFIG_COUNT/KEY/VALUE (git >= 2.31), so the secret is in
-    neither argv nor any config file. The URL-scoped key means a redirect to
-    another host does not receive it. The username depends on the provider
-    (GitHub -> x-access-token, GitLab -> oauth2).
+    but passed through GIT_CONFIG_COUNT/KEY/VALUE (git >= 2.31, see _git_env),
+    so the secret is in neither argv nor any config file. The URL-scoped key
+    means a redirect to another host does not receive it. The username depends
+    on the provider (GitHub -> x-access-token, GitLab -> oauth2).
     """
     if not token:
-        return {}
+        return []
     parsed = urlparse(url)
     origin = f"{parsed.scheme}://{parsed.hostname}" + (f":{parsed.port}" if parsed.port else "")
     user = _PROVIDER_USERINFO_USER.get(provider, "oauth2")
     basic = base64.b64encode(f"{user}:{token}".encode()).decode()
-    return {
-        "GIT_CONFIG_COUNT": "1",
-        "GIT_CONFIG_KEY_0": f"http.{origin}/.extraHeader",
-        "GIT_CONFIG_VALUE_0": f"Authorization: Basic {basic}",
-    }
+    return [(f"http.{origin}/.extraHeader", f"Authorization: Basic {basic}")]
+
+
+def _auth_env(url: str, token: str | None, provider: str = "gitlab") -> dict[str, str]:
+    """_auth_config as GIT_CONFIG_* variables (empty without a token)."""
+    return _config_env(_auth_config(url, token, provider))
+
+
+def _config_env(entries: list[tuple[str, str]]) -> dict[str, str]:
+    if not entries:
+        return {}
+    env = {"GIT_CONFIG_COUNT": str(len(entries))}
+    for i, (key, value) in enumerate(entries):
+        env[f"GIT_CONFIG_KEY_{i}"] = key
+        env[f"GIT_CONFIG_VALUE_{i}"] = value
+    return env
 
 
 _OAUTH_PATTERN = re.compile(r"((?:oauth2|x-access-token):)[^@\s/]+(@)")
@@ -262,8 +282,38 @@ def mask_token_in_log(text: str, token: str | None = None) -> str:
 
 # ---------- Subprocess environment ----------
 
+# The host's git configuration is not read (SECURITY INVARIANT 5), so a proxy or a
+# private CA reaches git only through these, as it does for builds (build_env.py).
+_GIT_ENV_PASSTHROUGH = (
+    "HTTP_PROXY", "HTTPS_PROXY", "NO_PROXY", "ALL_PROXY",
+    "http_proxy", "https_proxy", "no_proxy", "all_proxy",
+    "GIT_SSL_CAINFO", "GIT_SSL_CAPATH", "SSL_CERT_FILE", "SSL_CERT_DIR", "CURL_CA_BUNDLE",
+)
+
+_empty_home: Path | None = None
+
+
+def _git_home() -> str:
+    """An empty directory for git's HOME, made once per process.
+
+    Not the service's HOME: git reads ~/.gitconfig and ~/.config/git/config
+    from there, and libcurl reads ~/.netrc, any of which can hold the host's
+    own credentials.
+    """
+    global _empty_home
+    if _empty_home is None or not _empty_home.is_dir():
+        _empty_home = Path(tempfile.mkdtemp(prefix="packwright-git-home-"))
+    return str(_empty_home)
+
+
 def _git_env(url: str | None = None, token: str | None = None, provider: str = "gitlab") -> dict[str, str]:
     """Minimal environment for git subprocesses, plus the credential if any.
+
+    No system or global config and an empty HOME, and an empty credential.helper
+    on top (it resets the helper list), so git never asks the host's credential
+    helpers: they answered for any URL with the service account's own login, and
+    were told to "erase" it when a request failed. Only the stored credential for
+    this URL's host is sent (_auth_config).
 
     GIT_TERMINAL_PROMPT=0 and GIT_ASKPASS=/bin/true ensure that git NEVER
     blocks on an interactive credential prompt — bad tokens fail fast
@@ -271,14 +321,65 @@ def _git_env(url: str | None = None, token: str | None = None, provider: str = "
     the credential: a --filter=blob:none clone fetches blobs lazily on a later
     `git show`.
     """
-    return _auth_env(url or "", token, provider) | {
+    env = {name: os.environ[name] for name in _GIT_ENV_PASSTHROUGH if name in os.environ}
+    return env | _config_env([("credential.helper", ""), *_auth_config(url or "", token, provider)]) | {
         "PATH": os.environ.get("PATH", "/usr/bin:/bin"),
-        "HOME": os.environ.get("HOME", "/tmp"),
+        "HOME": _git_home(),
+        "GIT_CONFIG_NOSYSTEM": "1",
+        "GIT_CONFIG_GLOBAL": os.devnull,
         "LANG": "C.UTF-8",
         "LC_ALL": "C.UTF-8",
         "GIT_TERMINAL_PROMPT": "0",
         "GIT_ASKPASS": "/bin/true",
     }
+
+
+# What git prints when the server refused the credential it was sent.
+_REJECTED_CREDENTIAL = re.compile(
+    r"Authentication failed|returned error: 40[13]|HTTP Basic: Access denied|Invalid username or password",
+    re.IGNORECASE,
+)
+
+
+async def _run_git(cmd: list[str], env: dict[str, str], timeout: float, what: str,
+                   cwd: str | None = None) -> tuple[int, bytes, bytes]:
+    """Run one git command; (returncode, stdout, stderr). Kills it on timeout."""
+    try:
+        proc = await _spawn(*cmd, stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE, env=env, cwd=cwd)
+    except FileNotFoundError as e:
+        raise GitUrlError("git binary not found on server") from e
+    try:
+        stdout, stderr = await asyncio.wait_for(proc.communicate(), timeout=timeout)
+    except asyncio.TimeoutError:
+        proc.kill()
+        await proc.wait()
+        raise GitUrlError(f"{what} timed out after {timeout:.0f}s")
+    return proc.returncode, stdout, stderr
+
+
+async def _fetch_with_fallback(
+    cmd: list[str], url: str, token: str | None, provider: str, timeout: float, what: str,
+    before_retry: Callable[[], None] | None = None,
+) -> tuple[int, bytes, bytes, str | None]:
+    """Run a command that talks to the remote; retry once without the stored token
+    if the server refused it. Returns the result and the token that worked (None
+    when anonymous), so the later commands of one operation send the same.
+
+    A stale or revoked stored credential used to make every repository on its
+    host fail, public ones included. A public repository now still clones; a
+    private one fails with the original error, which names the refused login.
+    """
+    rc, out, err = await _run_git(cmd, _git_env(url, token, provider), timeout, what)
+    if rc == 0 or not token or not _REJECTED_CREDENTIAL.search(err.decode("utf-8", "replace")):
+        return rc, out, err, token
+    if before_retry is not None:
+        before_retry()
+    rc2, out2, err2 = await _run_git(cmd, _git_env(url, None, provider), timeout, what)
+    if rc2 != 0:
+        return rc, out, err, token
+    logger.warning("The stored Git credential for %s was refused; used anonymous access",
+                   urlparse(url).hostname)
+    return rc2, out2, err2, None
 
 
 # ---------- list_refs ----------
@@ -300,25 +401,10 @@ async def list_refs(
     injected = url  # credentials travel in the environment, see _git_env
 
     cmd = ["git", "ls-remote", "--heads", "--tags", injected]
-    try:
-        proc = await _spawn(
-            *cmd,
-            stdout=asyncio.subprocess.PIPE,
-            stderr=asyncio.subprocess.PIPE,
-            env=_git_env(url, token, provider),
-        )
-        try:
-            stdout_bytes, stderr_bytes = await asyncio.wait_for(
-                proc.communicate(), timeout=timeout
-            )
-        except asyncio.TimeoutError:
-            proc.kill()
-            await proc.wait()
-            raise GitUrlError(f"git ls-remote timed out after {timeout:.0f}s")
-    except FileNotFoundError as e:
-        raise GitUrlError("git binary not found on server") from e
+    returncode, stdout_bytes, stderr_bytes, _ = await _fetch_with_fallback(
+        cmd, url, token, provider, timeout, "git ls-remote")
 
-    if proc.returncode != 0:
+    if returncode != 0:
         stderr = mask_token_in_log(stderr_bytes.decode("utf-8", "replace"), token)
         raise GitUrlError(f"git ls-remote failed: {stderr.strip() or 'unknown error'}")
 
@@ -357,12 +443,13 @@ async def clone_repo(
     *,
     provider: str = "gitlab",
     timeout: float = 600.0,
-) -> None:
+) -> bool:
     """Clone `url` @ `ref` into `target_dir` (which must not yet exist).
 
     Uses `--depth 1 --single-branch --branch <ref>` for speed.
     On any error, partial state at target_dir is removed and a masked
-    exception is raised.
+    exception is raised. Returns True when the stored credential was refused
+    and the clone succeeded without it (see _fetch_with_fallback).
     """
     validate_git_url(url, _current_allowed_hosts())
     validate_git_ref(ref)
@@ -389,29 +476,17 @@ async def clone_repo(
     ]
 
     try:
-        proc = await _spawn(
-            *cmd,
-            stdout=asyncio.subprocess.PIPE,
-            stderr=asyncio.subprocess.PIPE,
-            env=_git_env(url, token, provider),
-        )
-        try:
-            _, stderr_bytes = await asyncio.wait_for(
-                proc.communicate(), timeout=timeout
-            )
-        except asyncio.TimeoutError:
-            proc.kill()
-            await proc.wait()
-            _safe_rmtree(target_dir)
-            raise GitUrlError(f"git clone timed out after {timeout:.0f}s")
-    except FileNotFoundError as e:
+        returncode, _, stderr_bytes, used = await _fetch_with_fallback(
+            cmd, url, token, provider, timeout, "git clone", before_retry=lambda: _safe_rmtree(target_dir))
+    except GitUrlError:
         _safe_rmtree(target_dir)
-        raise GitUrlError("git binary not found on server") from e
+        raise
 
-    if proc.returncode != 0:
+    if returncode != 0:
         stderr = mask_token_in_log(stderr_bytes.decode("utf-8", "replace"), token)
         _safe_rmtree(target_dir)
         raise GitUrlError(f"git clone failed: {stderr.strip() or 'unknown error'}")
+    return bool(token) and used is None
 
 
 def _safe_rmtree(path: Path) -> None:
@@ -503,29 +578,15 @@ async def scan_tree(
             injected,
             str(target),
         ]
-        try:
-            proc = await _spawn(
-                *clone_cmd,
-                stdout=asyncio.subprocess.PIPE,
-                stderr=asyncio.subprocess.PIPE,
-                env=_git_env(url, token, provider),
-            )
-            try:
-                _, stderr_bytes = await asyncio.wait_for(
-                    proc.communicate(), timeout=timeout
-                )
-            except asyncio.TimeoutError:
-                proc.kill()
-                await proc.wait()
-                raise GitUrlError(f"git scan-tree clone timed out after {timeout:.0f}s")
-        except FileNotFoundError as e:
-            raise GitUrlError("git binary not found on server") from e
-
-        if proc.returncode != 0:
+        returncode, _, stderr_bytes, used = await _fetch_with_fallback(
+            clone_cmd, url, token, provider, timeout, "git scan-tree clone",
+            before_retry=lambda: _safe_rmtree(target))
+        if returncode != 0:
             stderr = mask_token_in_log(stderr_bytes.decode("utf-8", "replace"), token)
             raise GitUrlError(
                 f"git scan-tree clone failed: {stderr.strip() or 'unknown error'}"
             )
+        token = used  # the blobs fetched lazily below need what the clone used
 
         # List top-level dirs via ls-tree (reads tree objects only, does not
         # trigger lazy blob fetch).
@@ -811,27 +872,10 @@ async def preview_frontend(
             injected,
             str(target),
         ]
-        try:
-            proc = await _spawn(
-                *clone_cmd,
-                stdout=asyncio.subprocess.PIPE,
-                stderr=asyncio.subprocess.PIPE,
-                env=_git_env(url, token, provider),
-            )
-            try:
-                _, stderr_bytes = await asyncio.wait_for(
-                    proc.communicate(), timeout=timeout
-                )
-            except asyncio.TimeoutError:
-                proc.kill()
-                await proc.wait()
-                raise GitUrlError(
-                    f"preview-frontend clone timed out after {timeout:.0f}s"
-                )
-        except FileNotFoundError as e:
-            raise GitUrlError("git binary not found on server") from e
-
-        if proc.returncode != 0:
+        returncode, _, stderr_bytes, _ = await _fetch_with_fallback(
+            clone_cmd, url, token, provider, timeout, "preview-frontend clone",
+            before_retry=lambda: _safe_rmtree(target))
+        if returncode != 0:
             stderr = mask_token_in_log(stderr_bytes.decode("utf-8", "replace"), token)
             raise GitUrlError(
                 f"preview-frontend clone failed: {stderr.strip() or 'unknown error'}"

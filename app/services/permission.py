@@ -120,7 +120,8 @@ async def resolve_role_permissions(db: AsyncSession, role: "Role | None") -> set
         permissions.update(p.code for p in current.permissions)
 
         parent_id = current.parent_role_id
-        # A cycle is not rejected at creation either; revisiting is the exit.
+        # The role API refuses loops, but rows written before it did may
+        # still hold one; revisiting is the exit.
         if parent_id is None or parent_id in visited:
             break
 
