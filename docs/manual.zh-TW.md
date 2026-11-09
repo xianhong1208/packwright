@@ -216,6 +216,12 @@ LOCAL_SOURCE_ROOTS=/srv/projects,/data/builds
 - clone 時依網址的主機自動選用,只在呼叫 git 的那一刻以 HTTP header 的形式交給 git,
   不會寫進網址、資料庫的建置設定或日誌。
 - `.env` 的 `GITLAB_TOKEN` 仍可作為後備,但只會送給 `GITLAB_TOKEN_HOST`(預設 `gitlab.com`)。
+- **只會用這裡存的憑證**。伺服器帳號自己的 git 設定與登入(`~/.gitconfig`、`/etc/gitconfig` 裡的
+  credential helper,例如 `gh auth git-credential`,以及 `~/.netrc`)一律不讀:以前它們會替任何人輸入的
+  網址回答,等於讓所有能建置的人 clone 伺服器帳號看得到的私有 repo。要走 proxy 或私有 CA,改用環境變數
+  (`HTTPS_PROXY`、`NO_PROXY`、`GIT_SSL_CAINFO`、`SSL_CERT_FILE` 等),不要寫在服務帳號的 git 設定裡。
+- 存的憑證被主機拒絕(過期、撤銷)時,會再匿名試一次:公開 repo 照樣能 clone,建置記錄會提醒更新憑證;
+  私有 repo 則照常失敗。
 
 使用者**不需要也不應該**把帳密寫進 Git URL,這種網址會被驗證擋下。
 

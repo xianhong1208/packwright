@@ -7,6 +7,8 @@ SECURITY INVARIANTS docstring: URL/ref validation gate every network call,
 and token injection/masking decide whether a secret leaks into a log line.
 """
 
+import os
+
 import pytest
 
 from app.services.git_service import (
@@ -221,10 +223,47 @@ class TestCredentialEnvironment:
     @pytest.mark.unit
     @pytest.mark.parametrize("token", [None, ""])
     def test_tc_git_032_no_token_adds_no_credential(self, token):
-        """TC-GIT-032: falsy token -> no GIT_CONFIG_* at all, prompts still disabled."""
+        """TC-GIT-032: falsy token -> no extraHeader (only the helper reset), prompts still disabled."""
         env = _git_env(PUBLIC_REPO_URL, token)
-        assert not any(k.startswith("GIT_CONFIG") for k in env)
+        assert env["GIT_CONFIG_COUNT"] == "1"
+        assert (env["GIT_CONFIG_KEY_0"], env["GIT_CONFIG_VALUE_0"]) == ("credential.helper", "")
+        assert not any("Authorization" in v for v in env.values())
         assert env["GIT_TERMINAL_PROMPT"] == "0"
+
+
+class TestHostConfigurationIsIgnored:
+    """git must not use the service account's own configuration or login: a
+    credential helper there (`gh auth git-credential`) answered for any URL a user
+    typed, so anyone allowed to build could clone what that login could reach."""
+
+    @pytest.mark.unit
+    def test_tc_git_097_no_host_config_home_or_helper(self, monkeypatch):
+        """TC-GIT-097: no system or global config, an empty HOME that is not the
+        service's, and the helper list reset; the stored token comes after the reset."""
+        monkeypatch.setenv("HOME", "/root")
+        env = _git_env(PUBLIC_REPO_URL, GITLAB_TOKEN)
+
+        assert env["GIT_CONFIG_NOSYSTEM"] == "1"
+        assert env["GIT_CONFIG_GLOBAL"] == os.devnull
+        assert env["HOME"] != "/root" and os.listdir(env["HOME"]) == []
+        assert env["GIT_CONFIG_COUNT"] == "2"
+        assert (env["GIT_CONFIG_KEY_0"], env["GIT_CONFIG_VALUE_0"]) == ("credential.helper", "")
+        assert env["GIT_CONFIG_KEY_1"] == "http.https://gitlab.example.com/.extraHeader"
+
+    @pytest.mark.unit
+    def test_tc_git_098_only_proxy_and_ca_settings_pass_through(self, monkeypatch):
+        """TC-GIT-098: a proxy or private CA still reaches git through the environment
+        (the host's git config no longer can); nothing else of the service's does."""
+        monkeypatch.setenv("HTTPS_PROXY", "http://proxy.example.com:3128")
+        monkeypatch.setenv("GIT_SSL_CAINFO", "/etc/ssl/private-ca.pem")
+        monkeypatch.setenv("JWT_SECRET_KEY", "service-secret")
+        monkeypatch.setenv("GIT_CONFIG_PARAMETERS", "'credential.helper'='store'")
+
+        env = _git_env(PUBLIC_REPO_URL, None)
+
+        assert env["HTTPS_PROXY"] == "http://proxy.example.com:3128"
+        assert env["GIT_SSL_CAINFO"] == "/etc/ssl/private-ca.pem"
+        assert "JWT_SECRET_KEY" not in env and "GIT_CONFIG_PARAMETERS" not in env
 
 
 class TestMaskTokenInLog:
