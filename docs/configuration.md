@@ -168,9 +168,11 @@ identified and how much they may do.
 ## Auto venv bootstrap (Git mode)
 
 After cloning a Python project, Packwright creates its virtual environment with uv: `uv sync
---frozen` when a `uv.lock` exists, otherwise `uv sync`, or `uv venv` plus
-`uv pip install -r requirements.txt`. Projects with neither `pyproject.toml` nor
-`requirements.txt` skip this step.
+--frozen --no-default-groups` when a `uv.lock` exists, otherwise `uv sync --no-default-groups`, or
+`uv venv` plus `uv pip install -r requirements.txt`. Projects with neither `pyproject.toml` nor
+`requirements.txt` skip this step. `--no-default-groups` keeps development groups such as `dev`
+(pytest, ruff, …) out of the build: in External mode everything in the `.venv` is copied to `libs/` and
+shipped. A group the program needs is chosen per build (*Dependency group*) and added with `--group`.
 
 | Variable | Default | Description |
 |---|---|---|
