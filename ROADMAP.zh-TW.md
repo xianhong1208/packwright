@@ -42,9 +42,3 @@ GitLab token 後備的安全問題。
 ## 以後
 
 - **放在 MCP Gate 後面的 MCP 介面。** 從 AI 用戶端啟動建置、追蹤進度、取得產出，由 MCP Gate 的 token 決定誰能做什麼。
-
-## 還要驗證的事
-
-- **完整打包一個較大的真實專案。** MCP Gate 已經從它的 Git tag 實際打包過（1.2.0 的幾個修正就是這樣找到的）。之後會用同樣方式打包
-  一次 Forgeyard，找到的問題在這裡修。
-- **PostgreSQL。** 可以透過 `DATABASE_URL` 使用，但 CI 的測試與 schema drift 檢查只在 SQLite 上跑。

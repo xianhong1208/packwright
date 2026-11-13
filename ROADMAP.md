@@ -51,11 +51,3 @@ See [CHANGELOG.md](CHANGELOG.md) for every change.
 
 - **An MCP interface behind MCP Gate.** Start builds, follow them and fetch results from an AI client,
   with MCP Gate's tokens deciding who may do what.
-
-## Verification still to do
-
-- **A larger real project, end to end.** MCP Gate has been packaged from its Git tag for real (that run
-  found the fixes in 1.2.0). Forgeyard is to be packaged once the same way, and the problems it finds
-  fixed here.
-- **PostgreSQL.** It is supported through `DATABASE_URL`, but CI runs the tests and the schema-drift
-  check on SQLite only.
