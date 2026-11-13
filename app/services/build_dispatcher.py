@@ -292,7 +292,9 @@ async def _build_docker_nuitka(task_id: str, config: BuildConfig, db: AsyncSessi
 
     if not nuitka_success:
         await task_manager.update_task(task_id, "status", TaskStatus.FAILED, db)
-        await task_manager.update_task(task_id, "status_msg", "Nuitka compilation failed")
+        await task_manager.update_task(
+            task_id, "status_msg", await _backend_failure_message(task_id, "Nuitka compilation failed")
+        )
         return
 
     # Docker image build with precompiled binary
@@ -328,7 +330,18 @@ async def _build_backend_only(task_id: str, config: BuildConfig, db: AsyncSessio
         await task_manager.update_task(task_id, "status_msg", "Build complete")
     else:
         await task_manager.update_task(task_id, "status", TaskStatus.FAILED, db)
-        await task_manager.update_task(task_id, "status_msg", "Backend compile failed — see the log below")
+        await task_manager.update_task(
+            task_id, "status_msg", await _backend_failure_message(task_id, "Backend compile failed — see the log below")
+        )
+
+
+async def _backend_failure_message(task_id: str, otherwise: str) -> str:
+    """What the task says when run_nuitka_build returned False: the smoke test
+    when that is what failed (the compile itself succeeded), else ``otherwise``."""
+    task = await task_manager.get_task(task_id)
+    if task is not None and task.stage == "verify":
+        return "Smoke test failed — the program was built but did not start; see the log below"
+    return otherwise
 
 
 async def _build_frontend_only(task_id: str, config: BuildConfig, db: AsyncSession) -> None:
@@ -438,7 +451,9 @@ async def _build_fullstack(task_id: str, config: BuildConfig, db: AsyncSession) 
         await task_manager.update_task(task_id, "status_msg", "Fullstack build complete")
     else:
         await task_manager.update_task(task_id, "status", TaskStatus.FAILED, db)
-        await task_manager.update_task(task_id, "status_msg", "Backend build failed")
+        await task_manager.update_task(
+            task_id, "status_msg", await _backend_failure_message(task_id, "Backend build failed")
+        )
 
 
 async def _prepare_venv(

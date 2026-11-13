@@ -268,11 +268,15 @@ def diagnose_build_failure(log_text: str) -> list[dict]:
 
     # ------------------------------------------------------------------
     # 7. npm / frontend build fail
-    #    npm ERR!  OR  (vite build AND error)  OR  Cannot find module
+    #    npm ERR!  OR  vite's "error during build"  OR  Cannot find module
     # ------------------------------------------------------------------
     try:
         npm_err = "npm err!" in text_lower
-        vite_err = "vite build" in text_lower and "error" in text_lower
+        # Vite says "error during build:" when it fails. "vite build" plus the
+        # word "error" anywhere in the log matched every fullstack build that
+        # failed later for any reason: MCP Gate's smoke test ("Error loading
+        # config") was reported as "Frontend build failed".
+        vite_err = "error during build" in text_lower
         cant_find = "cannot find module" in text_lower
         if npm_err or vite_err or cant_find:
             if npm_err:
@@ -280,7 +284,7 @@ def diagnose_build_failure(log_text: str) -> list[dict]:
             elif cant_find:
                 needle = "cannot find module"
             else:
-                needle = "vite build"
+                needle = "error during build"
             evidence = _line_containing(text_lower, text, needle)
             add(
                 "Frontend build failed",

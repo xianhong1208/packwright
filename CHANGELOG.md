@@ -6,6 +6,13 @@ follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this proje
 
 ## [Unreleased]
 
+### Fixed
+- A failed smoke test is reported as one. The build said "Nuitka compilation failed" although the compile had
+  succeeded, its failure report named the stage "finishing up", and on a full-stack build the diagnosis read
+  "Frontend build failed", because that rule fired on "vite build" plus the word "error" anywhere in the log. The
+  task now says "Smoke test failed", the report names the verification stage, and the frontend rule needs vite's
+  own "error during build".
+
 ## [1.3.2] — 2026-11-13
 
 ### Changed

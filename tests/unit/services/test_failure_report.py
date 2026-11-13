@@ -328,3 +328,44 @@ class TestDiagnosisActions:
                 for key in action["overrides"]:
                     assert key in fields, f"{key} is not a BuildConfig field"
         assert seen >= 2
+
+
+# A fullstack build of MCP Gate whose frontend built fine and whose smoke test then
+# failed, cut down to the lines that matter.
+_SMOKE_FAILED_AFTER_VITE = (
+    "=== Building frontend ===\n"
+    "npm notice run vite build\n"
+    "vite v6.4.5 building for production...\n"
+    "✓ built in 6.65s\n"
+    "=== Step 2: Nuitka Compilation (Host) ===\n"
+    "Nuitka: Successfully created 'dist/main'.\n"
+    "Verify: ✗ Binary exited with code 1: Error loading config: Missing config file(s) in /app/config\n"
+    "Smoke test failed — marking build as failed\n"
+)
+
+
+class TestSmokeFailureIsNotTheFrontend:
+    """A fullstack build's log always says "vite build"; the frontend rule fired
+    whenever the word "error" appeared anywhere else, so MCP Gate's failed smoke
+    test was reported as "Frontend build failed"."""
+
+    @pytest.mark.unit
+    def test_tc_fail_030_a_smoke_failure_after_vite_is_not_a_frontend_failure(self):
+        """TC-FAIL-030: diagnose — a later error does not make a successful vite build a failed one."""
+        problems = [d["problem"] for d in diagnose_build_failure(_SMOKE_FAILED_AFTER_VITE)]
+        assert "Frontend build failed" not in problems
+
+    @pytest.mark.unit
+    def test_tc_fail_031_the_report_names_verification(self):
+        """TC-FAIL-031: build_failure_report — with the stage at verify, the report says the test run failed."""
+        report = build_failure_report(_SMOKE_FAILED_AFTER_VITE, stage="verify")
+        assert report["failed_stage"] == "verify"
+        assert report["diagnosis"][0]["problem"].startswith("Failed verification")
+
+    @pytest.mark.unit
+    def test_tc_fail_032_a_failed_vite_build_is_still_a_frontend_failure(self):
+        """TC-FAIL-032: diagnose — vite's own failure line still points at the frontend."""
+        log = "npm notice run vite build\nvite v6.4.5 building for production...\nerror during build:\n[vite]: Rollup failed to resolve import \"x\""
+        diagnoses = diagnose_build_failure(log)
+        assert diagnoses[0]["problem"] == "Frontend build failed"
+        assert diagnoses[0]["evidence"] == "error during build:"
