@@ -616,14 +616,17 @@ async def update_role(
         role.description = data.description
     if data.is_active is not None and not role.is_system:
         role.is_active = data.is_active
-    if data.parent_role_id is not None:
-        # Verify parent role exists and prevent circular reference
+    # Leaving parent_role_id out keeps the parent; sending null clears it. The
+    # other fields read null as "unchanged", and this one did too, so the Roles
+    # dialog (which sends null when the parent is removed) could never clear it.
+    # 0 still clears, for clients written against that older convention.
+    if "parent_role_id" in data.model_fields_set:
         if data.parent_role_id == role_id:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail="Role cannot be its own parent",
             )
-        if data.parent_role_id != 0:
+        if data.parent_role_id:
             result = await db.execute(select(Role).where(Role.id == data.parent_role_id))
             if not result.scalar_one_or_none():
                 raise HTTPException(

@@ -38,6 +38,8 @@ class RoleUpdate(BaseModel):
     display_name: str | None = None
     description: str | None = None
     permission_codes: list[str] | None = None
+    # Unlike the fields above, null here is a value: it clears the parent.
+    # Leave the field out to keep the current parent.
     parent_role_id: int | None = None
     is_active: bool | None = None
 

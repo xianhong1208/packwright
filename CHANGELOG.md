@@ -24,6 +24,13 @@ follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this proje
 - `minimatch` under typescript-eslint is held at 11.0.1 or later (GHSA-g3hv-75wg-m249, a denial of service
   through crafted glob patterns). It is a lint-time dependency only and never reaches the built console.
 
+### Fixed
+- A role's parent can be removed. Clearing the parent in the Roles dialog sent `parent_role_id: null`, which
+  `PUT /api/users/roles/{id}` read as "unchanged", so a parent could be set but never taken away. Null now
+  clears the parent, leaving the field out keeps it, and `0` still clears it as before. Removing a parent
+  goes through the same check as any role change: it is refused if no active account would be left able
+  to manage roles. The dialog's empty parent field reads "No parent role".
+
 ## [1.3.1] — 2026-11-09
 
 ### Fixed
