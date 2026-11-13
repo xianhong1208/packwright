@@ -13,6 +13,16 @@ follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this proje
   credentials sections moved to `docs/how-it-works.md` (and `.zh-TW.md`).
 - `MCP_CENTER_URL`, MCP Gate's name before its rename, is no longer read as a fallback for `MCP_GATE_URL`;
   set `MCP_GATE_URL` instead.
+- Dependencies updated within their major versions, both lock files regenerated: Nuitka 4.3.5, uvicorn
+  0.54, FastAPI 0.162.6, SQLAlchemy 2.1.8, asyncpg 0.32, psycopg2-binary 2.9.13, cryptography 50.0.2, pytest
+  9.2; TanStack Query 5.107, Recharts 3.10, Zustand 5.1, Vite 7.3.8, Tailwind CSS 4.3, typescript-eslint 8.72.
+  The Docker image now copies uv 0.13.8 and the Docker 28 CLI, and CI uses `actions/setup-python@v7` and
+  `actions/cache@v6`. TypeScript 7 and Node 25 stay out until they pass CI, and `eslint-plugin-react-hooks`
+  stays on 7.0 (7.1 turns on rules the console does not pass yet).
+
+### Security
+- `minimatch` under typescript-eslint is held at 11.0.1 or later (GHSA-g3hv-75wg-m249, a denial of service
+  through crafted glob patterns). It is a lint-time dependency only and never reaches the built console.
 
 ## [1.3.1] — 2026-11-09
 
