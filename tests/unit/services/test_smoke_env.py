@@ -313,3 +313,12 @@ class TestSmokeTestLeavesNoState:
         await nuitka_worker._smoke_test("t", binary, tmp_path)
 
         assert any("settings.json" in str(c.args[1]) and "changed" in str(c.args[1]) for c in log.call_args_list)
+
+
+@pytest.mark.unit
+def test_tc_smk_021_bytecode_caches_are_counted_not_listed():
+    """TC-SMK-021: the log names what matters (data, secrets) and counts the caches."""
+    from app.services.nuitka_worker import _describe_removed
+
+    text = _describe_removed(["data", "libs/a/__pycache__", "libs/b/__pycache__", "secrets"])
+    assert text == "data, secrets, 2 __pycache__ folders"

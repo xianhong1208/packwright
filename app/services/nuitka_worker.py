@@ -836,6 +836,19 @@ def _undo_smoke_writes(root: Path, before: dict[str, tuple[int, int] | None]) ->
     return removed, changed
 
 
+def _describe_removed(removed: list[str]) -> str:
+    """The removed paths for the log, with Python's bytecode caches counted rather
+    than listed: MCP Gate's run left one in nearly every package in libs/."""
+    caches = [p for p in removed if Path(p).name == "__pycache__"]
+    named = [p for p in removed if Path(p).name != "__pycache__"]
+    parts = named[:20]
+    if len(named) > 20:
+        parts.append(f"{len(named) - 20} more")
+    if caches:
+        parts.append(f"{len(caches)} __pycache__ folder{'s' if len(caches) != 1 else ''}")
+    return ", ".join(parts)
+
+
 async def _smoke_test(
     task_id: str,
     binary: Path,
@@ -848,11 +861,9 @@ async def _smoke_test(
         return await _run_smoke_test(task_id, binary, cwd, extra_env)
     finally:
         removed, changed = await asyncio.to_thread(_undo_smoke_writes, cwd, before)
-        if removed or changed:
+        if removed:
             await task_manager.append_log(
-                task_id,
-                "Smoke test: removed what the program wrote in the output directory: "
-                + (", ".join(removed) if removed else "nothing"),
+                task_id, "Smoke test: removed what the program wrote in the output directory: " + _describe_removed(removed)
             )
         if changed:
             await task_manager.append_log(
