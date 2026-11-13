@@ -6,6 +6,12 @@ follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this proje
 
 ## [Unreleased]
 
+### Changed
+- Docs: roadmap and README rewritten. `ROADMAP.md` and `ROADMAP.zh-TW.md` list what shipped and the plan for
+  1.3.2 to 1.7, each item with a GitHub issue under its milestone; the READMEs lead with a screenshot, key
+  features, installation and a quick start, and the build pipeline, main settings, storage and Git
+  credentials sections moved to `docs/how-it-works.md` (and `.zh-TW.md`).
+
 ## [1.3.1] — 2026-11-09
 
 ### Fixed

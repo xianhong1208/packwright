@@ -1,8 +1,9 @@
 # Configuration reference
 
 Every setting Packwright reads, with its default and what it does. For an overview and the
-handful of settings most installs touch, see the [Configuration](../README.md#configuration)
-and [Storage & data](../README.md#storage--data) sections of the README.
+handful of settings most installs touch, see [The settings most installs
+touch](how-it-works.md#the-settings-most-installs-touch) and [Storage & data](how-it-works.md#storage--data)
+in How Packwright works.
 
 ## How settings are loaded
 

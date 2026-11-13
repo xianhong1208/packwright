@@ -1,28 +1,64 @@
 # Packwright
 
-**A full-stack build & packaging platform.** Point it at a local path or a Git URL and it compiles Python to a standalone executable with [Nuitka](https://nuitka.net/), builds frontends with npm / yarn / pnpm / bun, packages the two together, and can export the result as a Docker image `.tar.gz` — all from a web console with live build logs, user accounts and role-based permissions.
+[![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
+[![CI](https://github.com/xianhong1208/packwright/actions/workflows/ci.yml/badge.svg?branch=dev)](https://github.com/xianhong1208/packwright/actions/workflows/ci.yml)
+[![Latest release](https://img.shields.io/github/v/release/xianhong1208/packwright)](https://github.com/xianhong1208/packwright/releases/latest)
 
-Packwright was called *Build Center* up to v1.0.0. Names that live in existing data keep the old spelling, so nothing needs migrating: the SQLite file `data/build_center.db`, the default PostgreSQL database `build_center`, and the `BUILD_CENTER_SMOKE_TEST` variable that smoke-tested binaries still receive (alongside the new `PACKWRIGHT_SMOKE_TEST`). The systemd unit is now `deploy/packwright.service`.
+**A self-hosted build server that turns a Python backend and its web frontend into one standalone
+program, or a Docker image, from a web console.**
 
-[繁體中文](README.zh-TW.md) · [Quick start](#quick-start) · [How it works](#how-it-works) · [Configuration](#configuration) · [Git credentials](#git-credentials) · [All settings](docs/configuration.md) · [Detailed manual (zh-TW)](docs/manual.zh-TW.md)
+[Quick start (zh-TW)](docs/quickstart.zh-TW.md) · [Manual (zh-TW)](docs/manual.zh-TW.md) ·
+[繁體中文](README.zh-TW.md) · [Roadmap](ROADMAP.md) · [Changelog](CHANGELOG.md)
+
+Point Packwright at a folder on the server or a Git URL. It compiles Python to a standalone executable
+with [Nuitka](https://nuitka.net/), builds the frontend with npm, yarn, pnpm or bun, packages the two
+together and can export the result as a Docker image `.tar.gz`, with live build logs, projects and
+versions, accounts and role-based permissions.
+
+![The Packwright home page: running and recent builds by day, the last 30 days and the machine's load](docs/images/dashboard.png)
+
+## What's new
+
+**1.3.1** (2026-11-09) fixes what a full review found: a role change can no longer lock everyone out, a
+local build's download is that build's output only, the entry point must be inside the project, git
+never uses the server's own git login, and browsing no longer hits the rate limit. 1.3.0 stopped builds
+from seeing the service's secrets. See [CHANGELOG.md](CHANGELOG.md), and [ROADMAP.md](ROADMAP.md) for
+what comes next.
 
 ## Key features
 
-- **Four build modes.** Backend-only (Nuitka), frontend-only (any Node package manager), full-stack (frontend bundled into the Nuitka build as data), and Docker output (the build packaged into an image and exported as `.tar.gz`).
-- **Projects and versions.** Every build is filed under a project (the same name and source). A project's page lists its versions and builds a new one in one dialog; the version is read from the Git tag, pyproject.toml or package.json, names the download, tags the Docker image and is written into a `VERSION` file. Projects are shared by everyone who may build.
-- **Notifications.** A project can send how its builds end to Discord, Slack or any URL that takes JSON: failed builds with the diagnosis, passed ones with how long they took. No mail server needed; webhook URLs are stored encrypted and never shown again.
-- **Quick build.** Point it at a folder or a Git URL and it reads the project: backend, frontend or full stack, the entry point, where `package.json` is, the Python version and dependency groups. One click starts the build; every setting is still there under *All settings*.
-- **Local path or Git URL sources.** Git mode clones the repo, bootstraps a `.venv` with `uv sync`, builds, and cleans the workspace afterward. SSRF-hardened URL validation, argv-only subprocess calls, and per-host clone timeouts.
-- **Git credentials managed in the console.** Add GitHub, GitLab and self-hosted tokens in the UI; they are stored encrypted and chosen automatically by the clone URL's host — no secrets in `.env`.
-- **Live logs and history.** Every build streams over WebSocket; finished builds keep a full record with the exact config that produced them, so a rebuild is deterministic.
-- **Accounts, roles, permissions.** JWT sessions with refresh-token rotation, an RBAC model (users / roles / permissions), login history and an audit log. First run creates the administrator.
-- **Built to run unattended.** Background sweeps reclaim workspace and exported-image disk on a TTL, and a systemd unit keeps the service up.
+- **Four build modes.** Backend only (Nuitka), frontend only (any Node package manager), full stack
+  (the frontend bundled into the Nuitka build as data), and Docker output (the build packaged into an
+  image and exported as `.tar.gz`).
+- **Quick build.** Give it a folder or a Git URL and it reads the project: backend, frontend or full
+  stack, the entry point, where `package.json` is, the Python version and dependency groups. One click
+  starts the build; every setting is still there under *All settings*.
+- **Projects and versions.** Every build is filed under a project (the same name and source). A
+  project's page lists its versions and builds a new one in one dialog; the version is read from the Git
+  tag, `pyproject.toml` or `package.json`, names the download, tags the Docker image and is written into
+  a `VERSION` file. Projects are shared by everyone who may build.
+- **Local path or Git URL sources.** Git mode clones the repository, bootstraps a `.venv` with
+  `uv sync`, builds, and cleans the workspace afterwards. URLs are validated against SSRF, subprocesses
+  get argument lists only, and each clone has a time limit.
+- **Git credentials managed in the console.** GitHub, GitLab and self-hosted tokens are stored
+  encrypted and chosen by the clone URL's host; no secrets in `.env`.
+- **Live logs and history.** Every build streams over WebSocket; a finished build keeps the exact
+  settings that produced it, so a rebuild does the same thing.
+- **Notifications.** A project can send how its builds end to Discord, Slack or any URL that takes JSON:
+  failed builds with the diagnosis, passed ones with how long they took.
+- **Faster rebuilds.** With [ccache](https://ccache.dev/) installed, Nuitka reuses the C files that did
+  not change, and builds running together share the machine's cores.
+- **Accounts, roles, permissions.** JWT sessions with refresh-token rotation, roles and permissions,
+  login history and an audit log. The first start creates the administrator.
+- **Built to run unattended.** Background sweeps reclaim workspace and exported-image disk space on a
+  schedule, and a systemd unit or Docker keeps the service up.
 
-## Install
+## Installation
 
 ### With Docker
 
-The image carries everything builds need: the Nuitka toolchain for Python 3.12 to 3.14, ccache, Node.js (npm, yarn and pnpm through corepack), git and the docker CLI.
+The image carries everything builds need: the Nuitka toolchain for Python 3.12 to 3.14, ccache,
+Node.js (npm, yarn and pnpm through corepack), git and the docker CLI.
 
 ```bash
 git clone https://github.com/xianhong1208/packwright.git
@@ -31,18 +67,26 @@ docker compose up -d
 docker compose logs packwright | grep "bootstrap admin"   # the first sign-in password
 ```
 
-Open `http://localhost:5018` and sign in as **`admin`**. Everything Packwright keeps (database, generated secrets, workspaces, outputs, the compile cache) is in the `packwright-data` volume, so `docker compose up -d --build` after a `git pull` upgrades without losing anything. Builds run as uid 1000 inside the container. `docker-compose.yml` shows how to let builds read folders on the host and, if you trust every account, use the host's Docker for Docker output.
+Everything Packwright keeps (database, generated secrets, workspaces, outputs, the compile cache) is in
+the `packwright-data` volume, so `docker compose up -d --build` after a `git pull` upgrades without
+losing anything. Builds run as uid 1000 inside the container. `docker-compose.yml` shows how to let
+builds read folders on the host and, if you trust every account, use the host's Docker for Docker
+output.
 
 ### From source
 
-**Prerequisites:** Python 3.13+, [uv](https://docs.astral.sh/uv/), Node.js 22.12+ (to build the console, and for frontend builds), and — for the engines they drive — Nuitka's toolchain (a C compiler) and Docker (for Docker output). The database is a local SQLite file by default (no setup); PostgreSQL is optional (set `DATABASE_URL`). `pigz` is optional and speeds up image compression. [ccache](https://ccache.dev/) is optional and strongly recommended: with it, Nuitka reuses the C files that did not change, so a rebuild can be several times faster (the **Machine** page says whether it is on).
+**Prerequisites:** Python 3.13+, [uv](https://docs.astral.sh/uv/), Node.js 22.12+ (to build the console,
+and for frontend builds), a C compiler for Nuitka, and Docker for Docker output. The database is a local
+SQLite file by default; PostgreSQL is optional (set `DATABASE_URL`). `pigz` is optional and speeds up
+image compression. ccache is optional and strongly recommended: a rebuild can be several times faster
+(the **Machine** page says whether it is on).
 
 ```bash
 git clone https://github.com/xianhong1208/packwright.git
 cd packwright
-uv sync                       # backend deps
+uv sync                       # backend dependencies
 cd frontend && npm install && npm run build && cd ..
-cp .env.example .env          # optional; SQLite works with no config
+cp .env.example .env          # optional; SQLite works with no configuration
 ```
 
 ## Quick start
@@ -51,112 +95,57 @@ cp .env.example .env          # optional; SQLite works with no config
 uv run python main.py         # applies migrations, then serves on http://0.0.0.0:5018
 ```
 
-- Open `http://localhost:5018` and sign in as **`admin`** with the password printed in the startup log (`Created bootstrap admin 'admin' with generated password: …`). It is generated on first start and shown only once — change it after logging in, or set `BOOTSTRAP_ADMIN_USERNAME` / `BOOTSTRAP_ADMIN_PASSWORD` before first start.
-- **Add a Git credential** (optional, for private repos): **Git credentials** (left rail) → choose GitHub, GitLab or a self-hosted server, paste a personal access token.
-- **Create a build**: pick Local path or Git URL, choose the mode, and submit. Logs stream live; the finished artifact is downloadable (or exported as a Docker image `.tar.gz`).
+1. Open `http://localhost:5018` and sign in as **`admin`** with the password printed in the startup
+   log (`Created bootstrap admin 'admin' with generated password: …`). It is generated on first start
+   and shown only once: change it after signing in, or set `BOOTSTRAP_ADMIN_USERNAME` /
+   `BOOTSTRAP_ADMIN_PASSWORD` before the first start.
+2. To build from a folder on the server, set `LOCAL_SOURCE_ROOTS` to the folders builds may read (empty
+   disables local builds). For private repositories, add a token under **Git credentials** in the left
+   rail (GitHub, GitLab or a self-hosted server).
+3. Choose **New build**, give it the folder or the Git URL, check what Quick build found, and press
+   **Start build**. The log streams live; the finished program is downloadable from the build's page, or
+   exported as a Docker image `.tar.gz`.
 
-For a development frontend with hot reload, run `npm run dev` in `frontend/` (it proxies the API to `:5018`). A step-by-step walkthrough (in Traditional Chinese) is in [docs/quickstart.zh-TW.md](docs/quickstart.zh-TW.md).
+A step-by-step walkthrough, in Traditional Chinese, is in
+[docs/quickstart.zh-TW.md](docs/quickstart.zh-TW.md).
 
-## How it works
+## Deployment options
 
-```
-Console (React + antd)  ──HTTP / WebSocket──▶  FastAPI
-                                                 │
-   auth (JWT + RBAC) ── tasks ── monitoring      │
-                                                 ▼
-                          build dispatcher ──▶ Nuitka / npm / Docker workers
-                                                 │  (git clone → uv sync → build)
-                                                 ▼
-                          artifacts + Docker image .tar.gz
-```
+- **Docker Compose** (above): one container with every build tool, data in a volume.
+- **A system service:** `deploy/packwright.service` is an example systemd unit; adjust its
+  `WorkingDirectory`, `ExecStart` and `PATH`, then `systemctl enable --now packwright`.
+- **Behind a reverse proxy:** put HTTPS in front, forward WebSockets (`/ws/`) so logs stream live, and
+  set `TRUSTED_PROXY_IPS` to the proxy's address.
+- **One worker only.** Task state, WebSocket connections and build slots live in the process, so run a
+  single uvicorn worker; `MAX_CONCURRENT_BUILDS` (default 3) bounds builds at once and the rest queue.
 
-- **Sources.** A build is either a *local path* (confined to `LOCAL_SOURCE_ROOTS`) or a *Git URL*. Git mode validates the URL (no `file://`, `ssh://`, localhost, link-local or credential-bearing URLs), clones at a specific branch/tag, and — for Python projects — bootstraps a `.venv` before building. git sends only the credentials stored in Packwright, never the server account's own git configuration or login.
-- **Token injection.** For a private repo the token for that host is looked up, decrypted, and handed to `git` only for that call, as an HTTP auth header scoped to the repository's origin (through `GIT_CONFIG_*` environment variables, so it is not on the command line either). It never appears in the URL, the stored build config or the log, and the API never returns it.
-- **Concurrency.** `MAX_CONCURRENT_BUILDS` bounds simultaneous builds (of every kind) behind a semaphore, and the rest queue; builds of one local folder run one at a time and wait for it without holding a slot; the process is intentionally single-worker because task state, WebSocket connections and the build semaphore live in process memory.
-- **Cleanup.** A background loop deletes per-task workspaces and exported images by status and age, and (optionally) shrinks a successful build's workspace to just its output.
+Every setting is an environment variable and none is required: the ones most installs touch and where
+the data lives are in [How Packwright works](docs/how-it-works.md); every setting with its default is
+in [docs/configuration.md](docs/configuration.md).
 
-## Configuration
+**Security.** Packwright runs build commands from the projects it builds, so anyone who may start a
+build can run code as the service's user: approving accounts is the real security boundary. URL
+validation, path confinement, a filtered build environment and rate limits are defence in depth, not a
+sandbox. Run it on an isolated host behind HTTPS, and keep `TRUSTED_PROXY_IPS` empty unless a proxy
+really rewrites `X-Forwarded-For`. [SECURITY.md](SECURITY.md) has the trust model, the known
+limitations and how to report a vulnerability.
 
-Everything is environment-driven, and nothing is required. `.env.example` lists the essentials and [docs/configuration.md](docs/configuration.md) documents every setting. The most important ones:
+## Documentation
 
-| Variable | Default | Description |
-|---|---|---|
-| `DATABASE_URL` | *(empty → SQLite)* | A local SQLite file by default; set a `postgresql+asyncpg://…` DSN to use PostgreSQL. |
-| `HOST` / `PORT` | `0.0.0.0` / `5018` | Bind address. |
-| `JWT_SECRET_KEY` | auto | Session signing key; generated to `.env` on first start if empty. |
-| `SETTINGS_ENCRYPTION_KEY` | auto | Encrypts stored Git tokens; generated to `.env` if empty. |
-| `CORS_ORIGINS` | dev ports | CSV of browser origins allowed to call the API. |
-| `GIT_WORKSPACE_DIR` | `./data/workspace` | Where clones and build workspaces live, and where each non-Docker build's output is kept and downloaded from (local builds included). |
-| `DOCKER_IMAGES_DIR` | `./data/docker_images` | Where exported Docker images (`.tar.gz`) are written. |
-| `NUITKA_CACHE_DIR` | *(empty → `~/.cache/Nuitka`)* | Nuitka's cache, including the ccache store that makes rebuilds faster. |
-| `LOCAL_SOURCE_ROOTS` | *(empty)* | CSV of absolute prefixes a local-source build may read; empty disables local mode. |
-| `UV_BIN` / `PRE_BUILD_PATH` | auto | uv binary and subprocess PATH; auto-detected when empty. |
-| `BUILD_ENV_PASSTHROUGH` | *(empty)* | CSV of extra host variables builds may see. Builds get only the basics, proxy/CA settings and tool configuration (`NPM_CONFIG_*`, `DOCKER_*`, …), never the service's secrets. |
-| `MAX_CONCURRENT_BUILDS` | `3` | Simultaneous builds; the rest wait in the queue. |
-| `PUBLIC_URL` | *(empty)* | The address people open Packwright at; build notifications link to the build with it. |
-| `TRUSTED_PROXY_IPS` | *(empty)* | Proxy IPs whose `X-Forwarded-For` may be trusted; empty is safest. |
-| `RATE_LIMIT_PER_MINUTE` / `RATE_LIMIT_PER_HOUR` | `300` / `6000` | API requests one client address may make (everyone behind one NAT or proxy shares it); sign-in, registration and build submission have their own, stricter limits. |
-
-## Storage & data
-
-Packwright writes everything under a single `data/` directory. By default these paths are **relative to the working directory you launch from** (where you run `uv run python main.py`), so a default install keeps all state inside the project:
-
-```
-data/
-├── build_center.db     # SQLite database (users, roles, history, Git credentials)
-├── workspace/          # one dir per build: clone, .venv, and the compiled output
-└── docker_images/      # exported Docker images, as <task-id>.tar.gz
-```
-
-**Where a finished build ends up:**
-- **Binary / bundle** (backend, frontend, full-stack): stays in that build's workspace under `data/workspace/<task-id>/`, and the console's **Download** button streams it from there.
-- **Docker output**: the image is saved to `data/docker_images/` as a `.tar.gz`; load it later with `docker load -i <file>`.
-
-**Relocating storage** (e.g. onto a larger disk) — set absolute paths in `.env` and restart:
-
-```bash
-GIT_WORKSPACE_DIR=/srv/packwright/workspace     # clones, builds, downloadable outputs
-DOCKER_IMAGES_DIR=/srv/packwright/docker_images # exported image tarballs
-# Move the database too (SQLite file, or point at PostgreSQL):
-DATABASE_URL=sqlite+aiosqlite:////srv/packwright/build_center.db
-```
-
-Put `GIT_WORKSPACE_DIR` on the same filesystem as `BOOTSTRAP_UV_CACHE_DIR` so `uv` can hardlink instead of copying during dependency install.
-
-**Retention** — a background sweep reclaims disk on a TTL, so the disk doesn't grow without bound. Because a non-Docker output is downloaded from its workspace, the success TTL doubles as *how long that output stays downloadable*:
-
-| Variable | Default | What it keeps |
-|---|---|---|
-| `WORKSPACE_SUCCESS_TTL_DAYS` | `7` | Successful non-Docker workspaces (i.e. how long the output is downloadable). |
-| `WORKSPACE_FAILED_TTL_DAYS` | `30` | Failed / cancelled workspaces (kept longer for debugging). |
-| `DOCKER_IMAGES_TTL_DAYS` | `30` | Exported image tarballs. |
-
-On a successful build the workspace is also trimmed automatically: a non-Docker build's workspace is shrunk to just its output (dropping the clone, `.venv` and `.git`), and a Docker build's workspace is deleted outright since the image tarball already holds the result.
-
-## Git credentials
-
-Access tokens for private repositories are managed in the console (**Git credentials** in the left rail, `user:manage` permission), not in `.env`:
-
-- One token per host, for **GitHub**, **GitLab**, or a self-hosted instance (any host).
-- Tokens are encrypted at rest with `SETTINGS_ENCRYPTION_KEY` and never returned by the API — the UI shows only the last four characters.
-- When a build clones a URL, the token whose host matches exactly is selected automatically.
-- `GITLAB_TOKEN` in `.env` remains a fallback when no stored credential matches, sent only to the exact host in `GITLAB_TOKEN_HOST` (default `gitlab.com`; set it to your server's name for a self-hosted GitLab).
-
-## Testing
-
-```bash
-uv run pytest -q tests/unit          # backend unit tests (DB-free)
-cd frontend && npx vitest run        # frontend unit tests
-```
-
-## Security & trust model
-
-Packwright runs untrusted build commands by design, so account approval is the real security boundary: anyone who can create a task can run code as the service user. Git URL validation, local-path confinement, subprocess argv-only calls, token masking and rate limiting are defence in depth, not a sandbox. Run it on an isolated host, front it with HTTPS, and keep `TRUSTED_PROXY_IPS` empty unless a proxy actually rewrites `X-Forwarded-For`. [SECURITY.md](SECURITY.md) has the full trust model, known limitations and how to report a vulnerability.
+| | |
+|---|---|
+| [Quick start (zh-TW)](docs/quickstart.zh-TW.md) | the first build in five minutes |
+| [Manual (zh-TW)](docs/manual.zh-TW.md) | every page and flow of the console, deployment, troubleshooting |
+| [How Packwright works](docs/how-it-works.md) | what happens to a build, the main settings, where data lives, Git credentials |
+| [Configuration reference](docs/configuration.md) | every setting with its default |
+| [SECURITY.md](SECURITY.md) | trust model, known limitations, reporting a vulnerability |
+| [ROADMAP.md](ROADMAP.md) | what is shipped and what comes next |
 
 ## Contributing
 
-Setup, the checks CI runs, branch and commit conventions, and the release steps are in [CONTRIBUTING.md](CONTRIBUTING.md). Changes are listed in [CHANGELOG.md](CHANGELOG.md).
+Setup, the checks CI runs, branch and commit conventions and the release steps are in
+[CONTRIBUTING.md](CONTRIBUTING.md). Changes are listed in [CHANGELOG.md](CHANGELOG.md).
 
-## License
+## Licence
 
 [MIT](LICENSE)

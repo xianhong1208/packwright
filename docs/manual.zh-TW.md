@@ -577,7 +577,7 @@ data/
 └── docker_images/      # 匯出的 image,<task-id>.tar.gz
 ```
 
-可以用 `DATABASE_URL`、`GIT_WORKSPACE_DIR`、`DOCKER_IMAGES_DIR` 搬到其他磁碟(見 README 的
+可以用 `DATABASE_URL`、`GIT_WORKSPACE_DIR`、`DOCKER_IMAGES_DIR` 搬到其他磁碟(見[運作方式](how-it-works.zh-TW.md#儲存與資料)的
 「儲存與資料」)。`GIT_WORKSPACE_DIR` 與 `BOOTSTRAP_UV_CACHE_DIR` 放在同一個檔案系統,uv 才能用
 硬連結而不是複製。
 
