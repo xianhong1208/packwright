@@ -13,8 +13,8 @@ in How Packwright works.
   are resolved against the launch directory, so launch from the Packwright directory
   (`start.sh` and the systemd unit do) unless you set absolute paths.
 - The variable name is the setting name in upper case (`MAX_CONCURRENT_BUILDS`); matching is
-  case-insensitive. The one exception is `MCP_GATE_URL`, which also accepts the legacy name
-  `MCP_CENTER_URL` when `MCP_GATE_URL` is not set.
+  case-insensitive. `MCP_CENTER_URL`, MCP Gate's name before its rename, is no longer read:
+  set `MCP_GATE_URL`.
 - Lists (`CORS_ORIGINS`, `TRUSTED_PROXY_IPS`, `GIT_ALLOWED_HOSTS`, `LOCAL_SOURCE_ROOTS`) are
   comma-separated; surrounding spaces and empty entries are ignored.
 - Booleans accept `true`/`false`, `1`/`0`, `yes`/`no`, `on`/`off`.
@@ -132,7 +132,7 @@ very first account in the database, which becomes an active administrator).
 | Variable | Default | Description |
 |---|---|---|
 | `MCP_OAUTH_ENABLED` | `false` | Turns MCP Gate sign-in on. It is only offered when this is true **and** `MCP_GATE_URL` and `MCP_OAUTH_CLIENT_ID` are both set. |
-| `MCP_GATE_URL` | `http://localhost:4568` | MCP Gate's issuer URL (its `OAUTH_ISSUER`); the browser is sent to `<MCP_GATE_URL>/oauth/authorize`. Must match the issuer exactly, including `localhost` vs `127.0.0.1`. The legacy name `MCP_CENTER_URL` is read when this one is not set. |
+| `MCP_GATE_URL` | `http://localhost:4568` | MCP Gate's issuer URL (its `OAUTH_ISSUER`); the browser is sent to `<MCP_GATE_URL>/oauth/authorize`. Must match the issuer exactly, including `localhost` vs `127.0.0.1`. |
 | `MCP_OAUTH_CLIENT_ID` | *(empty)* | Client ID of the OAuth client registered for Packwright in MCP Gate. |
 | `MCP_OAUTH_CLIENT_SECRET` | *(empty)* | Client secret for a confidential client. Leave empty for a public client (PKCE only). |
 | `MCP_OAUTH_REDIRECT_URI` | `http://localhost:5018/auth/oauth/mcp/callback` | Callback URL MCP Gate redirects back to; it must be registered on the client exactly. Packwright also derives its own public origin from it (where users land after sign-in) and marks the SSO cookies `Secure` when it starts with `https`. Update it when you change `PORT` or put Packwright behind a domain. |

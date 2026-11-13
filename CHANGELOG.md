@@ -11,6 +11,8 @@ follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this proje
   1.3.2 to 1.7, each item with a GitHub issue under its milestone; the READMEs lead with a screenshot, key
   features, installation and a quick start, and the build pipeline, main settings, storage and Git
   credentials sections moved to `docs/how-it-works.md` (and `.zh-TW.md`).
+- `MCP_CENTER_URL`, MCP Gate's name before its rename, is no longer read as a fallback for `MCP_GATE_URL`;
+  set `MCP_GATE_URL` instead.
 
 ## [1.3.1] — 2026-11-09
 
