@@ -42,7 +42,7 @@ export default function DockerStep() {
               <Form.Item
                 name="docker_image_name"
                 label={<span style={{ color: 'var(--ink-muted)' }}>Image name</span>}
-                tooltip="e.g. myapp:latest"
+                tooltip="e.g. myapp:latest. Empty: named after the Git repository or the folder, tagged with the version."
               >
                 <Input placeholder="myapp:latest" className="input-field" />
               </Form.Item>

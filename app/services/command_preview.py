@@ -15,7 +15,7 @@ import shlex
 from pathlib import Path
 
 from app.schemas.task import BuildConfig, PackMode, ProjectType, SourceType
-from app.services.docker_worker import image_reference
+from app.services.docker_worker import default_image_repo, image_reference
 from app.services.frontend_worker import build_command, install_command
 from app.services.nuitka_worker import StdlibSelection, auto_jobs, build_nuitka_command
 
@@ -63,7 +63,7 @@ def preview_commands(config: BuildConfig) -> dict:
             notes.append(f"CPU jobs is on Auto: {jobs} here, fewer when other builds run at the same time.")
 
     if config.docker_enabled:
-        image = image_reference(config.docker_image_name, project.name, config.version)
+        image = image_reference(config.docker_image_name, default_image_repo(config), config.version)
         steps.append({"stage": "Build the Docker image", "command": f"docker build -t {shlex.quote(image)} ."})
 
     return {"steps": steps, "notes": notes}

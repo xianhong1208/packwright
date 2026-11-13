@@ -10,7 +10,7 @@ from textwrap import dedent
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.schemas.task import BuildConfig, ProjectType, PackMode
+from app.schemas.task import BuildConfig, ProjectType, PackMode, SourceType
 from app.services.source_guard import SourceGuard
 from app.services.task_manager import task_manager
 from app.services.build_env import build_environment
@@ -63,7 +63,7 @@ async def _run_docker_build(
     await task_manager.append_log(task_id, "Docker found, preparing build...")
 
     # Determine image name
-    image_name = image_reference(config.docker_image_name, project_path.name, config.version)
+    image_name = image_reference(config.docker_image_name, default_image_repo(config), config.version)
 
     await task_manager.append_log(task_id, f"Image name: {image_name}")
 
@@ -362,6 +362,22 @@ def docker_tag(version: str) -> str:
     """A version as a Docker tag: [A-Za-z0-9_.-], at most 128, not starting with . or -."""
     tag = re.sub(r"[^A-Za-z0-9_.-]", "_", version).lstrip(".-")[:128]
     return tag or "latest"
+
+
+def default_image_repo(config: BuildConfig) -> str:
+    """What an image is named after when no name is set: the repository for a Git
+    build, the folder for a local one.
+
+    A Git build is cloned into a workspace named after the task, so the folder's
+    name is a task id: packaging MCP Gate from Git produced the image
+    "be1d3c22-b30d-479d-8cc7-101d31c6ec90:1.3.1", a new repository on every build.
+    """
+    if config.source_type == SourceType.GIT and config.git_url.strip():
+        last = re.split(r"[/:]", config.git_url.strip().rstrip("/"))[-1]
+        last = re.sub(r"\.git$", "", last, flags=re.IGNORECASE)
+        if last:
+            return last
+    return Path(config.project_path).name
 
 
 def image_reference(configured: str, folder_name: str, version: str) -> str:

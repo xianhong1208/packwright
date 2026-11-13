@@ -355,6 +355,7 @@ Docker 環境變數除外),回來時還原;**Clear draft** 可以清掉。
 ### Docker
 
 不需要就保持關閉。開啟後可以設定 image 名稱、基底映像、對外 port、額外的 `RUN` 指令與環境變數。
+image 名稱留空時,Git 來源用 repo 名稱、本機來源用資料夾名稱(轉小寫),tag 是版本。
 純前端 + Docker 會包成 nginx image,可以再設定 API 反向代理與 nginx 參數,說明見
 [快速上手的 nginx 一節](./quickstart.zh-TW.md#純前端--docker-的-nginx-設定-)。
 
