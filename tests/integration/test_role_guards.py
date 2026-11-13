@@ -110,3 +110,59 @@ def test_tc_int_065_unknown_permission_codes_are_refused(client, admin_tokens):
     updated = client.put(f"/api/users/roles/{role['id']}", json={"permission_codes": ["bogus:x"]}, headers=_h(token))
     assert updated.status_code == 400
     assert _codes(_role(client, token, "typo-ok")) == ["task:create"]
+
+
+@pytest.mark.integration
+def test_tc_int_075_null_clears_the_parent_and_absent_keeps_it(client, admin_tokens):
+    """TC-INT-075: PUT with parent_role_id null clears the parent; a PUT without the
+    field keeps it; 0 still clears. Null used to read as "unchanged", so the Roles
+    dialog could set a parent but never remove it."""
+    token = admin_tokens["access_token"]
+    base = _create(client, token, "clear-base", permission_codes=["task:create"])
+    child = _create(client, token, "clear-child", parent_role_id=base["id"])
+    url = f"/api/users/roles/{child['id']}"
+
+    kept = client.put(url, json={"display_name": "Clear child"}, headers=_h(token))
+    assert kept.status_code == 200, kept.text
+    assert kept.json()["parent_role_id"] == base["id"]
+
+    cleared = client.put(url, json={"display_name": "Clear child", "parent_role_id": None}, headers=_h(token))
+    assert cleared.status_code == 200, cleared.text
+    assert cleared.json()["parent_role_id"] is None
+    assert client.get(url, headers=_h(token)).json()["parent_role_id"] is None
+    assert _role(client, token, "clear-child")["parent_role_id"] is None
+
+    assert client.put(url, json={"parent_role_id": base["id"]}, headers=_h(token)).json()["parent_role_id"] == base["id"]
+    assert client.put(url, json={"parent_role_id": 0}, headers=_h(token)).json()["parent_role_id"] is None
+
+
+@pytest.mark.integration
+def test_tc_int_076_clearing_the_last_managers_parent_is_refused(client, admin_tokens):
+    """TC-INT-076: clearing a parent goes through the same guard as any role change: when
+    the only active account able to manage roles gets role:manage from that parent, the
+    clear is refused and the parent stays."""
+    token = admin_tokens["access_token"]
+    base = _create(client, token, "mgr-base", permission_codes=["role:manage", "role:view", "user:view"])
+    heir = _create(client, token, "mgr-heir", parent_role_id=base["id"])
+    assert client.post("/auth/register", json={"username": "heir", "password": "heir-pass-123"}).status_code == 201
+    uid = next(u["id"] for u in client.get("/api/users", headers=_h(token)).json() if u["username"] == "heir")
+    assert client.put(f"/api/users/{uid}/role", json={"role_id": heir["id"]}, headers=_h(token)).status_code == 200
+    assert client.put(f"/api/users/{uid}/status", json={"is_active": True}, headers=_h(token)).status_code == 200
+    heir_token = login(client, "heir", "heir-pass-123")["access_token"]
+    admin = _role(client, token, "admin")
+    # The heir, through its parent, becomes the only one who can manage roles.
+    assert client.put(f"/api/users/roles/{admin['id']}", json={"permission_codes": ["task:create"]},
+                      headers=_h(heir_token)).status_code == 200
+    try:
+        r = client.put(f"/api/users/roles/{heir['id']}", json={"parent_role_id": None}, headers=_h(heir_token))
+        assert r.status_code == 400, r.text
+        assert "manage roles" in r.json()["detail"]
+        assert _role(client, heir_token, "mgr-heir")["parent_role_id"] == base["id"]
+    finally:
+        restored = client.put(f"/api/users/roles/{admin['id']}", json={"permission_codes": ["*:*"]},
+                              headers=_h(heir_token))
+        assert restored.status_code == 200, restored.text
+        assert client.put(f"/api/users/{uid}/status", json={"is_active": False}, headers=_h(token)).status_code == 200
+    # With the admin role whole again, the same clear goes through.
+    assert client.put(f"/api/users/roles/{heir['id']}", json={"parent_role_id": None},
+                      headers=_h(token)).json()["parent_role_id"] is None
