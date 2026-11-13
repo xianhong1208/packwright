@@ -6,6 +6,12 @@ follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this proje
 
 ## [Unreleased]
 
+### Fixed
+- Git builds no longer ship the project's development tools. The `.venv` was created with `uv sync`, which also
+  installs the `dev` dependency group, and External mode copies the whole `.venv` into `libs/`: packaging MCP Gate
+  put pytest, pytest-asyncio, pytest-cov, pytest-mock, coverage and ruff into its binary's `libs/` and Docker image.
+  The bootstrap now runs `uv sync --no-default-groups`, plus `--group <name>` for a group chosen in the build settings.
+
 ## [1.3.2] — 2026-11-13
 
 ### Changed
