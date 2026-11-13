@@ -458,6 +458,7 @@ export interface RoleUpdate {
   display_name?: string | null
   description?: string | null
   permission_codes?: string[] | null
+  /** null removes the parent; leave the field out to keep it. */
   parent_role_id?: number | null
   is_active?: boolean | null
 }

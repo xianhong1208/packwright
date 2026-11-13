@@ -96,7 +96,9 @@ export default function RoleManagementPage() {
         const updateData: RoleUpdate = {
           display_name: values.display_name,
           description: values.description,
-          parent_role_id: values.parent_role_id || null,
+          // Always sent: null removes the parent (a cleared Select gives undefined),
+          // while leaving the field out would keep it.
+          parent_role_id: values.parent_role_id ?? null,
           permission_codes: values.permission_codes,
         }
         await userApi.updateRole(editingRole.id, updateData)
@@ -275,7 +277,7 @@ export default function RoleManagementPage() {
             label="Parent role (inherits its permissions)"
           >
             <Select
-              placeholder="Select a parent role (optional)"
+              placeholder="No parent role"
               allowClear
               options={roles
                 .filter(r => r.id !== editingRole?.id)

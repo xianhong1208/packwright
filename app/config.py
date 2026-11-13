@@ -98,11 +98,10 @@ class Settings(BaseSettings):
     # runs the OAuth 2.1 authorization-code + PKCE flow against MCP Gate, then
     # issues its own session — local email/password sign-in stays available.
     mcp_oauth_enabled: bool = False
-    # MCP Gate's issuer (its OAUTH_ISSUER). MCP Gate was called MCP Center, so the
-    # old MCP_CENTER_URL is still read when MCP_GATE_URL is not set.
+    # MCP Gate's issuer (its OAUTH_ISSUER).
     mcp_gate_url: str = Field(
         "http://localhost:4568",
-        validation_alias=AliasChoices("MCP_GATE_URL", "MCP_CENTER_URL", "mcp_gate_url"),
+        validation_alias=AliasChoices("MCP_GATE_URL", "mcp_gate_url"),
     )
     mcp_oauth_client_id: str = ""
     mcp_oauth_client_secret: str = ""  # blank for a public client (PKCE only)

@@ -6,6 +6,33 @@ follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this proje
 
 ## [Unreleased]
 
+## [1.3.2] — 2026-11-13
+
+### Changed
+- Docs: roadmap and README rewritten. `ROADMAP.md` and `ROADMAP.zh-TW.md` list what shipped and the plan for
+  1.3.2 to 1.7, each item with a GitHub issue under its milestone; the READMEs lead with a screenshot, key
+  features, installation and a quick start, and the build pipeline, main settings, storage and Git
+  credentials sections moved to `docs/how-it-works.md` (and `.zh-TW.md`).
+- `MCP_CENTER_URL`, MCP Gate's name before its rename, is no longer read as a fallback for `MCP_GATE_URL`;
+  set `MCP_GATE_URL` instead.
+- Dependencies updated within their major versions, both lock files regenerated: Nuitka 4.3.5, uvicorn
+  0.54, FastAPI 0.162.6, SQLAlchemy 2.1.8, asyncpg 0.32, psycopg2-binary 2.9.13, cryptography 50.0.2, pytest
+  9.2; TanStack Query 5.107, Recharts 3.10, Zustand 5.1, Vite 7.3.8, Tailwind CSS 4.3, typescript-eslint 8.72.
+  The Docker image now copies uv 0.13.8 and the Docker 28 CLI, and CI uses `actions/setup-python@v7` and
+  `actions/cache@v6`. TypeScript 7 and Node 25 stay out until they pass CI, and `eslint-plugin-react-hooks`
+  stays on 7.0 (7.1 turns on rules the console does not pass yet).
+
+### Security
+- `minimatch` under typescript-eslint is held at 11.0.1 or later (GHSA-g3hv-75wg-m249, a denial of service
+  through crafted glob patterns). It is a lint-time dependency only and never reaches the built console.
+
+### Fixed
+- A role's parent can be removed. Clearing the parent in the Roles dialog sent `parent_role_id: null`, which
+  `PUT /api/users/roles/{id}` read as "unchanged", so a parent could be set but never taken away. Null now
+  clears the parent, leaving the field out keeps it, and `0` still clears it as before. Removing a parent
+  goes through the same check as any role change: it is refused if no active account would be left able
+  to manage roles. The dialog's empty parent field reads "No parent role".
+
 ## [1.3.1] — 2026-11-09
 
 ### Fixed
@@ -351,7 +378,8 @@ role-based permissions.
 - Timezone-safe token expiry on SQLite; portable build statistics.
 - Git credentials feedback in the console; no pre-filled personal paths in New build.
 
-[Unreleased]: https://github.com/xianhong1208/packwright/compare/v1.3.1...dev
+[Unreleased]: https://github.com/xianhong1208/packwright/compare/v1.3.2...dev
+[1.3.2]: https://github.com/xianhong1208/packwright/compare/v1.3.1...v1.3.2
 [1.3.1]: https://github.com/xianhong1208/packwright/compare/v1.3.0...v1.3.1
 [1.3.0]: https://github.com/xianhong1208/packwright/compare/v1.2.0...v1.3.0
 [1.2.0]: https://github.com/xianhong1208/packwright/compare/v1.1.0...v1.2.0
