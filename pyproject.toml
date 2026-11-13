@@ -1,6 +1,6 @@
 [project]
 name = "packwright"
-version = "1.3.1"
+version = "1.3.2"
 description = "Packwright - Full-stack build & packaging platform"
 readme = "README.md"
 license = { text = "MIT" }
