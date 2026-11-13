@@ -18,8 +18,8 @@ COPY pyproject.toml /src/pyproject.toml
 RUN npm run build
 
 # ---- Tools copied in as single binaries --------------------------------------
-FROM ghcr.io/astral-sh/uv:0.9.24 AS uv
-FROM docker:27-cli AS dockercli
+FROM ghcr.io/astral-sh/uv:0.13.8 AS uv
+FROM docker:28-cli AS dockercli
 FROM node:22-bookworm-slim AS node
 
 # ---- Runtime -------------------------------------------------------------------
