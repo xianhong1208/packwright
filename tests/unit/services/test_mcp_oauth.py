@@ -71,19 +71,20 @@ class TestFlowState:
 
 
 class TestIssuerSetting:
-    """MCP Gate was called MCP Center; deployments that set the old variable keep working."""
+    """MCP Gate was called MCP Center; the old variable name is no longer read."""
 
     @pytest.mark.unit
-    def test_legacy_mcp_center_url_is_still_read(self, monkeypatch):
+    def test_pre_rename_mcp_center_url_is_ignored(self, monkeypatch):
         from app.config import get_settings
 
-        monkeypatch.delenv("MCP_GATE_URL")
+        monkeypatch.delenv("MCP_GATE_URL", raising=False)
         monkeypatch.setenv("MCP_CENTER_URL", "http://legacy.test:4568")
         get_settings.cache_clear()
-        assert get_settings().mcp_gate_url == "http://legacy.test:4568"
+        # Compared with the legacy value, not the default: a local .env may set MCP_GATE_URL.
+        assert get_settings().mcp_gate_url != "http://legacy.test:4568"
 
     @pytest.mark.unit
-    def test_new_name_wins_over_the_legacy_one(self, monkeypatch):
+    def test_mcp_gate_url_sets_the_issuer(self, monkeypatch):
         from app.config import get_settings
 
         monkeypatch.setenv("MCP_GATE_URL", "http://gate.test:4568")
