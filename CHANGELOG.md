@@ -6,6 +6,13 @@ follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this proje
 
 ## [Unreleased]
 
+### Security
+- The smoke test no longer leaves the program's state in the build output. The binary runs in the output
+  directory, which is what the build hands out: packaging MCP Gate put the smoke run's `data/mcp_gate.db` (with its
+  signing keys), `secrets/secrets.json` (encryption key and setup token) and `logs/` into the downloadable archive,
+  so every deployment of that build would have started with the same keys. Whatever the program creates there is
+  removed after the run, and existing files it changed are named in the build log.
+
 ## [1.3.2] — 2026-11-13
 
 ### Changed

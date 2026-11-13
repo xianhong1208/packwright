@@ -235,7 +235,10 @@ class TestSmokeTestCleansUp:
         import asyncio
 
         # Bounded: when the launcher alone is stopped, waiting on it can hang.
-        result = await asyncio.wait_for(nuitka_worker._smoke_test("t", binary, tmp_path), timeout=15)
+        # Run it elsewhere: what the program writes in its cwd is removed afterwards.
+        out = tmp_path / "out"
+        out.mkdir()
+        result = await asyncio.wait_for(nuitka_worker._smoke_test("t", binary, out), timeout=15)
 
         assert result["status"] == "pass" and "still running" in result["detail"]
         pid = int(child_pid.read_text())
@@ -261,3 +264,52 @@ def _stopped_within(pid: int, seconds: float) -> bool:
             return True
         time.sleep(0.05)
     return False
+
+
+class TestSmokeTestLeavesNoState:
+    """The program runs in the output directory, and that directory is what the
+    build hands out. Packaging MCP Gate left its database (signing keys),
+    secrets/secrets.json (encryption key, setup token) and logs/ from the smoke
+    run in the downloadable archive."""
+
+    @pytest.mark.unit
+    @pytest.mark.asyncio
+    async def test_tc_smk_019_what_the_program_writes_is_removed(self, tmp_path, mocker):
+        """TC-SMK-019: new files and folders are gone afterwards; the output's own files stay."""
+        from app.services import nuitka_worker
+
+        mocker.patch.object(nuitka_worker, "_build_smoke_env", return_value={"PATH": "/usr/bin:/bin"})
+        log = mocker.patch.object(nuitka_worker.task_manager, "append_log", mocker.AsyncMock())
+        out = tmp_path / "dist"
+        (out / "config").mkdir(parents=True)
+        (out / "config" / "app.yaml").write_text("a: 1\n")
+        binary = out / "main"
+        binary.write_text(
+            "#!/bin/sh\nmkdir -p data secrets\necho key > secrets/secrets.json\n"
+            "echo db > data/app.db\necho cache > config/cache.tmp\n"
+        )
+        binary.chmod(0o755)
+
+        result = await nuitka_worker._smoke_test("t", binary, out)
+
+        assert result["status"] == "pass"
+        assert sorted(p.relative_to(out).as_posix() for p in out.rglob("*")) == ["config", "config/app.yaml", "main"]
+        logged = " ".join(str(c.args[1]) for c in log.call_args_list)
+        assert "data" in logged and "secrets" in logged and "config/cache.tmp" in logged
+
+    @pytest.mark.unit
+    @pytest.mark.asyncio
+    async def test_tc_smk_020_a_changed_file_is_reported(self, tmp_path, mocker):
+        """TC-SMK-020: a file of the output the program rewrote cannot be put back, so it is named in the log."""
+        from app.services import nuitka_worker
+
+        mocker.patch.object(nuitka_worker, "_build_smoke_env", return_value={"PATH": "/usr/bin:/bin"})
+        log = mocker.patch.object(nuitka_worker.task_manager, "append_log", mocker.AsyncMock())
+        (tmp_path / "settings.json").write_text("{}")
+        binary = tmp_path / "main"
+        binary.write_text('#!/bin/sh\necho \'{"x": 1}\' > settings.json\n')
+        binary.chmod(0o755)
+
+        await nuitka_worker._smoke_test("t", binary, tmp_path)
+
+        assert any("settings.json" in str(c.args[1]) and "changed" in str(c.args[1]) for c in log.call_args_list)
