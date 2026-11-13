@@ -35,13 +35,14 @@ build's download is that build's output only; the entry point must be inside the
 uses the server's own git login; browsing no longer hits the rate limit; a build waiting for its folder
 no longer holds a build slot; Git credential hosts are checked.
 
+**1.3.2 (2026-11-13), up-to-date dependencies and a roles fix.** The open dependency updates were applied together and checked with a real build (Nuitka 4.3.5, current FastAPI, SQLAlchemy and React libraries; the lint tools' `minimatch` advisory is fixed). The Roles dialog can clear a role's parent.
+
 See [CHANGELOG.md](CHANGELOG.md) for every change.
 
 ## Next
 
 | Version | What you get |
 |---|---|
-| **1.3.2: up-to-date dependencies and a roles fix** | The open dependency updates, applied together and checked with a real build (TypeScript 7 and Node 25 are left out until they pass CI). The **Roles** dialog can clear a role's parent; today the change is silently ignored. |
 | **1.4: automation** | **Build on push or tag:** webhooks from GitHub, GitLab and Gitea, each checked by its signature, plus a generic URL with a token for anything else. **Scheduled builds** for a project. **API tokens**, so scripts and CI can start builds and download results without a password. **`packwright.toml` in the repository:** a project can keep its build settings next to its code; the file wins field by field, and the console marks which values came from it. |
 | **1.5: artifacts and publishing** | Every build comes with **`SHA256SUMS`, a manifest and a CycloneDX SBOM**. **Keep the last N artifacts** per project, and **caps for the build caches** (Nuitka, uv, npm) with a sweep, so the disk stops growing. **Publish after a successful build:** files to GitHub or Gitea Releases, and the image pushed to **any registry** (Docker Hub, GHCR, Gitea or a private one). Their tokens are stored encrypted, like Git credentials. |
 | **1.6: isolation** | Each build runs **as a separate user or in its own container**, so it can no longer read the service's files or other builds. **Per-project secrets**, stored encrypted and given only to that project's builds. |

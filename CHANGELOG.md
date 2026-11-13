@@ -6,6 +6,8 @@ follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this proje
 
 ## [Unreleased]
 
+## [1.3.2] — 2026-11-13
+
 ### Changed
 - Docs: roadmap and README rewritten. `ROADMAP.md` and `ROADMAP.zh-TW.md` list what shipped and the plan for
   1.3.2 to 1.7, each item with a GitHub issue under its milestone; the READMEs lead with a screenshot, key
@@ -376,7 +378,8 @@ role-based permissions.
 - Timezone-safe token expiry on SQLite; portable build statistics.
 - Git credentials feedback in the console; no pre-filled personal paths in New build.
 
-[Unreleased]: https://github.com/xianhong1208/packwright/compare/v1.3.1...dev
+[Unreleased]: https://github.com/xianhong1208/packwright/compare/v1.3.2...dev
+[1.3.2]: https://github.com/xianhong1208/packwright/compare/v1.3.1...v1.3.2
 [1.3.1]: https://github.com/xianhong1208/packwright/compare/v1.3.0...v1.3.1
 [1.3.0]: https://github.com/xianhong1208/packwright/compare/v1.2.0...v1.3.0
 [1.2.0]: https://github.com/xianhong1208/packwright/compare/v1.1.0...v1.2.0
