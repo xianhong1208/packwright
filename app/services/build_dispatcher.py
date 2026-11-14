@@ -565,7 +565,13 @@ async def _prepare_venv(
             )
         group_flags.extend(["--group", group_name])
 
-    group_label = (
+    # --no-default-groups: uv sync otherwise installs the `dev` group (and any
+    # [tool.uv] default-groups), so pytest, ruff, coverage and the like were
+    # installed into the build's .venv and, in External mode, copied into libs/
+    # and shipped with the program and its Docker image. A build is what goes
+    # out to users; a group it needs is picked explicitly with --group.
+    group_flags = ["--no-default-groups", *group_flags]
+    group_label = " --no-default-groups" + (
         f" --group {' --group '.join(config.dependency_groups)}"
         if config.dependency_groups
         else ""

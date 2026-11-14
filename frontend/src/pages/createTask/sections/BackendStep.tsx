@@ -168,7 +168,7 @@ export default function BackendStep() {
                 <div>Options are read from the <code>[dependency-groups]</code> section of pyproject.toml.</div>
                 <div className="mt-2">At build time this becomes <code>uv sync --group &lt;name&gt;</code>.</div>
                 <div className="mt-2">Typical use: pick the right PyTorch wheel per platform (rocm / cuda / cpu).</div>
-                <div className="mt-2" style={{ color: 'var(--ink-muted)' }}>Single-select. Leave blank to omit the --group flag (the default).</div>
+                <div className="mt-2" style={{ color: 'var(--ink-muted)' }}>Single-select. Leave blank to install no group: Git builds skip even <code>dev</code>, which uv installs by default.</div>
               </div>
             }
             extra={

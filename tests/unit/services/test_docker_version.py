@@ -63,3 +63,36 @@ def test_tc_dver_004_download_names_carry_the_version(base, version, expected):
     from app.api.routes.tasks import _download_name
 
     assert _download_name(base, version) == expected
+
+
+@pytest.mark.unit
+@pytest.mark.parametrize(
+    ("source", "expected"),
+    [
+        ({"source_type": "git", "git_url": "https://github.com/xianhong1208/MCP_Gate.git", "git_ref": "dev"}, "MCP_Gate"),
+        ({"source_type": "git", "git_url": "https://gitlab.example.com/team/shop/", "git_ref": "main"}, "shop"),
+        ({"source_type": "git", "git_url": "git@github.com:team/Shop.GIT", "git_ref": "main"}, "Shop"),
+        ({"source_type": "local", "project_path": "/srv/projects/shop"}, "shop"),
+    ],
+)
+def test_tc_dver_005_an_unnamed_git_image_is_named_after_the_repository(source, expected):
+    """TC-DVER-005: a Git build is cloned into a folder named after the task, so the
+    image is named after the repository instead; a local build keeps its folder's name."""
+    from app.services.docker_worker import default_image_repo
+
+    config = BuildConfig(project_type="backend_only", docker_enabled=True, **source)
+    assert default_image_repo(config) == expected
+    assert image_reference("", default_image_repo(config), "1.4.0") == f"{expected.lower()}:1.4.0"
+
+
+@pytest.mark.unit
+def test_tc_dver_006_the_command_preview_uses_the_same_name():
+    """TC-DVER-006: the Commands tab shows the name the build will use, not <checkout>."""
+    from app.services.command_preview import preview_commands
+
+    config = BuildConfig(
+        project_type="backend_only", source_type="git", docker_enabled=True, version="1.4.0",
+        git_url="https://github.com/xianhong1208/MCP_Gate.git", git_ref="dev",
+    )
+    docker = [s for s in preview_commands(config)["steps"] if s["stage"] == "Build the Docker image"]
+    assert docker[0]["command"] == "docker build -t mcp_gate:1.4.0 ."
