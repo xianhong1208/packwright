@@ -20,6 +20,19 @@ const base = {
 const assemble = (values: Record<string, unknown> = {}, dirs: string[] = [], dataDirs: string[] = []) =>
   assembleTaskCreate({ values: { ...base, ...values }, selectedDirs: dirs, selectedDataDirs: dataDirs })
 
+describe('assembleTaskCreate — Docker volumes', () => {
+  it('sends an empty Volumes field as null, so the smoke run fills it', () => {
+    expect(assemble({ docker_volumes: '  ' }).config.docker_volumes).toBeNull()
+    expect(assemble({}).config.docker_volumes).toBeNull()
+  })
+
+  it('sends a value as typed, and the non-root default', () => {
+    const { config } = assemble({ docker_volumes: 'data, secrets ' })
+    expect(config.docker_volumes).toBe('data, secrets')
+    expect(config.docker_run_as_root).toBe(false)
+  })
+})
+
 describe('assembleTaskCreate — source modes are mutually exclusive', () => {
   it('git mode blanks project_path', () => {
     // Leaving a stale local path next to a git URL asks the backend to guess

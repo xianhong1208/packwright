@@ -94,6 +94,18 @@ DATABASE_URL=sqlite+aiosqlite:////srv/packwright/build_center.db
 - **不帶建置殘留。** editable 安裝的 finder(uv 為 Git 專案寫的 `__editable___<名稱>_finder.py`)不會複製進
   `libs/`:程式自己的程式碼已經編進執行檔。
 - 建置日誌與建置結果會顯示 image 的大小。
+- **狀態與執行身分。** 程式以使用者 `app`(uid 10001)執行,它擁有自己的檔案(在 `COPY` 時就指定,不會多存一份)
+  與 `/app`。Docker 設定 → Advanced 的 *Run as root* 可以關掉這個行為。**Volumes** 設定列出程式存放狀態的資料夾
+  (相對於 `/app` 或絕對路徑);每個資料夾都會在 image 裡建立、交給 `app`,並宣告成 `VOLUME`。留空時,使用煙霧測試
+  期間程式自己建立的資料夾(MCP Gate:`data`、`logs`、`secrets`),並寫回這次建置的設定;專案還沒設定時也寫進專案,
+  下次建置欄位就會帶入。建置會建議一個保留這些資料的 `docker run`:
+
+  ```bash
+  docker run -d --name mcp_gate -p 4598:4598 -v mcp_gate-data:/app/data -v mcp_gate-secrets:/app/secrets mcp_gate:1.4.0
+  ```
+
+  新的 named volume 會帶著 image 裡該資料夾的內容與擁有者,非 root 的程式可以直接寫入。若改用 bind mount,
+  請把主機資料夾交給 uid 10001(`chown 10001:10001 <目錄>`)。
 
 ## Git 憑證
 

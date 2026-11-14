@@ -25,7 +25,8 @@ def test_tc_dlay_001_no_layer_stores_a_file_twice(tmp_path):
     )
     dockerfile = _generate_dockerfile(config, precompiled=True)
 
-    assert "COPY --chmod=755 dist/main ./" in dockerfile
+    assert "COPY --chown=app:app --chmod=755 dist/main ./" in dockerfile
     assert "chmod +x" not in dockerfile
-    copies = [line for line in dockerfile.splitlines() if line.startswith("COPY dist/") and "libs" not in line]
-    assert copies == ["COPY dist/config/ ./config/", "COPY dist/static/ ./static/"]
+    assert "chown -R" not in dockerfile
+    copies = [line for line in dockerfile.splitlines() if line.startswith("COPY --chown=app:app dist/") and "libs" not in line]
+    assert copies == ["COPY --chown=app:app dist/config/ ./config/", "COPY --chown=app:app dist/static/ ./static/"]
