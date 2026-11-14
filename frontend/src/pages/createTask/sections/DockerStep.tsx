@@ -80,7 +80,7 @@ export default function DockerStep() {
                   }
                   rules={[{ pattern: /^[A-Za-z0-9._/\-,\s]*$/, message: 'Folder paths only, e.g. data, secrets' }]}
                 >
-                  <Input placeholder="Auto — e.g. data, secrets" className="input-field" style={{ fontFamily: 'var(--font-mono)' }} />
+                  <Input placeholder="Auto — e.g. data, secrets" className="input-field" />
                 </Form.Item>
               </Col>
             </Row>

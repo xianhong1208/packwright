@@ -89,8 +89,18 @@ export default function BuildResultPanel({ result }: { result: BuildResult | nul
               {result.image.name}
             </code>
           </div>
+          {result.image.size_bytes != null && (
+            <div className="rounded-lg p-3 col-span-2 md:col-span-1 bg-void-950">
+              <div className="text-xs mb-1" style={{ color: 'var(--ink-faint)' }}>
+                Image size
+              </div>
+              <div className="text-lg font-semibold" style={{ color: 'var(--ink)' }}>
+                {formatImageSize(result.image.size_bytes)}
+              </div>
+            </div>
+          )}
           {result.image.run_command && (
-            <div className="rounded-lg p-3 col-span-2 md:col-span-4 bg-void-950 min-w-0 md:order-last">
+            <div className="rounded-lg p-3 col-span-2 md:col-span-4 bg-void-950 min-w-0">
               <div className="flex items-center justify-between gap-2 mb-1">
                 <span className="text-xs" style={{ color: 'var(--ink-faint)' }}>
                   Run it{result.image.user ? ` — runs as ${result.image.user}` : ''}
@@ -110,16 +120,6 @@ export default function BuildResultPanel({ result }: { result: BuildResult | nul
               <code className="text-xs font-mono break-all" style={{ color: 'var(--ink-muted)' }}>
                 {result.image.run_command}
               </code>
-            </div>
-          )}
-          {result.image.size_bytes != null && (
-            <div className="rounded-lg p-3 col-span-2 md:col-span-1 bg-void-950">
-              <div className="text-xs mb-1" style={{ color: 'var(--ink-faint)' }}>
-                Image size
-              </div>
-              <div className="text-lg font-semibold" style={{ color: 'var(--ink)' }}>
-                {formatImageSize(result.image.size_bytes)}
-              </div>
             </div>
           )}
         </div>
