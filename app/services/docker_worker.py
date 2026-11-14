@@ -657,6 +657,22 @@ def _generate_frontend_dockerfile(config: BuildConfig, port: int) -> str:
     """)
 
 
+def _outermost_dirs(dirs: list[str]) -> list[str]:
+    """The listed directories without those inside another listed one, in order.
+
+    A full-stack build adds its frontend output to the data dirs; when that
+    output sits in a data dir already listed (MCP Gate: static/web inside
+    static), COPYing both put the frontend into the image twice.
+    """
+    norm = [os.path.normpath(d) for d in dirs]
+    kept: list[str] = []
+    for d in norm:
+        if d in kept or any(d.startswith(other + os.sep) for other in norm if other != d):
+            continue
+        kept.append(d)
+    return kept
+
+
 def _generate_precompiled_dockerfile(config: BuildConfig, base_image: str, port: int) -> str:
     """Generate Dockerfile for precompiled Nuitka binary built on host.
 
@@ -683,7 +699,11 @@ def _generate_precompiled_dockerfile(config: BuildConfig, base_image: str, port:
 
     # Copy compiled binary
     if config.onefile:
-        copy_binary = f"COPY {output_dir}/{binary_name} ./\nRUN chmod +x ./{binary_name}\n"
+        # --chmod on the COPY, not a RUN chmod afterwards: changing a file's mode
+        # in a later layer stores the whole file again, which doubled the
+        # binary's share of the image (MCP Gate: 2 x 49.7 MB). The build runs
+        # with DOCKER_BUILDKIT=1, which --chmod needs.
+        copy_binary = f"COPY --chmod=755 {output_dir}/{binary_name} ./\n"
     else:
         copy_binary = f"COPY {output_dir}/{entry_stem}.dist/ ./\n"
 
@@ -700,7 +720,7 @@ def _generate_precompiled_dockerfile(config: BuildConfig, base_image: str, port:
     data_copy_lines = ""
     if config.data_dirs:
         dist_root = Path(config.project_path) / output_dir
-        for data_dir in [d.strip() for d in config.data_dirs.split(",") if d.strip()]:
+        for data_dir in _outermost_dirs([d.strip() for d in config.data_dirs.split(",") if d.strip()]):
             if (dist_root / data_dir).is_dir():
                 data_copy_lines += f"COPY {output_dir}/{data_dir}/ ./{data_dir}/\n"
 

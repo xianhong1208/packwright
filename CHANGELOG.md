@@ -7,6 +7,10 @@ follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this proje
 ## [Unreleased]
 
 ### Fixed
+- Backend Docker images no longer store files twice. The binary got its execute bit from a `RUN chmod` after its
+  `COPY`, which stores the whole binary again in a new layer (MCP Gate: 2 × 49.7 MB); it is now
+  `COPY --chmod=755`. A full-stack build whose frontend output sits inside a data dir already listed (MCP Gate's
+  `static/web` inside `static`) copied the frontend twice; a data dir inside another one is now copied once.
 - A failed smoke test is reported as one. The build said "Nuitka compilation failed" although the compile had
   succeeded, its failure report named the stage "finishing up", and on a full-stack build the diagnosis read
   "Frontend build failed", because that rule fired on "vite build" plus the word "error" anywhere in the log. The
