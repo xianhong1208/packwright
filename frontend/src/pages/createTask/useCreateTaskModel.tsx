@@ -68,7 +68,7 @@ export function useCreateTaskModel(options: ModelOptions = {}) {
     if (!isRebuild || !rebuildState?.config) return
     const c = rebuildState.config
     if (c.nuitka_jobs || c.include_packages || c.extra_dirs || c.data_dirs) setBackendAdvKeys(['backend-advanced'])
-    if (c.docker_env_vars || c.docker_custom_commands || c.docker_install_node) setDockerAdvKeys(['docker-advanced'])
+    if (c.docker_env_vars || c.docker_custom_commands || c.docker_install_node || c.docker_run_as_root) setDockerAdvKeys(['docker-advanced'])
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isRebuild])
 

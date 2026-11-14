@@ -135,7 +135,7 @@ class TestRecoverInterrupted:
 
 
 def _quiet_task_manager(mocker, module):
-    for name in ("append_log", "update_task", "set_process"):
+    for name in ("append_log", "update_task", "set_process", "record_config_value", "merge_result"):
         mocker.patch.object(module.task_manager, name, mocker.AsyncMock())
 
 

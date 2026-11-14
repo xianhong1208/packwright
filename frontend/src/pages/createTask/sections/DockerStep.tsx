@@ -65,6 +65,27 @@ export default function DockerStep() {
             </Col>
           </Row>
 
+          {hasBackend && (
+            <Row gutter={16}>
+              <Col xs={24}>
+                <Form.Item
+                  name="docker_volumes"
+                  label={<span style={{ color: 'var(--ink-muted)' }}>Volumes</span>}
+                  tooltip="Folders the program keeps its state in, comma-separated, relative to /app or absolute. Each becomes a VOLUME owned by the program's user."
+                  extra={
+                    <span className="text-xs" style={{ color: 'var(--ink-faint)' }}>
+                      Empty: the folders the program creates on its first start (found by the smoke test) are used,
+                      and filled in here for the next build. Mount a named volume on each so the data survives a new container.
+                    </span>
+                  }
+                  rules={[{ pattern: /^[A-Za-z0-9._/\-,\s]*$/, message: 'Folder paths only, e.g. data, secrets' }]}
+                >
+                  <Input placeholder="Auto — e.g. data, secrets" className="input-field" />
+                </Form.Item>
+              </Col>
+            </Row>
+          )}
+
           {projectType === 'frontend_only' && (
             <>
               <Row gutter={16}>
@@ -216,7 +237,7 @@ export default function DockerStep() {
               forceRender: true,
               label: (
                 <span className="text-sm" style={{ color: 'var(--ink-muted)' }}>
-                  <GearIcon className="mr-2" />Advanced: Node.js, custom RUN commands, environment variables
+                  <GearIcon className="mr-2" />Advanced: Node.js, custom RUN commands, environment variables{hasBackend ? ', user' : ''}
                 </span>
               ),
               children: (
@@ -232,6 +253,23 @@ export default function DockerStep() {
                         <Switch checkedChildren="On" unCheckedChildren="Off" />
                       </Form.Item>
                     </Col>
+                    {hasBackend && (
+                      <Col xs={24} md={16}>
+                        <Form.Item
+                          name="docker_run_as_root"
+                          label={<span style={{ color: 'var(--ink-muted)' }}>Run as root</span>}
+                          valuePropName="checked"
+                          tooltip="Off (recommended): the program runs as the user app (uid 10001), which owns its files and volumes."
+                          extra={
+                            <span className="text-xs" style={{ color: 'var(--ink-faint)' }}>
+                              Only for a program that must change system files at run time.
+                            </span>
+                          }
+                        >
+                          <Switch checkedChildren="On" unCheckedChildren="Off" />
+                        </Form.Item>
+                      </Col>
+                    )}
                   </Row>
                   <Form.Item
                     name="docker_env_vars"

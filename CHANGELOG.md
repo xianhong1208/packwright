@@ -6,6 +6,17 @@ follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this proje
 
 ## [Unreleased]
 
+### Added
+- Docker settings: **Volumes** and **Run as root** (#36). A backend image runs its program as the user `app`
+  (uid 10001), which owns its files (`COPY --chown`, nothing stored twice) and `/app`; *Run as root* turns this off.
+  Each folder in Volumes is created in the image, owned by that user, and declared as a `VOLUME`. Left empty, the
+  folders the program created during the smoke test are used (MCP Gate: `data`, `logs`, `secrets`) and saved into
+  the build's settings, and into the project's while it has none, so the next build shows them. The suggested
+  command was `docker run --rm --network host <image>`, which threw away the program's state on every stop (MCP Gate:
+  new database, signing keys and encryption key); it is now `docker run -d --name <repo> -p <port>:<port> -v
+  <repo>-<folder>:/app/<folder> … <image>`, shown in the build log and, with a Copy button, in the build result.
+  No migration: settings are stored as JSON.
+
 ### Changed
 - Backend Docker images are smaller (#37). Every image installed the same system packages, GUI and OpenGL
   libraries included: 221 MB of MCP Gate's 449 MB image, for a program that loads none of them. An image now

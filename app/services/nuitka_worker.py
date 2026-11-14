@@ -883,6 +883,29 @@ def _undo_smoke_writes(root: Path, before: dict[str, tuple[int, int] | None]) ->
     return removed, changed
 
 
+def _created_dirs(cwd: Path, binary_dir: Path, before: dict[str, tuple[int, int] | None]) -> list[str]:
+    """The folders the program created beside itself or where it ran, by name.
+
+    Both places are /app in a Docker image (a standalone build's binary sits in
+    <entry>.dist/ here, but its contents are copied to /app). These are where a
+    service keeps its state (MCP Gate: data/, secrets/, logs/), so they are what
+    a Docker build offers as volumes. Bytecode caches are not state.
+    """
+    after = _tree_state(cwd)
+    try:
+        prefix = binary_dir.resolve().relative_to(cwd.resolve())
+    except ValueError:
+        prefix = Path(".")
+    names: list[str] = []
+    for rel, state in after.items():
+        if state is not None or rel in before:
+            continue
+        path = Path(rel)
+        if path.parent in (Path("."), prefix) and path.name != "__pycache__" and path.name not in names:
+            names.append(path.name)
+    return sorted(names)
+
+
 def _describe_removed(removed: list[str]) -> str:
     """The removed paths for the log, with Python's bytecode caches counted rather
     than listed: MCP Gate's run left one in nearly every package in libs/."""
@@ -905,7 +928,13 @@ async def _smoke_test(
     """Run the binary once (see _run_smoke_test), then take away what it wrote in cwd."""
     before = await asyncio.to_thread(_tree_state, cwd)
     try:
-        return await _run_smoke_test(task_id, binary, cwd, extra_env)
+        verify = await _run_smoke_test(task_id, binary, cwd, extra_env)
+        verify["created_dirs"] = await asyncio.to_thread(_created_dirs, cwd, binary.parent, before)
+        if verify["created_dirs"]:
+            await task_manager.append_log(
+                task_id, "Smoke test: the program created " + ", ".join(f"{d}/" for d in verify["created_dirs"])
+            )
+        return verify
     finally:
         removed, changed = await asyncio.to_thread(_undo_smoke_writes, cwd, before)
         if removed:

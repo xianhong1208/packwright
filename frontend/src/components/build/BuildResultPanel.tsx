@@ -99,6 +99,29 @@ export default function BuildResultPanel({ result }: { result: BuildResult | nul
               </div>
             </div>
           )}
+          {result.image.run_command && (
+            <div className="rounded-lg p-3 col-span-2 md:col-span-4 bg-void-950 min-w-0">
+              <div className="flex items-center justify-between gap-2 mb-1">
+                <span className="text-xs" style={{ color: 'var(--ink-faint)' }}>
+                  Run it{result.image.user ? ` — runs as ${result.image.user}` : ''}
+                </span>
+                <button
+                  type="button"
+                  className="text-xs hover:text-cyber-300"
+                  style={{ color: 'var(--ink-muted)' }}
+                  onClick={() => {
+                    navigator.clipboard?.writeText(result.image?.run_command || '')
+                    message.success('Command copied.')
+                  }}
+                >
+                  Copy
+                </button>
+              </div>
+              <code className="text-xs font-mono break-all" style={{ color: 'var(--ink-muted)' }}>
+                {result.image.run_command}
+              </code>
+            </div>
+          )}
         </div>
       )}
 

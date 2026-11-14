@@ -359,6 +359,11 @@ image 名稱留空時,Git 來源用 repo 名稱、本機來源用資料夾名稱
 後端與全端的 image 只裝 `libpq5 zlib1g libxml2 libxslt1.1`,圖形相關的系統函式庫(OpenGL、GLib、X11 等)只有在
 打包進去的 `.so` 需要時才裝(OpenCV、Qt 這類),建置日誌會寫出原因;程式用 `ctypes` 自己載入的函式庫請用
 `apt-get` 自訂指令補上。單一執行檔用 zstandard 壓縮。建置結果會顯示 image 名稱與大小。
+
+後端與全端 image 預設以非 root 使用者 `app`(uid 10001)執行程式;Advanced 的 **Run as root** 可以改回 root。
+**Volumes** 填程式存放狀態的資料夾(例:`data, secrets`,相對於 `/app`),會變成 `VOLUME` 並交給 `app`。
+留空時,用煙霧測試期間程式自己建立的資料夾,並寫回設定,下次建置就會帶入。建置日誌與建置結果的 **Run it**
+會給一行掛上 named volume 的 `docker run`,容器刪掉重建資料也還在。
 純前端 + Docker 會包成 nginx image,可以再設定 API 反向代理與 nginx 參數,說明見
 [快速上手的 nginx 一節](./quickstart.zh-TW.md#純前端--docker-的-nginx-設定-)。
 

@@ -123,6 +123,12 @@ export default function ReviewStep() {
             <SummaryRow label="Image name" value={form.getFieldValue('docker_image_name') || '(auto)'} mono />
             <SummaryRow label="Base image" value={form.getFieldValue('docker_base_image') || 'python:3.13-slim'} mono />
             <SummaryRow label="Exposed port" value={form.getFieldValue('docker_expose_port') || 8000} />
+            {projectType !== 'frontend_only' && (
+              <>
+                <SummaryRow label="Volumes" value={form.getFieldValue('docker_volumes') || 'Auto (from the smoke run)'} mono />
+                <SummaryRow label="Runs as" value={form.getFieldValue('docker_run_as_root') ? 'root' : 'app (uid 10001)'} />
+              </>
+            )}
             {projectType === 'frontend_only' && form.getFieldValue('docker_api_proxy') && (
               <SummaryRow label="API proxy" value={form.getFieldValue('docker_api_proxy')} mono />
             )}

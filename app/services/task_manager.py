@@ -441,6 +441,41 @@ class TaskManager:
         current.update(patch)
         await self.set_result(task_id, current, db)
 
+    async def record_config_value(
+        self,
+        task_id: str,
+        key: str,
+        value: Any,
+        db: AsyncSession | None = None,
+    ) -> None:
+        """Save a setting the build decided (e.g. Docker volumes found by the smoke
+        run) into the build's stored config, and into its project's while the
+        project has no value for it, so the next build starts from it.
+
+        A value the project already has is never replaced: the project's
+        settings are the user's.
+        """
+        async with self._lock:
+            task = self._tasks.get(task_id)
+            if task is not None:
+                task["config"] = task["config"].model_copy(update={key: value})
+                project_id = task.get("project_id")
+            else:
+                project_id = None
+        if db is None:
+            return
+        db_task = (await db.execute(select(Task).where(Task.task_id == task_id))).scalar_one_or_none()
+        if db_task is not None:
+            db_task.config = {**(db_task.config or {}), key: value}
+            project_id = project_id or db_task.project_id
+        if project_id is not None:
+            from app.models.project import Project
+
+            project = await db.get(Project, project_id)
+            if project is not None and project.config.get(key) is None:
+                project.config = {**project.config, key: value}
+        await db.commit()
+
     async def get_history(
         self,
         db: AsyncSession,

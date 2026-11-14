@@ -110,15 +110,27 @@ async def _run_docker_build(
         for pkg, (soname, needed_by) in system.reasons.items():
             await task_manager.append_log(task_id, f"  + {pkg}: {needed_by} needs {soname}")
 
+    if precompiled and config.docker_volumes is None:
+        # Not set yet: the folders the program created when the smoke test ran
+        # it, saved into this build's settings (and the project's, while unset
+        # there) so the next build shows them in the Volumes field.
+        detected = await _smoke_created_dirs(task_id)
+        if detected:
+            config.docker_volumes = ", ".join(detected)
+            await task_manager.append_log(
+                task_id, f"Volumes (from the folders the smoke run created): {config.docker_volumes}"
+            )
+            await task_manager.record_config_value(task_id, "docker_volumes", config.docker_volumes, db)
+
     try:
         dockerfile_content = _generate_dockerfile(config, precompiled=precompiled, system=system)
         guard.write(dockerfile_path, dockerfile_content)
         await task_manager.append_log(task_id, "Generated Dockerfile")
         await task_manager.append_log(task_id, "")
         await task_manager.append_log(task_id, "=== Dockerfile ===")
-        for line in dockerfile_content.split("\n")[:20]:
+        for line in dockerfile_content.split("\n")[:40]:
             await task_manager.append_log(task_id, line)
-        if dockerfile_content.count("\n") > 20:
+        if dockerfile_content.count("\n") > 40:
             await task_manager.append_log(task_id, "... (truncated)")
         await task_manager.append_log(task_id, "==================")
 
@@ -153,10 +165,21 @@ async def _run_docker_build(
         size = await _image_size(image_name)
         if size is not None:
             await task_manager.append_log(task_id, f"Image size: {size / 1_000_000:.1f} MB")
-            await task_manager.merge_result(task_id, {"image": {"name": image_name, "size_bytes": size}}, db)
+        await task_manager.merge_result(
+            task_id,
+            {"image": {
+                "name": image_name,
+                "size_bytes": size,
+                "run_command": run_hint(config, image_name, precompiled=precompiled),
+                "volumes": [mount_point(v) for v in parse_volumes(config.docker_volumes)] if precompiled else [],
+                "user": "root" if config.docker_run_as_root or not precompiled else f"{APP_USER} (uid {APP_UID})",
+            }},
+            db,
+        )
+        run_command = run_hint(config, image_name, precompiled=precompiled)
         await task_manager.append_log(task_id, "")
         await task_manager.append_log(task_id, "To run the container:")
-        await task_manager.append_log(task_id, f"  docker run --rm --network host {image_name}")
+        await task_manager.append_log(task_id, f"  {run_command}")
         await task_manager.append_log(task_id, "=" * 50)
 
         # Export Docker image as .tar.gz for download
@@ -420,6 +443,76 @@ def _version_block(version: str) -> str:
         f'LABEL org.opencontainers.image.version="{version}"\n'
         f"ENV PACKWRIGHT_BUILD_VERSION={version}\n"
     )
+
+
+# The program's user in a backend image. A fixed number rather than whatever
+# useradd picks, so files on a bind mount can be given to it with one chown.
+APP_USER = "app"
+APP_UID = 10001
+
+_VOLUME_PATH = re.compile(r"^[A-Za-z0-9._/-]+$")
+
+
+def parse_volumes(value: str | None) -> list[str]:
+    """The folders in a Volumes setting, in order, without duplicates.
+
+    Comma- or newline-separated; each relative to /app (the image's WORKDIR) or
+    absolute. Raises ValueError naming an entry that could not be a plain path:
+    it lands in a Dockerfile RUN and VOLUME line.
+    """
+    out: list[str] = []
+    for raw in re.split(r"[,\n]", value or ""):
+        entry = raw.strip()
+        if not entry:
+            continue
+        norm = entry.rstrip("/") or "/"
+        parts = [p for p in norm.split("/") if p]
+        if not _VOLUME_PATH.match(entry) or ".." in parts or not parts:
+            raise ValueError(
+                f"Volume {entry!r} is not a plain folder path: use letters, digits, '.', '_', '-' and '/', "
+                "relative to /app (e.g. data) or absolute (e.g. /var/lib/myapp), without '..'"
+            )
+        if norm not in out:
+            out.append(norm)
+    return out
+
+
+def mount_point(volume: str) -> str:
+    """Where a Volumes entry is inside the image."""
+    return volume if volume.startswith("/") else f"/app/{volume}"
+
+
+def _volume_name(repo: str, volume: str) -> str:
+    """A named volume for the run hint: <repo>-<folder>, e.g. mcp_gate-data."""
+    slug = re.sub(r"[^A-Za-z0-9_.-]+", "-", volume.strip("/")).strip("-.") or "data"
+    return f"{repo}-{slug}"
+
+
+def run_hint(config: BuildConfig, image_name: str, precompiled: bool) -> str:
+    """The `docker run` command the build suggests.
+
+    It used to be `docker run --rm --network host <image>`: --rm threw away
+    everything the program wrote (MCP Gate: a new database, new signing keys and
+    a new encryption key on every start), and host networking hid a wrong EXPOSE.
+    Now a detached container with its port published and a named volume per
+    state folder, which survive restarts and re-creating the container.
+    """
+    last = image_name.rsplit("/", 1)[-1]
+    repo = re.sub(r"[^A-Za-z0-9_.-]+", "-", re.split(r"[:@]", last)[0]).strip("-.") or "app"
+    port = config.docker_expose_port
+    parts = ["docker run -d", f"--name {repo}", f"-p {port}:{port}"]
+    if precompiled:
+        for volume in parse_volumes(config.docker_volumes):
+            parts.append(f"-v {_volume_name(repo, volume)}:{mount_point(volume)}")
+    parts.append(image_name)
+    return " ".join(parts)
+
+
+async def _smoke_created_dirs(task_id: str) -> list[str]:
+    """The folders the program created in its smoke run (see nuitka_worker._smoke_test)."""
+    task = await task_manager.get_task(task_id)
+    verify = task.result.verify if task and task.result else None
+    return list(verify.created_dirs) if verify else []
 
 
 def _scan_roots(config: BuildConfig) -> list[Path]:
@@ -740,20 +833,31 @@ def _generate_precompiled_dockerfile(
     extra_blocks += _render_docker_env_vars(config.docker_env_vars)
     extra_blocks += _render_custom_commands(config.docker_custom_commands)
 
+    # The program runs as a non-root user unless asked otherwise. Its files are
+    # given to it on the COPY itself (--chown), never by a RUN chown afterwards,
+    # which would store every file a second time (see the --chmod note below).
+    as_root = config.docker_run_as_root
+    own = "" if as_root else f"--chown={APP_USER}:{APP_USER} "
+    if not as_root:
+        extra_blocks += (
+            "\n# The program's own user\n"
+            f"RUN useradd --system --uid {APP_UID} --user-group --home-dir /app --no-create-home {APP_USER}\n"
+        )
+
     # Copy compiled binary
     if config.onefile:
         # --chmod on the COPY, not a RUN chmod afterwards: changing a file's mode
         # in a later layer stores the whole file again, which doubled the
         # binary's share of the image (MCP Gate: 2 x 49.7 MB). The build runs
         # with DOCKER_BUILDKIT=1, which --chmod needs.
-        copy_binary = f"COPY --chmod=755 {output_dir}/{binary_name} ./\n"
+        copy_binary = f"COPY {own}--chmod=755 {output_dir}/{binary_name} ./\n"
     else:
-        copy_binary = f"COPY {output_dir}/{entry_stem}.dist/ ./\n"
+        copy_binary = f"COPY {own}{output_dir}/{entry_stem}.dist/ ./\n"
 
     # Third-party packages (only in EXTERNAL mode — libs/ created by nuitka_worker)
     copy_libs = ""
     if config.pack_mode == PackMode.EXTERNAL:
-        copy_libs = f"COPY {output_dir}/libs/ ./libs/\n"
+        copy_libs = f"COPY {own}{output_dir}/libs/ ./libs/\n"
 
     # Data directories (copied to output_dir by nuitka_worker).
     # Only COPY dirs that actually landed in dist/: nuitka_worker skips (with a
@@ -765,7 +869,25 @@ def _generate_precompiled_dockerfile(
         dist_root = Path(config.project_path) / output_dir
         for data_dir in _outermost_dirs([d.strip() for d in config.data_dirs.split(",") if d.strip()]):
             if (dist_root / data_dir).is_dir():
-                data_copy_lines += f"COPY {output_dir}/{data_dir}/ ./{data_dir}/\n"
+                data_copy_lines += f"COPY {own}{output_dir}/{data_dir}/ ./{data_dir}/\n"
+
+    # State folders: created in the image and owned by the program's user, so a
+    # new named volume mounted there starts with that owner (Docker copies the
+    # image folder's ownership into an empty volume). Without the folder in the
+    # image, Docker creates the mount point as root and a non-root program
+    # cannot write its own data. /app itself is given to the user too, for the
+    # folders it creates that are not volumes (logs, caches).
+    volumes = [mount_point(v) for v in parse_volumes(config.docker_volumes)]
+    state_block = ""
+    if not as_root:
+        state_block += f"RUN mkdir -p {' '.join(volumes)} && chown {APP_USER}:{APP_USER} /app {' '.join(volumes)}\n" if volumes \
+            else f"RUN chown {APP_USER}:{APP_USER} /app\n"
+    elif volumes:
+        state_block += f"RUN mkdir -p {' '.join(volumes)}\n"
+    if volumes:
+        state_block += "VOLUME [" + ", ".join(f'"{v}"' for v in volumes) + "]\n"
+    if not as_root:
+        state_block += f"USER {APP_USER}\n"
 
     # Only what the shipped extensions load (see system_libs): the GUI and
     # OpenGL libraries every image used to get were 221 MB of MCP Gate's 449.
@@ -776,7 +898,8 @@ def _generate_precompiled_dockerfile(
         WORKDIR /app
         RUN apt-get update && apt-get install -y --no-install-recommends {packages} \\
             && apt-get clean && rm -rf /var/lib/apt/lists/*
-    """) + extra_blocks + "\n# Copy precompiled Nuitka output\n" + copy_binary + copy_libs + data_copy_lines + dedent(f"""\
+    """) + extra_blocks + "\n# Copy precompiled Nuitka output\n" + copy_binary + copy_libs + data_copy_lines \
+        + state_block + dedent(f"""\
         ENV HOST=0.0.0.0
         ENV PORT={port}
         ENV LANG=C.UTF-8
