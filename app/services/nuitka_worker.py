@@ -611,6 +611,53 @@ def _copytree_fast(src: Path, dst: Path) -> None:
         shutil.copytree(src, dst, ignore=_LIBS_IGNORE)
 
 
+_LIBS_SKIP_PREFIXES = ("pip", "setuptools", "wheel", "nuitka")
+
+
+def ships_in_libs(name: str) -> bool:
+    """Whether a site-packages entry is copied into libs/.
+
+    Left out: bytecode caches and hidden files, the packaging tools, .pth hooks,
+    and the finder of an editable install. uv installs a Git project itself in
+    editable mode, as __editable___<name>_finder.py pointing at the build
+    workspace; the program's own code is compiled into the binary, so the finder
+    only shipped a dead path to a folder that is deleted after the build.
+    """
+    if name == "__pycache__" or name.startswith("."):
+        return False
+    # Underscore-prefixed entries are legitimate packages / extensions (e.g.
+    # _cffi_backend, _rocm_sdk_core, _rocm_sdk_libraries_gfx1151 — dynamically
+    # imported at runtime by rocm_sdk). The old blanket "skip _*" rule silently
+    # dropped these, breaking runtime imports. Only setuptools' internal shims
+    # and editable-install finders are skipped explicitly.
+    if name in ("pkg_resources", "easy_install.py", "_distutils_hack"):
+        return False
+    if name.startswith("__editable__"):
+        return False
+    if any(name.startswith(p) for p in _LIBS_SKIP_PREFIXES):
+        return False
+    # .pth files are setuptools hooks that cause issues at runtime
+    return not name.endswith(".pth")
+
+
+async def has_zstandard(python: str) -> bool:
+    """Whether the compiling interpreter can compress a onefile binary.
+
+    Without the zstandard package Nuitka stores the payload uncompressed and
+    says so only in a warning in the middle of the compile log (MCP Gate: a
+    49.7 MB binary that compresses to about a third).
+    """
+    try:
+        proc = await asyncio.create_subprocess_exec(
+            python, "-c", "import zstandard",
+            stdout=asyncio.subprocess.DEVNULL, stderr=asyncio.subprocess.DEVNULL,
+            env=build_environment(),
+        )
+        return await proc.wait() == 0
+    except OSError:
+        return False
+
+
 def _human_size(n: int) -> str:
     size = float(n)
     for unit in ("B", "KB", "MB", "GB", "TB"):
@@ -1475,6 +1522,17 @@ async def run_nuitka_build(task_id: str, config: BuildConfig, db: AsyncSession) 
         })
         if not entry_ok:
             raise FileNotFoundError(f"Entry point not found: {entry_point}")
+        if config.onefile:
+            compressed = await has_zstandard(nuitka_python)
+            preflight.append({
+                "label": "Onefile compression",
+                "passed": compressed,
+                "detail": "zstandard installed" if compressed else (
+                    "zstandard is not installed in the selected toolchain, so the binary is stored "
+                    "uncompressed. Install nuitka[onefile] (scripts/setup_nuitka_venvs.sh does)."
+                ),
+                "critical": False,
+            })
 
         # Inject libs loading code into entry point (only for non-FULL modes)
         if config.pack_mode != PackMode.FULL:
@@ -1662,25 +1720,8 @@ async def run_nuitka_build(task_id: str, config: BuildConfig, db: AsyncSession) 
                     # Copy each package (including .dist-info for importlib.metadata)
                     copied_count = 0
                     skipped = []
-                    skip_prefixes = ("pip", "setuptools", "wheel", "nuitka")
                     for item in site_packages.iterdir():
-                        # Skip __pycache__ and hidden files (but NOT _ prefixed .so files)
-                        if item.name == "__pycache__":
-                            continue
-                        if item.name.startswith("."):
-                            continue
-                        # Underscore-prefixed entries are legitimate packages /
-                        # extensions (e.g. _cffi_backend, _rocm_sdk_core,
-                        # _rocm_sdk_libraries_gfx1151 — dynamically imported at
-                        # runtime by rocm_sdk). The old blanket "skip _*" rule
-                        # silently dropped these, breaking runtime imports. Only
-                        # skip setuptools' internal shims explicitly.
-                        if item.name in ("pkg_resources", "easy_install.py", "_distutils_hack"):
-                            continue
-                        if any(item.name.startswith(p) for p in skip_prefixes):
-                            continue
-                        # Skip .pth files (setuptools hooks that cause issues at runtime)
-                        if item.suffix == ".pth":
+                        if not ships_in_libs(item.name):
                             continue
 
                         target = target_folder / item.name

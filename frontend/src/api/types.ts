@@ -240,6 +240,13 @@ export interface BuildResult {
   failed_stage?: string | null
   /** C files Nuitka took from ccache vs. compiled; absent without ccache. */
   compile_cache?: { hits: number; compiled: number } | null
+  /** The Docker image a Docker build produced. */
+  image?: ImageInfo | null
+}
+
+export interface ImageInfo {
+  name: string
+  size_bytes: number | null
 }
 
 /** GET /monitoring/compile-cache: the ccache store Nuitka builds use. */

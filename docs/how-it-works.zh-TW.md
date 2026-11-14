@@ -81,6 +81,20 @@ DATABASE_URL=sqlite+aiosqlite:////srv/packwright/build_center.db
 
 建置成功時工作區也會自動精簡:非 Docker 建置只留下產物(丟掉 clone、`.venv`、`.git`),Docker 建置則直接刪除整個工作區,因為 image tarball 已保存結果。
 
+## Docker image
+
+後端或全端開啟 Docker 時,程式先在主機上編譯,image 只把產物複製進精簡的基底映像(預設 `python:3.13-slim`):
+
+- **系統套件。** image 一律安裝 `libpq5 zlib1g libxml2 libxslt1.1`;圖形介面與繪圖函式庫(OpenGL、GLib、X11、xcb、
+  fontconfig…)只有在打包進去的擴充模組需要時才裝:Packwright 會讀產物裡每個 `.so` 要載入的函式庫(ELF `DT_NEEDED`)。
+  OpenCV、Qt 會帶進它們需要的套件,大多數程式一個都不需要。建置日誌會列出每個額外套件,以及是哪個檔案需要它。
+  用 `dlopen()` 或 `ctypes` 載入的函式庫不會出現在任何清單裡,請在 *Custom commands* 加一行 `apt-get` 安裝。
+- **壓縮。** 單一執行檔用 zstandard 壓縮(`nuitka[onefile]`,隨 Packwright 安裝,`scripts/setup_nuitka_venvs.sh`
+  也會裝);少了它,preflight 的 *Onefile compression* 會提醒。
+- **不帶建置殘留。** editable 安裝的 finder(uv 為 Git 專案寫的 `__editable___<名稱>_finder.py`)不會複製進
+  `libs/`:程式自己的程式碼已經編進執行檔。
+- 建置日誌與建置結果會顯示 image 的大小。
+
 ## Git 憑證
 
 私有 repo 的存取權杖在管理台設定(左側工具列的 **Git credentials**,需要 `user:manage` 權限),不放在 `.env`:

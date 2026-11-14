@@ -429,6 +429,13 @@ class ArtifactInfo(BaseModel):
     sha256: str | None = None
 
 
+class ImageInfo(BaseModel):
+    """The Docker image a build produced."""
+
+    name: str
+    size_bytes: int | None = None
+
+
 class VerifyResult(BaseModel):
     """Outcome of the post-build smoke test."""
 
@@ -489,6 +496,8 @@ class BuildResult(BaseModel):
     # C files Nuitka took from ccache vs. compiled (app/services/compile_cache).
     # None when the build compiled without ccache.
     compile_cache: CompileCacheSummary | None = None
+    # The image, for Docker builds.
+    image: ImageInfo | None = None
 
 
 class TaskResponse(BaseModel):
