@@ -14,7 +14,8 @@ follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this proje
   10 seconds, and removed with its anonymous volumes afterwards, also on failure or cancellation; a failed start
   fails the build ("Smoke test failed") with the container's output. Its listening ports are read inside the
   container (a port bound only to 127.0.0.1 is reported too), and the folders it created come from `docker diff`;
-  with Volumes empty, the image is built again with them and that image is tested. Without Docker the binary is
+  with Volumes empty, the image is built again with them (the first, untagged, image is removed) and that image is
+  tested. Without Docker the binary is
   tested on the host, and the log says so. The build result says which was tested.
 
 ### Added

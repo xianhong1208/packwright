@@ -167,7 +167,8 @@ async def test_tc_ismk_008_image_verdict_fails_the_build(tmp_path, mocker):
 @pytest.mark.asyncio
 async def test_tc_ismk_009_found_volumes_rebuild_and_retest(tmp_path, mocker):
     """TC-ISMK-009: Volumes unset — the folders the image created become VOLUMEs, the image is
-    built and tested again, the value is saved, and the port is checked inside the container."""
+    built and tested again (the first, now untagged, image removed), the value is saved, and the
+    port is checked inside the container."""
     (tmp_path / "dist").mkdir()
     merge, record = _quiet(mocker)
     mocker.patch.object(docker_worker.shutil, "which", return_value="/usr/bin/docker")
@@ -183,6 +184,8 @@ async def test_tc_ismk_009_found_volumes_rebuild_and_retest(tmp_path, mocker):
     second = {**first, "container": "b", "created_dirs": []}
     smoke = mocker.patch.object(docker_worker, "smoke_test_image", mocker.AsyncMock(side_effect=[first, second]))
     mocker.patch.object(docker_worker, "_image_size", mocker.AsyncMock(return_value=None))
+    mocker.patch.object(docker_worker, "_image_id", mocker.AsyncMock(side_effect=["sha256:first", "sha256:second"]))
+    quiet = mocker.patch.object(docker_worker, "_docker_quiet", mocker.AsyncMock(return_value=(0, "")))
     mocker.patch.object(docker_worker.os, "pipe", side_effect=OSError("no export in this test"))
     config = BuildConfig(project_type="backend_only", project_path=str(tmp_path), docker_enabled=True,
                          output_name="main", docker_expose_port=8000)
@@ -195,3 +198,4 @@ async def test_tc_ismk_009_found_volumes_rebuild_and_retest(tmp_path, mocker):
     patch = next(c.args[1] for c in merge.call_args_list if "verify" in c.args[1])
     assert patch["verify"]["container"] == "b" and patch["verify"]["created_dirs"] == ["data", "secrets"]
     assert patch["port_check"]["suggested"] == 4598
+    quiet.assert_awaited_once_with("image", "rm", "sha256:first")  # no untagged first image left behind

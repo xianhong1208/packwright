@@ -295,8 +295,13 @@ async def _verify_image(
         )
         guard.write(dockerfile_path, _generate_dockerfile(config, precompiled=precompiled, system=system))
         await task_manager.set_stage(task_id, "docker")
+        first_id = await _image_id(image_name)
         if not await _run_docker_command(task_id, build_cmd, project_path):
             return False
+        # The first image lost its tag to the second: remove it rather than
+        # leave an untagged copy on the build host for every such build.
+        if first_id and first_id != await _image_id(image_name):
+            await _docker_quiet("image", "rm", first_id)
         await task_manager.set_stage(task_id, "verify")
         await task_manager.append_log(task_id, "=== Smoke test: the image with its volumes ===")
         verify = await smoke_test_image(image_name, is_cancelled=cancelled)
@@ -602,6 +607,23 @@ def _scan_roots(config: BuildConfig) -> list[Path]:
     if config.pack_mode == PackMode.FULL:
         roots.extend(sorted((project / ".venv").glob("lib/python*/site-packages")))
     return roots
+
+
+async def _docker_quiet(*args: str) -> tuple[int, str]:
+    """A docker CLI call whose output is only returned: (returncode, stdout)."""
+    try:
+        proc = await asyncio.create_subprocess_exec(
+            "docker", *args, stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.DEVNULL,
+        )
+        out, _ = await proc.communicate()
+    except OSError:
+        return -1, ""
+    return proc.returncode or 0, out.decode().strip()
+
+
+async def _image_id(image_name: str) -> str | None:
+    code, out = await _docker_quiet("image", "inspect", "-f", "{{.Id}}", image_name)
+    return out if code == 0 and out else None
 
 
 async def _image_size(image_name: str) -> int | None:
