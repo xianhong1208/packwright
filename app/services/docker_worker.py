@@ -15,6 +15,7 @@ from app.services.source_guard import SourceGuard
 from app.services.task_manager import task_manager
 from app.services.build_env import build_environment
 from app.services.process_runner import run_step
+from app.services.system_libs import SystemPackages, system_packages
 
 
 async def run_docker_build(
@@ -102,8 +103,15 @@ async def _run_docker_build(
     # Generate Dockerfile based on project type
     dockerfile_path = project_path / "Dockerfile.generated"
 
+    system = None
+    if precompiled:
+        system = await asyncio.to_thread(system_packages, _scan_roots(config))
+        await task_manager.append_log(task_id, f"System packages: {' '.join(system.packages)}")
+        for pkg, (soname, needed_by) in system.reasons.items():
+            await task_manager.append_log(task_id, f"  + {pkg}: {needed_by} needs {soname}")
+
     try:
-        dockerfile_content = _generate_dockerfile(config, precompiled=precompiled)
+        dockerfile_content = _generate_dockerfile(config, precompiled=precompiled, system=system)
         guard.write(dockerfile_path, dockerfile_content)
         await task_manager.append_log(task_id, "Generated Dockerfile")
         await task_manager.append_log(task_id, "")
@@ -142,6 +150,10 @@ async def _run_docker_build(
         await task_manager.append_log(task_id, "")
         await task_manager.append_log(task_id, "=" * 50)
         await task_manager.append_log(task_id, f"Docker image built successfully: {image_name}")
+        size = await _image_size(image_name)
+        if size is not None:
+            await task_manager.append_log(task_id, f"Image size: {size / 1_000_000:.1f} MB")
+            await task_manager.merge_result(task_id, {"image": {"name": image_name, "size_bytes": size}}, db)
         await task_manager.append_log(task_id, "")
         await task_manager.append_log(task_id, "To run the container:")
         await task_manager.append_log(task_id, f"  docker run --rm --network host {image_name}")
@@ -410,7 +422,34 @@ def _version_block(version: str) -> str:
     )
 
 
-def _generate_dockerfile(config: BuildConfig, precompiled: bool = False) -> str:
+def _scan_roots(config: BuildConfig) -> list[Path]:
+    """Where the shared objects that ship in the image are: the output folder
+    (libs/ or the standalone .dist folder), and for Full mode the project's
+    packages too, since a onefile binary keeps its copies inside itself."""
+    project = Path(config.project_path)
+    roots = [project / (config.output_dir or "dist")]
+    if config.pack_mode == PackMode.FULL:
+        roots.extend(sorted((project / ".venv").glob("lib/python*/site-packages")))
+    return roots
+
+
+async def _image_size(image_name: str) -> int | None:
+    """The image's size in bytes as `docker image ls` reports it, or None."""
+    try:
+        proc = await asyncio.create_subprocess_exec(
+            "docker", "image", "inspect", "-f", "{{.Size}}", image_name,
+            stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.DEVNULL,
+        )
+        out, _ = await proc.communicate()
+    except OSError:
+        return None
+    text = out.decode().strip()
+    return int(text) if proc.returncode == 0 and text.isdigit() else None
+
+
+def _generate_dockerfile(
+    config: BuildConfig, precompiled: bool = False, system: SystemPackages | None = None
+) -> str:
     """Generate Dockerfile based on project type and configuration.
 
     Backend/fullstack projects always use precompiled Nuitka binaries
@@ -424,7 +463,9 @@ def _generate_dockerfile(config: BuildConfig, precompiled: bool = False) -> str:
         return _generate_frontend_dockerfile(config, port) + _version_block(config.version)
 
     # Backend and fullstack always use precompiled binary
-    return _generate_precompiled_dockerfile(config, base_image, port) + _version_block(config.version)
+    if system is None:
+        system = system_packages(_scan_roots(config))
+    return _generate_precompiled_dockerfile(config, base_image, port, system) + _version_block(config.version)
 
 
 def _generate_frontend_dockerfile(config: BuildConfig, port: int) -> str:
@@ -673,7 +714,9 @@ def _outermost_dirs(dirs: list[str]) -> list[str]:
     return kept
 
 
-def _generate_precompiled_dockerfile(config: BuildConfig, base_image: str, port: int) -> str:
+def _generate_precompiled_dockerfile(
+    config: BuildConfig, base_image: str, port: int, system: SystemPackages
+) -> str:
     """Generate Dockerfile for precompiled Nuitka binary built on host.
 
     Only copies the compiled output into a slim runtime image.
@@ -724,14 +767,14 @@ def _generate_precompiled_dockerfile(config: BuildConfig, base_image: str, port:
             if (dist_root / data_dir).is_dir():
                 data_copy_lines += f"COPY {output_dir}/{data_dir}/ ./{data_dir}/\n"
 
+    # Only what the shipped extensions load (see system_libs): the GUI and
+    # OpenGL libraries every image used to get were 221 MB of MCP Gate's 449.
+    packages = " ".join(system.packages)
     return dedent(f"""\
         # === Precompiled Backend Dockerfile ===
         FROM {base_image}
         WORKDIR /app
-        RUN apt-get update && apt-get install -y --no-install-recommends \
-            libpq5 \
-            libxcb1 libglib2.0-0 libsm6 libxrender1 libxext6 libgl1 \
-            zlib1g libxml2 libxslt1.1 \
+        RUN apt-get update && apt-get install -y --no-install-recommends {packages} \\
             && apt-get clean && rm -rf /var/lib/apt/lists/*
     """) + extra_blocks + "\n# Copy precompiled Nuitka output\n" + copy_binary + copy_libs + data_copy_lines + dedent(f"""\
         ENV HOST=0.0.0.0

@@ -6,3 +6,7 @@ export const formatBytes = (bytes: number): string => {
   const i = Math.min(sizes.length - 1, Math.floor(Math.log(bytes) / Math.log(k)))
   return `${(bytes / Math.pow(k, i)).toFixed(i === 0 ? 0 : 1)} ${sizes[i]}`
 }
+
+/** An image size as `docker image ls` shows it: decimal units (1 MB = 1,000,000 bytes). */
+export const formatImageSize = (bytes: number): string =>
+  bytes >= 1e9 ? `${(bytes / 1e9).toFixed(2)} GB` : `${(bytes / 1e6).toFixed(1)} MB`
