@@ -330,7 +330,7 @@ Docker 環境變數除外),回來時還原;**Clear draft** 可以清掉。
 | Binary name | 執行檔名稱;留空時取進入點的檔名(`main.py` → `main`) |
 | Nuitka pack mode | **External**(建議):第三方套件放在執行檔旁的 `libs/`,編譯快;**Full**:全部編進執行檔,非常慢 |
 | Single-file binary | 輸出單一執行檔或資料夾 |
-| Dependency group | `[dependency-groups]` 中的一組(例如不同平台的 PyTorch) |
+| Dependency group | `[dependency-groups]` 中的一組(例如不同平台的 PyTorch)。Git 模式不會裝其他群組,連 uv 預設會裝的 `dev` 也不裝,所以 pytest、ruff 這類開發工具不會跟著出貨 |
 | CPU jobs | 平行編譯的程序數。0 = 自動:單獨建置時用全部核心,同時有多個建置時平分核心(每個至少 4)。記憶體用量幾乎跟它成正比 |
 | Include packages | Nuitka 偵測不到的動態 import(例:`litellm, openai`) |
 | Include package data | 套件內建的非 `.py` 資料檔(例:`certifi`) |
@@ -355,6 +355,7 @@ Docker 環境變數除外),回來時還原;**Clear draft** 可以清掉。
 ### Docker
 
 不需要就保持關閉。開啟後可以設定 image 名稱、基底映像、對外 port、額外的 `RUN` 指令與環境變數。
+image 名稱留空時,Git 來源用 repo 名稱、本機來源用資料夾名稱(轉小寫),tag 是版本。
 純前端 + Docker 會包成 nginx image,可以再設定 API 反向代理與 nginx 參數,說明見
 [快速上手的 nginx 一節](./quickstart.zh-TW.md#純前端--docker-的-nginx-設定-)。
 
@@ -378,7 +379,7 @@ Queued → Preflight → Compile → Bundle → Verify
 | **Preflight** | 檢查專案路徑、進入點、`.venv`、Nuitka 與 Python 版本;有問題立刻失敗,不用等編譯 |
 | **Compile** | Nuitka 編譯 |
 | **Bundle** | 複製依賴(`libs/`)與資料目錄 |
-| **Verify** | 試跑執行檔。缺模組會判定失敗;因為建置機沒有 GPU、連不到資料庫、缺命令列參數或授權檔而結束的,判定為警告,並說明這屬於執行環境而非打包問題 |
+| **Verify** | 試跑執行檔。缺模組會判定失敗;因為建置機沒有 GPU、連不到資料庫、缺命令列參數或授權檔而結束的,判定為警告,並說明這屬於執行環境而非打包問題。試跑在輸出目錄裡執行,程式在那裡新建的檔案(資料庫、金鑰、log)試跑完會刪掉,不會進到下載檔或 image;改到既有檔案時會在 log 警告 |
 
 - **日誌** 經 WebSocket 即時串流,可搜尋、複製、下載。每個建置保留最後 `MAX_LOG_LINES` 行。
 - **Cancel run** 會停止建置行程。
