@@ -61,7 +61,7 @@
 ### ② 後端設定(後端 / 全端才有)
 - **進入點**:主程式,例如 `main.py`。
 - **打包模式**:見下方「兩種模式怎麼選」。
-- **依賴群組**:自動讀 `pyproject.toml` 的 `[dependency-groups]`,單選。典型用途:選不同平台的 PyTorch(rocm/cuda/cpu)。
+- **依賴群組**:自動讀 `pyproject.toml` 的 `[dependency-groups]`,單選。典型用途:選不同平台的 PyTorch(rocm/cuda/cpu)。沒選的群組都不安裝,包括 uv 預設會裝的 `dev`。
 - **進階設定**(可不動):CPU 並行數、強制納入套件、要一起打包的 source code 目錄、資料目錄、以及下方「進階選項速查」那幾個。
 
 ### ③ 前端設定(前端 / 全端才有)

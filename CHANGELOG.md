@@ -11,6 +11,25 @@ follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this proje
   `COPY`, which stores the whole binary again in a new layer (MCP Gate: 2 × 49.7 MB); it is now
   `COPY --chmod=755`. A full-stack build whose frontend output sits inside a data dir already listed (MCP Gate's
   `static/web` inside `static`) copied the frontend twice; a data dir inside another one is now copied once.
+- A failed smoke test is reported as one. The build said "Nuitka compilation failed" although the compile had
+  succeeded, its failure report named the stage "finishing up", and on a full-stack build the diagnosis read
+  "Frontend build failed", because that rule fired on "vite build" plus the word "error" anywhere in the log. The
+  task now says "Smoke test failed", the report names the verification stage, and the frontend rule needs vite's
+  own "error during build".
+### Security
+- The smoke test no longer leaves the program's state in the build output. The binary runs in the output
+  directory, which is what the build hands out: packaging MCP Gate put the smoke run's `data/mcp_gate.db` (with its
+  signing keys), `secrets/secrets.json` (encryption key and setup token) and `logs/` into the downloadable archive,
+  so every deployment of that build would have started with the same keys. Whatever the program creates there is
+  removed after the run, and existing files it changed are named in the build log.
+### Fixed
+- A Git build with no image name set is named after the repository (`mcp_gate:1.4.0`), as the docs say. It was
+  named after the workspace the repository is cloned into, which is the task id, so every build made a new
+  repository such as `be1d3c22-b30d-479d-8cc7-101d31c6ec90:1.3.1`. The Commands tab shows the same name.
+- Git builds no longer ship the project's development tools. The `.venv` was created with `uv sync`, which also
+  installs the `dev` dependency group, and External mode copies the whole `.venv` into `libs/`: packaging MCP Gate
+  put pytest, pytest-asyncio, pytest-cov, pytest-mock, coverage and ruff into its binary's `libs/` and Docker image.
+  The bootstrap now runs `uv sync --no-default-groups`, plus `--group <name>` for a group chosen in the build settings.
 
 ## [1.3.2] — 2026-11-13
 

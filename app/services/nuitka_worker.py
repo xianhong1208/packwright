@@ -788,7 +788,92 @@ def _signal_group(pid: int, sig: int) -> None:
         os.killpg(pid, sig)
 
 
+def _tree_state(root: Path) -> dict[str, tuple[int, int] | None]:
+    """Every path under root (relative), with (size, mtime_ns) for files and None
+    for directories. Symlinks are listed, never followed."""
+    state: dict[str, tuple[int, int] | None] = {}
+    for current, dirnames, filenames in os.walk(root):
+        base = Path(current)
+        for name in dirnames:
+            path = base / name
+            state[str(path.relative_to(root))] = None if not path.is_symlink() else (0, 0)
+        for name in filenames:
+            path = base / name
+            try:
+                st = path.lstat()
+            except OSError:
+                continue
+            state[str(path.relative_to(root))] = (st.st_size, st.st_mtime_ns)
+    return state
+
+
+def _undo_smoke_writes(root: Path, before: dict[str, tuple[int, int] | None]) -> tuple[list[str], list[str]]:
+    """Remove what the smoke-tested program created under root.
+
+    The binary runs in the output directory, and that directory is what the
+    build hands out. A service writes its state where it runs: packaging MCP
+    Gate left data/mcp_gate.db (its signing keys), secrets/secrets.json (its
+    encryption key and setup token) and logs/ in the downloadable archive, so
+    every deployment of that build would have started with the same keys.
+
+    Returns (removed, changed): the top-most paths removed, and existing files
+    the program modified, which cannot be put back and are only reported.
+    """
+    after = _tree_state(root)
+    created = sorted(p for p in after if p not in before)
+    removed: list[str] = []
+    for rel in created:
+        if any(rel.startswith(done + os.sep) for done in removed):
+            continue
+        path = root / rel
+        with contextlib.suppress(OSError):
+            if path.is_dir() and not path.is_symlink():
+                shutil.rmtree(path)
+            else:
+                path.unlink()
+            removed.append(rel)
+    changed = sorted(p for p, st in before.items() if st is not None and p in after and after[p] != st)
+    return removed, changed
+
+
+def _describe_removed(removed: list[str]) -> str:
+    """The removed paths for the log, with Python's bytecode caches counted rather
+    than listed: MCP Gate's run left one in nearly every package in libs/."""
+    caches = [p for p in removed if Path(p).name == "__pycache__"]
+    named = [p for p in removed if Path(p).name != "__pycache__"]
+    parts = named[:20]
+    if len(named) > 20:
+        parts.append(f"{len(named) - 20} more")
+    if caches:
+        parts.append(f"{len(caches)} __pycache__ folder{'s' if len(caches) != 1 else ''}")
+    return ", ".join(parts)
+
+
 async def _smoke_test(
+    task_id: str,
+    binary: Path,
+    cwd: Path,
+    extra_env: dict[str, str] | None = None,
+) -> dict[str, Any]:
+    """Run the binary once (see _run_smoke_test), then take away what it wrote in cwd."""
+    before = await asyncio.to_thread(_tree_state, cwd)
+    try:
+        return await _run_smoke_test(task_id, binary, cwd, extra_env)
+    finally:
+        removed, changed = await asyncio.to_thread(_undo_smoke_writes, cwd, before)
+        if removed:
+            await task_manager.append_log(
+                task_id, "Smoke test: removed what the program wrote in the output directory: " + _describe_removed(removed)
+            )
+        if changed:
+            await task_manager.append_log(
+                task_id,
+                "⚠ Smoke test: the program changed these files in the output, and they ship as changed: "
+                + ", ".join(changed),
+            )
+
+
+async def _run_smoke_test(
     task_id: str,
     binary: Path,
     cwd: Path,
@@ -1697,7 +1782,10 @@ async def run_nuitka_build(task_id: str, config: BuildConfig, db: AsyncSession) 
 
             build_result["duration_seconds"] = round(time.monotonic() - start_ts, 1)
             await task_manager.set_result(task_id, dict(build_result), db)
-            await task_manager.set_stage(task_id, "done")
+            # A failed smoke test leaves the build at "verify", so the failure
+            # report names that stage instead of "finishing up".
+            failed_verify = build_result["verify"]["status"] == "fail"
+            await task_manager.set_stage(task_id, "verify" if failed_verify else "done")
 
             await task_manager.append_log(task_id, "")
             await task_manager.append_log(task_id, "=" * 50)
@@ -1706,7 +1794,7 @@ async def run_nuitka_build(task_id: str, config: BuildConfig, db: AsyncSession) 
             await task_manager.append_log(task_id, "=" * 50)
 
             # A failed smoke test means the artifact is broken — fail the build
-            if build_result["verify"]["status"] == "fail":
+            if failed_verify:
                 await task_manager.append_log(
                     task_id, "Smoke test failed — marking build as failed"
                 )
