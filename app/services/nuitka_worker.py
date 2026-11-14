@@ -28,6 +28,7 @@ from app.services.source_guard import SourceGuard
 from app.services.task_manager import task_manager
 from app.services.process_runner import run_step
 from app.services import compile_cache
+from app.services.ports import Listener, group_listeners, port_check
 from app.services.build_env import build_environment
 
 settings = get_settings()
@@ -919,6 +920,30 @@ def _describe_removed(removed: list[str]) -> str:
     return ", ".join(parts)
 
 
+def docker_port_check(config: BuildConfig, verify: dict[str, Any], *, container: bool = False) -> dict | None:
+    """For a Docker build, what the smoke run's ports say about the exposed port (see ports.port_check)."""
+    if not config.docker_enabled:
+        return None
+    listeners = {Listener(x["port"], x["address"]) for x in verify.get("listeners") or []}
+    return port_check(listeners, config.docker_expose_port, container=container)
+
+
+async def _wait_watching_ports(proc: asyncio.subprocess.Process, window: float, seen: set[Listener]) -> int:
+    """proc.wait() with a timeout of `window`, noting every port the process
+    group listens on meanwhile (a service may bind seconds after it starts).
+    Raises asyncio.TimeoutError when the window passes, like wait_for."""
+    deadline = time.monotonic() + window
+    while True:
+        seen.update(await asyncio.to_thread(group_listeners, proc.pid))
+        left = deadline - time.monotonic()
+        if left <= 0:
+            raise asyncio.TimeoutError
+        try:
+            return await asyncio.wait_for(proc.wait(), timeout=min(0.5, left))
+        except asyncio.TimeoutError:
+            continue
+
+
 async def _smoke_test(
     task_id: str,
     binary: Path,
@@ -928,7 +953,14 @@ async def _smoke_test(
     """Run the binary once (see _run_smoke_test), then take away what it wrote in cwd."""
     before = await asyncio.to_thread(_tree_state, cwd)
     try:
-        verify = await _run_smoke_test(task_id, binary, cwd, extra_env)
+        listeners: set[Listener] = set()
+        verify = await _run_smoke_test(task_id, binary, cwd, extra_env, listeners)
+        verify["listeners"] = [{"port": lst.port, "address": lst.address} for lst in sorted(listeners)]
+        if listeners:
+            await task_manager.append_log(
+                task_id, "Smoke test: the program listened on " + ", ".join(
+                    f"{lst.address}:{lst.port}" for lst in sorted(listeners))
+            )
         verify["created_dirs"] = await asyncio.to_thread(_created_dirs, cwd, binary.parent, before)
         if verify["created_dirs"]:
             await task_manager.append_log(
@@ -954,6 +986,7 @@ async def _run_smoke_test(
     binary: Path,
     cwd: Path,
     extra_env: dict[str, str] | None = None,
+    listeners: set[Listener] | None = None,
 ) -> dict[str, Any]:
     """Launch the produced binary briefly to catch import/startup crashes.
 
@@ -987,7 +1020,7 @@ async def _run_smoke_test(
         return {"status": "fail", "detail": f"Failed to launch binary: {e}", "exit_code": None}
 
     try:
-        ret = await asyncio.wait_for(proc.wait(), timeout=_SMOKE_WINDOW)
+        ret = await _wait_watching_ports(proc, _SMOKE_WINDOW, listeners if listeners is not None else set())
         output = b""
         if proc.stdout:
             try:
@@ -1843,6 +1876,11 @@ async def run_nuitka_build(task_id: str, config: BuildConfig, db: AsyncSession) 
                 await task_manager.append_log(
                     task_id, f"Verify: {marker} {verify['detail']}"
                 )
+                checked = docker_port_check(config, verify)
+                if checked:
+                    build_result["port_check"] = checked
+                    if checked["message"]:
+                        await task_manager.append_log(task_id, f"⚠ Port: {checked['message']}")
             else:
                 build_result["verify"] = {
                     "status": "skipped",

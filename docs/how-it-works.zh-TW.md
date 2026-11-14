@@ -107,6 +107,10 @@ DATABASE_URL=sqlite+aiosqlite:////srv/packwright/build_center.db
   新的 named volume 會帶著 image 裡該資料夾的內容與擁有者,非 root 的程式可以直接寫入。若改用 bind mount,
   請把主機資料夾交給 uid 10001(`chown 10001:10001 <目錄>`)。
 
+- **Port 檢查。** 煙霧測試期間,Packwright 會記下程式實際監聽的 TCP port(從 `/proc` 讀它的 process group 的
+  socket)。如果 image 對外的 port 不是它,建置日誌與建置結果會發出警告並建議該用的值(例如「程式監聽 4598,
+  image 卻開 8000」)。設定不會被自動修改:一個程式可能監聽好幾個 port。
+
 ## Git 憑證
 
 私有 repo 的存取權杖在管理台設定(左側工具列的 **Git credentials**,需要 `user:manage` 權限),不放在 `.env`:
