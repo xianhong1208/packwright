@@ -214,6 +214,7 @@ export interface VerifyResult {
   exit_code: number | null
   /** Folders the program created where it ran. */
   created_dirs?: string[]
+  listeners?: { port: number; address: string }[]
 }
 
 export interface DiagnosisAction {
@@ -249,6 +250,16 @@ export interface BuildResult {
   compile_cache?: { hits: number; compiled: number } | null
   /** The Docker image a Docker build produced. */
   image?: ImageInfo | null
+  /** Docker builds: the ports the program listened on against the exposed one. */
+  port_check?: PortCheck | null
+}
+
+export interface PortCheck {
+  listening: number[]
+  expected: number
+  /** The port to set instead, when the program did not listen on the exposed one. */
+  suggested: number | null
+  message: string
 }
 
 export interface ImageInfo {

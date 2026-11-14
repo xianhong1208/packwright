@@ -7,6 +7,11 @@ follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this proje
 ## [Unreleased]
 
 ### Added
+- The smoke test checks the port (#35). It notes the TCP ports the program listens on (its process group's
+  sockets, sampled through the run), keeps them in the result, and for a Docker build warns in the log and the
+  build result when the image exposes another port, with the one to use: Quick build suggested 8000 for MCP Gate,
+  which listens on its `SERVER_PORT`, and the image answered nothing on the port it published. The setting is not
+  changed automatically.
 - Docker settings: **Volumes** and **Run as root** (#36). A backend image runs its program as the user `app`
   (uid 10001), which owns its files (`COPY --chown`, nothing stored twice) and `/app`; *Run as root* turns this off.
   Each folder in Volumes is created in the image, owned by that user, and declared as a `VOLUME`. Left empty, the
