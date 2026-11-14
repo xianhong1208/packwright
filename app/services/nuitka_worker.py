@@ -1782,7 +1782,10 @@ async def run_nuitka_build(task_id: str, config: BuildConfig, db: AsyncSession) 
 
             build_result["duration_seconds"] = round(time.monotonic() - start_ts, 1)
             await task_manager.set_result(task_id, dict(build_result), db)
-            await task_manager.set_stage(task_id, "done")
+            # A failed smoke test leaves the build at "verify", so the failure
+            # report names that stage instead of "finishing up".
+            failed_verify = build_result["verify"]["status"] == "fail"
+            await task_manager.set_stage(task_id, "verify" if failed_verify else "done")
 
             await task_manager.append_log(task_id, "")
             await task_manager.append_log(task_id, "=" * 50)
@@ -1791,7 +1794,7 @@ async def run_nuitka_build(task_id: str, config: BuildConfig, db: AsyncSession) 
             await task_manager.append_log(task_id, "=" * 50)
 
             # A failed smoke test means the artifact is broken — fail the build
-            if build_result["verify"]["status"] == "fail":
+            if failed_verify:
                 await task_manager.append_log(
                     task_id, "Smoke test failed — marking build as failed"
                 )
