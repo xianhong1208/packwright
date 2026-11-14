@@ -920,12 +920,139 @@ def _describe_removed(removed: list[str]) -> str:
     return ", ".join(parts)
 
 
+def smoke_target(config: BuildConfig) -> str:
+    """What a build's smoke test starts: the Docker image when the build makes one
+    and Docker is here, else the binary on this host."""
+    return "image" if config.docker_enabled and shutil.which("docker") else "binary"
+
+
 def docker_port_check(config: BuildConfig, verify: dict[str, Any], *, container: bool = False) -> dict | None:
     """For a Docker build, what the smoke run's ports say about the exposed port (see ports.port_check)."""
     if not config.docker_enabled:
         return None
     listeners = {Listener(x["port"], x["address"]) for x in verify.get("listeners") or []}
     return port_check(listeners, config.docker_expose_port, container=container)
+
+
+def classify_exit(ret: int, full: str) -> dict[str, Any]:
+    """The verdict on a program that exited within the smoke window, from its exit
+    code and output. Shared by the binary and the image smoke tests."""
+    tail = full.strip()[-500:]
+    if ret == 0:
+        return {"status": "pass", "detail": "Binary exited cleanly", "exit_code": 0}
+    # Environment-only failures: the binary started fine (imports, config,
+    # logging all executed) but couldn't finish because of something
+    # external — most commonly the service port already being in use by
+    # another running instance. That proves the binary itself is healthy,
+    # so treat it as a warning, NOT a build failure.
+    low = full.lower()
+    if (
+        "address already in use" in low
+        or "errno 98" in low
+        or "eaddrinuse" in low
+    ):
+        return {
+            "status": "warn",
+            "detail": (
+                "Binary started successfully but the port is already in use "
+                "(likely another instance is still running) — environment "
+                f"issue, not a build problem (exit {ret})"
+            ),
+            "exit_code": ret,
+        }
+    # GPU / accelerator init failures: the build host usually has no GPU, so
+    # a torch/ROCm/CUDA program can't initialize here even when the binary is
+    # fine — same idea as the port case. Treat as a warning and tell the user
+    # to verify on the target GPU machine, rather than failing the build.
+    if _looks_like_gpu_failure(low):
+        return {
+            "status": "warn",
+            "detail": (
+                "The binary stopped while initialising a GPU/accelerator (torch/ROCm/CUDA), "
+                "and build hosts usually have no GPU — most likely the environment, not the "
+                f"build. Verify it on a target machine with a GPU (exit {ret}): {tail[-200:]}"
+            ),
+            "exit_code": ret,
+        }
+    # External-service connection failures: the binary imported cleanly and
+    # ran far enough to open a DB/cache/broker connection, then failed because
+    # that backing service isn't reachable/authenticated ON THE BUILD HOST —
+    # its Postgres/Redis credentials and network differ from the deploy host.
+    # Reaching the connect() call proves the app itself is healthy, so this is
+    # an environment issue (same class as the port/GPU cases), not a build bug.
+    service_hints = (
+        "operationalerror", "password authentication failed",
+        "connection refused", "could not connect to server",
+        "connection to server at", "could not translate host name",
+        "no route to host", "econnrefused", "redis.exceptions",
+        "connectionerror", "psycopg2", "could not connect",
+        "access denied for user", "authentication failed",
+        "timeout expired", "server closed the connection",
+    )
+    if any(h in low for h in service_hints):
+        return {
+            "status": "warn",
+            "detail": (
+                "The binary started and only failed when connecting to an external service "
+                "(database/cache/queue) — the build host's addresses and credentials differ from "
+                "the deployment's, so this is the environment, not the build. Verify it on the "
+                f"target machine, where the services are reachable (exit {ret}): {tail[-200:]}"
+            ),
+            "exit_code": ret,
+        }
+    # Missing required CLI arguments: the smoke test runs the binary with no
+    # args, but the program legitimately requires some (e.g. --config). argparse
+    # prints a usage message and exits 2. That PROVES the binary launched and its
+    # arg parser ran — it's a smoke-test invocation gap, not a build defect. The
+    # real service is started with the proper flags. Treat as a warning.
+    argparse_hints = (
+        "the following arguments are required",
+        "are required:",
+        "is required:",
+        "unrecognized arguments",
+        "invalid choice",
+        "expected one argument",
+        "error: argument",
+    )
+    looks_like_usage = "usage:" in low and "error:" in low
+    if looks_like_usage or any(h in low for h in argparse_hints):
+        return {
+            "status": "warn",
+            "detail": (
+                "The binary started and exited because required command-line arguments were "
+                "missing (the smoke test runs it with none) — so the program and its argument "
+                "parsing work; this is how it was called, not the build. Run the real service "
+                f"with its arguments (e.g. --config) (exit {ret}): {tail[-200:]}"
+            ),
+            "exit_code": ret,
+        }
+    # Missing license / required runtime resource file: the binary launched
+    # and ran its startup (logging configured, etc.) but exited because a
+    # license/credential/config FILE that lives on the DEPLOY host isn't
+    # present on the build host. Same class as the DB/CLI-arg cases — the app
+    # is healthy, the build machine just lacks a deploy-time resource.
+    license_hints = (
+        "license file not found", "license error", "license not found",
+        "invalid license", "license expired", "license_file",
+        # "授權檔" ("license file") matches Chinese-language programs' own output.
+        "no license", "license.lic", "授權檔", "license required",
+    )
+    if any(h in low for h in license_hints):
+        return {
+            "status": "warn",
+            "detail": (
+                "The binary started and exited because a license or required resource file "
+                "(e.g. license.lic) was not found — that file is provided on the deployment "
+                "machine (or via LICENSE_FILE), so its absence on the build host is expected, "
+                f"not a build error. Verify it there once the file is in place (exit {ret}): {tail[-200:]}"
+            ),
+            "exit_code": ret,
+        }
+    return {
+        "status": "fail",
+        "detail": f"Binary exited with code {ret}" + (f": {tail}" if tail else ""),
+        "exit_code": ret,
+    }
 
 
 async def _wait_watching_ports(proc: asyncio.subprocess.Process, window: float, seen: set[Listener]) -> int:
@@ -1030,122 +1157,7 @@ async def _run_smoke_test(
             except asyncio.TimeoutError:
                 pass
         full = output.decode("utf-8", errors="replace")
-        tail = full.strip()[-500:]
-        if ret == 0:
-            return {"status": "pass", "detail": "Binary exited cleanly", "exit_code": 0}
-        # Environment-only failures: the binary started fine (imports, config,
-        # logging all executed) but couldn't finish because of something
-        # external — most commonly the service port already being in use by
-        # another running instance. That proves the binary itself is healthy,
-        # so treat it as a warning, NOT a build failure.
-        low = full.lower()
-        if (
-            "address already in use" in low
-            or "errno 98" in low
-            or "eaddrinuse" in low
-        ):
-            return {
-                "status": "warn",
-                "detail": (
-                    "Binary started successfully but the port is already in use "
-                    "(likely another instance is still running) — environment "
-                    f"issue, not a build problem (exit {ret})"
-                ),
-                "exit_code": ret,
-            }
-        # GPU / accelerator init failures: the build host usually has no GPU, so
-        # a torch/ROCm/CUDA program can't initialize here even when the binary is
-        # fine — same idea as the port case. Treat as a warning and tell the user
-        # to verify on the target GPU machine, rather than failing the build.
-        if _looks_like_gpu_failure(low):
-            return {
-                "status": "warn",
-                "detail": (
-                    "The binary stopped while initialising a GPU/accelerator (torch/ROCm/CUDA), "
-                    "and build hosts usually have no GPU — most likely the environment, not the "
-                    f"build. Verify it on a target machine with a GPU (exit {ret}): {tail[-200:]}"
-                ),
-                "exit_code": ret,
-            }
-        # External-service connection failures: the binary imported cleanly and
-        # ran far enough to open a DB/cache/broker connection, then failed because
-        # that backing service isn't reachable/authenticated ON THE BUILD HOST —
-        # its Postgres/Redis credentials and network differ from the deploy host.
-        # Reaching the connect() call proves the app itself is healthy, so this is
-        # an environment issue (same class as the port/GPU cases), not a build bug.
-        service_hints = (
-            "operationalerror", "password authentication failed",
-            "connection refused", "could not connect to server",
-            "connection to server at", "could not translate host name",
-            "no route to host", "econnrefused", "redis.exceptions",
-            "connectionerror", "psycopg2", "could not connect",
-            "access denied for user", "authentication failed",
-            "timeout expired", "server closed the connection",
-        )
-        if any(h in low for h in service_hints):
-            return {
-                "status": "warn",
-                "detail": (
-                    "The binary started and only failed when connecting to an external service "
-                    "(database/cache/queue) — the build host's addresses and credentials differ from "
-                    "the deployment's, so this is the environment, not the build. Verify it on the "
-                    f"target machine, where the services are reachable (exit {ret}): {tail[-200:]}"
-                ),
-                "exit_code": ret,
-            }
-        # Missing required CLI arguments: the smoke test runs the binary with no
-        # args, but the program legitimately requires some (e.g. --config). argparse
-        # prints a usage message and exits 2. That PROVES the binary launched and its
-        # arg parser ran — it's a smoke-test invocation gap, not a build defect. The
-        # real service is started with the proper flags. Treat as a warning.
-        argparse_hints = (
-            "the following arguments are required",
-            "are required:",
-            "is required:",
-            "unrecognized arguments",
-            "invalid choice",
-            "expected one argument",
-            "error: argument",
-        )
-        looks_like_usage = "usage:" in low and "error:" in low
-        if looks_like_usage or any(h in low for h in argparse_hints):
-            return {
-                "status": "warn",
-                "detail": (
-                    "The binary started and exited because required command-line arguments were "
-                    "missing (the smoke test runs it with none) — so the program and its argument "
-                    "parsing work; this is how it was called, not the build. Run the real service "
-                    f"with its arguments (e.g. --config) (exit {ret}): {tail[-200:]}"
-                ),
-                "exit_code": ret,
-            }
-        # Missing license / required runtime resource file: the binary launched
-        # and ran its startup (logging configured, etc.) but exited because a
-        # license/credential/config FILE that lives on the DEPLOY host isn't
-        # present on the build host. Same class as the DB/CLI-arg cases — the app
-        # is healthy, the build machine just lacks a deploy-time resource.
-        license_hints = (
-            "license file not found", "license error", "license not found",
-            "invalid license", "license expired", "license_file",
-            # "授權檔" ("license file") matches Chinese-language programs' own output.
-            "no license", "license.lic", "授權檔", "license required",
-        )
-        if any(h in low for h in license_hints):
-            return {
-                "status": "warn",
-                "detail": (
-                    "The binary started and exited because a license or required resource file "
-                    "(e.g. license.lic) was not found — that file is provided on the deployment "
-                    "machine (or via LICENSE_FILE), so its absence on the build host is expected, "
-                    f"not a build error. Verify it there once the file is in place (exit {ret}): {tail[-200:]}"
-                ),
-                "exit_code": ret,
-            }
-        return {
-            "status": "fail",
-            "detail": f"Binary exited with code {ret}" + (f": {tail}" if tail else ""),
-            "exit_code": ret,
-        }
+        return classify_exit(ret, full)
     except asyncio.TimeoutError:
         _signal_group(proc.pid, signal.SIGTERM)
         try:
@@ -1860,7 +1872,24 @@ async def run_nuitka_build(task_id: str, config: BuildConfig, db: AsyncSession) 
                 build_result["report_file"] = str(report_file)
 
             # Post-build smoke test
-            if config.verify_after_build:
+            target = smoke_target(config)
+            if config.verify_after_build and target == "image":
+                # The image is what ships, and the Docker ENV describes it: it is
+                # started after docker build (image_smoke), not this binary here.
+                build_result["verify"] = {
+                    "status": "skipped",
+                    "detail": "The Docker image is smoke-tested once it is built",
+                    "exit_code": None,
+                    "target": "image",
+                }
+                await task_manager.append_log(task_id, "Smoke test: the Docker image will be started once it is built")
+            elif config.verify_after_build:
+                if config.docker_enabled:
+                    await task_manager.append_log(
+                        task_id,
+                        "Smoke test: Docker is not available here, so the binary is tested on this host instead "
+                        "of the image (with the Docker ENV, whose container paths may not exist here)",
+                    )
                 await task_manager.set_stage(task_id, "verify")
                 await task_manager.update_task(task_id, "status_msg", "Verifying binary...")
                 # Runtime env for the test: Docker ENV first, else project .env
@@ -1871,6 +1900,7 @@ async def run_nuitka_build(task_id: str, config: BuildConfig, db: AsyncSession) 
                 verify = await _smoke_test(
                     task_id, binary_path, cwd=output_dir, extra_env=smoke_env
                 )
+                verify["target"] = "binary"
                 build_result["verify"] = verify
                 marker = {"pass": "✓", "warn": "⚠", "fail": "✗"}.get(verify["status"], "•")
                 await task_manager.append_log(

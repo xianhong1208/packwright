@@ -107,8 +107,13 @@ DATABASE_URL=sqlite+aiosqlite:////srv/packwright/build_center.db
   新的 named volume 會帶著 image 裡該資料夾的內容與擁有者,非 root 的程式可以直接寫入。若改用 bind mount,
   請把主機資料夾交給 uid 10001(`chown 10001:10001 <目錄>`)。
 
-- **Port 檢查。** 煙霧測試期間,Packwright 會記下程式實際監聽的 TCP port(從 `/proc` 讀它的 process group 的
-  socket)。如果 image 對外的 port 不是它,建置日誌與建置結果會發出警告並建議該用的值(例如「程式監聽 4598,
+- **煙霧測試的對象是 image。** image 建好後,用 `docker run -d` 以不重複的名稱(`<repo>-smoke-<hex>`)啟動,
+  Docker ENV 已經在 image 裡,走預設的 bridge 網路(不對外開 port);和執行檔測試一樣等 10 秒,正常結束或仍在執行
+  就算通過,之後連同匿名 volume 一起刪除。啟動失敗會讓建置失敗,並附上容器的輸出。建置主機沒有 Docker 時,改在主機上
+  測執行檔,日誌會註明。Volumes 留空時,以這次執行建立的資料夾(`docker diff`)為準,用它們再建一次 image(走 layer
+  快取,幾秒鐘),並測試這個新 image。
+- **Port 檢查。** 煙霧測試期間,Packwright 會記下程式實際監聽的 TCP port(image 從容器內讀;執行檔從 `/proc` 讀它的
+  process group 的 socket)。在容器裡只綁 127.0.0.1 的程式也會提醒:對外的 port 連不到它。如果 image 對外的 port 不是它,建置日誌與建置結果會發出警告並建議該用的值(例如「程式監聽 4598,
   image 卻開 8000」)。設定不會被自動修改:一個程式可能監聽好幾個 port。
 
 ## Git 憑證

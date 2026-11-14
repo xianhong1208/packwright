@@ -43,6 +43,15 @@ describe('BuildResultPanel', () => {
     expect(screen.getByText('228.4 MB')).toBeInTheDocument()
   })
 
+  it('says whether the image or the binary was smoke-tested', () => {
+    const { rerender } = render(
+      <BuildResultPanel result={{ ...base, verify: { status: 'pass', detail: '', exit_code: null, target: 'image', container: 'mcp_gate-smoke-1a2b3c4d' } }} />,
+    )
+    expect(screen.getByText('Smoke test: started the Docker image as mcp_gate-smoke-1a2b3c4d (removed afterwards).')).toBeInTheDocument()
+    rerender(<BuildResultPanel result={{ ...base, verify: { status: 'pass', detail: '', exit_code: 0, target: 'binary' } }} />)
+    expect(screen.getByText('Smoke test: ran the binary on the build host.')).toBeInTheDocument()
+  })
+
   it('warns when the program listened on another port than the image exposes', () => {
     render(
       <BuildResultPanel

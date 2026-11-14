@@ -620,7 +620,7 @@ _STAGE_HINTS = {
     "preflight": "Failed during preflight — usually a path, the Python version or the dependency environment",
     "compile": "Failed while compiling — Nuitka reported an error",
     "bundle": "Failed while bundling — copying dependencies or data directories went wrong",
-    "verify": "Failed verification — the binary was built but its test run failed",
+    "verify": "Failed verification — the program (or its Docker image) was built but its test run failed",
     "done": "Failed while finishing up",
 }
 

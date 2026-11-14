@@ -16,6 +16,7 @@ from app.services.task_manager import task_manager
 from app.services.build_env import build_environment
 from app.services.process_runner import run_step
 from app.services.system_libs import SystemPackages, system_packages
+from app.services.image_smoke import smoke_test_image
 
 
 async def run_docker_build(
@@ -155,6 +156,10 @@ async def _run_docker_build(
 
     success = await _run_docker_command(task_id, build_cmd, project_path)
 
+    if success and config.verify_after_build:
+        success = await _verify_image(task_id, config, image_name, build_cmd, project_path, precompiled, system,
+                                      guard, dockerfile_path, db)
+
     # Put the project's files back now rather than after the (long) export.
     await _restore_and_log(task_id, guard)
 
@@ -244,6 +249,79 @@ async def _run_docker_build(
             tar_path.unlink(missing_ok=True)
 
     return success
+
+
+async def _verify_image(
+    task_id: str,
+    config: BuildConfig,
+    image_name: str,
+    build_cmd: list[str],
+    project_path: Path,
+    precompiled: bool,
+    system: SystemPackages | None,
+    guard: SourceGuard,
+    dockerfile_path: Path,
+    db: AsyncSession,
+) -> bool:
+    """Smoke-test the image (see image_smoke); False when it failed.
+
+    With Volumes not set, the folders the program created in the container
+    become volumes: the Dockerfile gets them, the image is built again (every
+    layer but the last few comes from the cache) and that image is tested, so
+    what ships is what passed, with its volumes owned by the program's user.
+    """
+    from app.services.nuitka_worker import docker_port_check
+    from app.services.process_runner import is_cancelled
+
+    await task_manager.set_stage(task_id, "verify")
+    await task_manager.update_task(task_id, "status_msg", "Smoke-testing the image...")
+    await task_manager.append_log(task_id, "")
+    await task_manager.append_log(task_id, f"=== Smoke test: starting the image {image_name} ===")
+
+    async def cancelled() -> bool:
+        return await is_cancelled(task_id)
+
+    verify = await smoke_test_image(image_name, is_cancelled=cancelled)
+    await task_manager.append_log(task_id, f"Ran it as container {verify.get('container')} (removed)")
+    detected = verify.get("created_dirs") or []
+    if detected:
+        await task_manager.append_log(task_id, "The program created " + ", ".join(f"/app/{d}/" for d in detected))
+
+    if precompiled and config.docker_volumes is None and detected and verify["status"] != "fail":
+        config.docker_volumes = ", ".join(detected)
+        await task_manager.record_config_value(task_id, "docker_volumes", config.docker_volumes, db)
+        await task_manager.append_log(
+            task_id, f"Volumes (not set, so taken from that run): {config.docker_volumes} — building the image again"
+        )
+        guard.write(dockerfile_path, _generate_dockerfile(config, precompiled=precompiled, system=system))
+        await task_manager.set_stage(task_id, "docker")
+        if not await _run_docker_command(task_id, build_cmd, project_path):
+            return False
+        await task_manager.set_stage(task_id, "verify")
+        await task_manager.append_log(task_id, "=== Smoke test: the image with its volumes ===")
+        verify = await smoke_test_image(image_name, is_cancelled=cancelled)
+        await task_manager.append_log(task_id, f"Ran it as container {verify.get('container')} (removed)")
+        verify["created_dirs"] = detected
+
+    marker = {"pass": "✓", "warn": "⚠", "fail": "✗"}.get(verify["status"], "•")
+    await task_manager.append_log(task_id, f"Verify (image): {marker} {verify['detail']}")
+    if verify.get("listeners"):
+        await task_manager.append_log(
+            task_id, "Listening in the container: "
+            + ", ".join(f"{x['address']}:{x['port']}" for x in verify["listeners"])
+        )
+    patch: dict = {"verify": verify}
+    checked = docker_port_check(config, verify, container=True)
+    if checked:
+        patch["port_check"] = checked
+        if checked["message"]:
+            await task_manager.append_log(task_id, f"⚠ Port: {checked['message']}")
+    await task_manager.merge_result(task_id, patch, db)
+    if verify["status"] == "fail":
+        await task_manager.append_log(task_id, "Smoke test failed — marking build as failed")
+        return False
+    await task_manager.set_stage(task_id, "docker")  # on to the export
+    return True
 
 
 def _compressor_argv(threads: int) -> tuple[list[str], str]:

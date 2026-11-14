@@ -215,6 +215,10 @@ export interface VerifyResult {
   /** Folders the program created where it ran. */
   created_dirs?: string[]
   listeners?: { port: number; address: string }[]
+  /** What the smoke test started: the binary on the build host, or the Docker image. */
+  target?: 'binary' | 'image' | null
+  /** The smoke container's name, for an image test (removed afterwards). */
+  container?: string | null
 }
 
 export interface DiagnosisAction {

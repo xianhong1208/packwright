@@ -9,7 +9,7 @@ export const STAGE_LABELS: Record<string, string> = {
   preflight: 'Preflight (checking paths, the Python version and the dependency environment)',
   compile: 'Compile (Nuitka running)',
   bundle: 'Bundle (copying dependencies and data directories)',
-  verify: 'Verify (smoke-testing the built binary)',
+  verify: 'Verify (smoke-testing the built program, or the Docker image)',
   docker: 'Docker (building and exporting the image)',
   done: 'Finishing up',
 }
