@@ -6,6 +6,18 @@ follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this proje
 
 ## [Unreleased]
 
+### Changed
+- A Docker build smoke-tests the image, not the binary on the build host (#34). The host test ran with the Docker
+  ENV, which describes the container: MCP Gate's `MCP_GATE_CONFIG_DIR=/app/config` does not exist on the host, so a
+  correct image failed the build, while the image itself was never started and a broken one passed. The image is now
+  started with `docker run -d` under a unique name (`<repo>-smoke-<hex>`), judged by the same rules within the same
+  10 seconds, and removed with its anonymous volumes afterwards, also on failure or cancellation; a failed start
+  fails the build ("Smoke test failed") with the container's output. Its listening ports are read inside the
+  container (a port bound only to 127.0.0.1 is reported too), and the folders it created come from `docker diff`;
+  with Volumes empty, the image is built again with them (the first, untagged, image is removed) and that image is
+  tested. Without Docker the binary is
+  tested on the host, and the log says so. The build result says which was tested.
+
 ### Added
 - The smoke test checks the port (#35). It notes the TCP ports the program listens on (its process group's
   sockets, sampled through the run), keeps them in the result, and for a Docker build warns in the log and the

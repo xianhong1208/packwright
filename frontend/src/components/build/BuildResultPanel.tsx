@@ -30,6 +30,14 @@ export default function BuildResultPanel({ result }: { result: BuildResult | nul
         )}
       </div>
 
+      {result.verify?.target && result.verify.status !== 'skipped' && (
+        <p className="text-xs mb-2" style={{ color: 'var(--ink-faint)' }}>
+          {result.verify.target === 'image'
+            ? `Smoke test: started the Docker image${result.verify.container ? ` as ${result.verify.container} (removed afterwards)` : ''}.`
+            : 'Smoke test: ran the binary on the build host.'}
+        </p>
+      )}
+
       {verify && result.verify?.detail && (
         <div
           className="text-sm mb-4 px-3 py-2 rounded-lg"

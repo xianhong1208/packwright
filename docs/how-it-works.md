@@ -113,8 +113,16 @@ the result into a slim base image (`python:3.13-slim` by default):
   A new named volume starts with the image folder's contents and owner, so the non-root program can
   write to it. For a bind mount, give the host folder to uid 10001 (`chown 10001:10001 <dir>`).
 
-- **Port check.** During the smoke test Packwright notes the TCP ports the program listens on (its
-  process group's sockets in `/proc`). When the image exposes another port, the build log and the build
+- **The image is what is smoke-tested.** Once built, the image is started with `docker run -d` under a
+  unique name (`<repo>-smoke-<hex>`), with its Docker ENV baked in, on the default bridge network (no
+  published ports); after the same 10 seconds as the binary test it passes if it exited 0 or is still
+  running, and is then removed with its anonymous volumes. A failed exit fails the build with the
+  container's output. Without Docker on the build host, the binary is tested on the host instead and the
+  log says so. Volumes left empty are taken from the folders this run created (`docker diff`); the image
+  is then built again with them (from the layer cache, seconds) and that image is tested.
+- **Port check.** During the smoke test Packwright notes the TCP ports the program listens on (inside
+  the container for an image; its process group's sockets in `/proc` for a binary). In a container, a
+  program bound only to 127.0.0.1 is reported too: a published port cannot reach it. When the image exposes another port, the build log and the build
   result warn with the port to use ("The program listens on 4598, but the image exposes 8000"). The
   setting is not changed for you: a program can listen on several ports.
 
