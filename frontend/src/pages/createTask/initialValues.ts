@@ -58,6 +58,8 @@ export function initialValues(preset: Preset | null): Record<string, unknown> {
       docker_enabled: false,
       docker_install_node: false,
       docker_api_proxy: '',
+      docker_volumes: '',
+      docker_run_as_root: false,
       nginx_client_max_body_size: '0',
       nginx_proxy_read_timeout: '300s',
       nginx_streaming: true,

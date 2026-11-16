@@ -279,6 +279,16 @@ class BuildConfig(BaseModel):
             )
         return self
 
+    @field_validator("docker_volumes")
+    @classmethod
+    def validate_docker_volumes(cls, v: str | None) -> str | None:
+        if v is None:
+            return None
+        from app.services.docker_worker import parse_volumes
+
+        parse_volumes(v)  # raises ValueError naming the bad entry
+        return v
+
     @field_validator("frontend_env_filename")
     @classmethod
     def validate_env_filename(cls, v: str) -> str:
@@ -321,6 +331,19 @@ class BuildConfig(BaseModel):
     docker_api_proxy: str = Field(
         default="",
         description="Backend API URL for nginx reverse proxy (e.g., http://backend:8000)",
+    )
+    docker_volumes: str | None = Field(
+        default=None,
+        description=(
+            "Folders the program keeps its state in, comma- or newline-separated, relative to the "
+            "image's /app or absolute. Each becomes a VOLUME, owned by the program's user. None = "
+            "not set yet: the folders the program created during the smoke run are used, and saved "
+            "here for the next build"
+        ),
+    )
+    docker_run_as_root: bool = Field(
+        default=False,
+        description="Run the program as root inside a backend image (default: a non-root user, uid 10001)",
     )
 
     # === Nginx Settings (frontend-only Docker image) ===
@@ -434,6 +457,11 @@ class ImageInfo(BaseModel):
 
     name: str
     size_bytes: int | None = None
+    # The suggested `docker run`, with the port published and a named volume
+    # per state folder.
+    run_command: str = ""
+    volumes: list[str] = Field(default_factory=list)
+    user: str = ""
 
 
 class VerifyResult(BaseModel):
@@ -442,6 +470,9 @@ class VerifyResult(BaseModel):
     status: Literal["pass", "warn", "fail", "skipped"]
     detail: str = ""
     exit_code: int | None = None
+    # Folders the program created where it ran (relative names): what a Docker
+    # build declares as volumes when none are set.
+    created_dirs: list[str] = Field(default_factory=list)
 
 
 class DiagnosisAction(BaseModel):

@@ -43,6 +43,13 @@ describe('BuildResultPanel', () => {
     expect(screen.getByText('228.4 MB')).toBeInTheDocument()
   })
 
+  it('suggests a docker run that keeps the state folders', () => {
+    const run = 'docker run -d --name mcp_gate -p 4598:4598 -v mcp_gate-data:/app/data mcp_gate:1.4.0'
+    render(<BuildResultPanel result={{ ...base, image: { name: 'mcp_gate:1.4.0', size_bytes: null, run_command: run, user: 'app (uid 10001)' } }} />)
+    expect(screen.getByText(run)).toBeInTheDocument()
+    expect(screen.getByText(/runs as app \(uid 10001\)/)).toBeInTheDocument()
+  })
+
   it('says how many C files came from the compile cache', () => {
     render(<BuildResultPanel result={{ ...base, verify: { status: 'pass', detail: '', exit_code: 0 }, compile_cache: { hits: 80, compiled: 1 } }} />)
     expect(screen.getByText('Compile cache: reused 80 of 81 C files.')).toBeInTheDocument()

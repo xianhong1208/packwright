@@ -167,6 +167,11 @@ export interface BuildConfig {
   docker_custom_commands: string
   docker_install_node: boolean
   docker_api_proxy: string
+  /** State folders declared as volumes (relative to /app or absolute), comma-separated.
+   *  null = not set yet: the folders the smoke run created are used and saved here. */
+  docker_volumes?: string | null
+  /** Run the program as root inside a backend image (default: non-root uid 10001). */
+  docker_run_as_root?: boolean
   // nginx settings (frontend-only Docker image)
   nginx_client_max_body_size: string
   /** Idle timeout for the proxied backend — how long it may send nothing
@@ -207,6 +212,8 @@ export interface VerifyResult {
   status: VerifyStatus
   detail: string
   exit_code: number | null
+  /** Folders the program created where it ran. */
+  created_dirs?: string[]
 }
 
 export interface DiagnosisAction {
@@ -247,6 +254,10 @@ export interface BuildResult {
 export interface ImageInfo {
   name: string
   size_bytes: number | null
+  /** The suggested `docker run`: port published, a named volume per state folder. */
+  run_command?: string
+  volumes?: string[]
+  user?: string
 }
 
 /** GET /monitoring/compile-cache: the ccache store Nuitka builds use. */

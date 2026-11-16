@@ -506,6 +506,14 @@ export default function HistoryDetail() {
                       <code style={{ fontSize: 12 }}>{config.docker_base_image}</code>
                     </Descriptions.Item>
                     <Descriptions.Item label="Exposed port">{config.docker_expose_port}</Descriptions.Item>
+                    {config.project_type !== 'frontend_only' && (
+                      <Descriptions.Item label="Volumes">
+                        <code style={{ fontSize: 12 }}>{config.docker_volumes || '—'}</code>
+                      </Descriptions.Item>
+                    )}
+                    {config.project_type !== 'frontend_only' && (
+                      <Descriptions.Item label="Runs as">{config.docker_run_as_root ? 'root' : 'app (uid 10001)'}</Descriptions.Item>
+                    )}
                     {config.docker_install_node && (
                       <Descriptions.Item label="Node.js">Installed</Descriptions.Item>
                     )}

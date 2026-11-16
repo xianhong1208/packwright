@@ -98,6 +98,20 @@ the result into a slim base image (`python:3.13-slim` by default):
 - **No build leftovers.** The finder of an editable install (`__editable___<name>_finder.py`, which uv
   writes for a Git project) is left out of `libs/`: the program's own code is compiled into the binary.
 - The build log and the build result show the image's size.
+- **State and user.** The program runs as the user `app` (uid 10001), which owns its files (given on
+  the `COPY`, so nothing is stored twice) and `/app`. *Run as root* (Docker settings → Advanced) turns
+  this off. The **Volumes** setting lists the folders the program keeps its state in (relative to `/app`
+  or absolute); each is created in the image, owned by `app`, and declared as a `VOLUME`. Left empty,
+  the folders the program created during the smoke test are used (MCP Gate: `data`, `logs`, `secrets`)
+  and saved into the build's settings, and into the project's while it has none, so the field shows them
+  next time. The build suggests a `docker run` that keeps them:
+
+  ```bash
+  docker run -d --name mcp_gate -p 4598:4598 -v mcp_gate-data:/app/data -v mcp_gate-secrets:/app/secrets mcp_gate:1.4.0
+  ```
+
+  A new named volume starts with the image folder's contents and owner, so the non-root program can
+  write to it. For a bind mount, give the host folder to uid 10001 (`chown 10001:10001 <dir>`).
 
 ## Git credentials
 
