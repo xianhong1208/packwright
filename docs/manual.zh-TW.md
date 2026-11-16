@@ -365,6 +365,9 @@ image 名稱留空時,Git 來源用 repo 名稱、本機來源用資料夾名稱
 留空時,用煙霧測試期間程式自己建立的資料夾,並寫回設定,下次建置就會帶入。建置日誌與建置結果的 **Run it**
 會給一行掛上 named volume 的 `docker run`,容器刪掉重建資料也還在。
 
+開啟 Docker 時,煙霧測試直接啟動建好的 image(容器名稱不重複,測完刪除),用的就是 image 裡的 Docker ENV,所以
+`MCP_GATE_CONFIG_DIR=/app/config` 這類容器內路徑可以照填;建置主機沒有 Docker 時才改測執行檔,日誌會說明。
+
 **Exposed port** 要和程式實際監聽的 port 一致。煙霧測試會偵測程式監聽哪些 port,不一致時在建置結果顯示警告與
 建議值(不會自動改設定),例如 MCP Gate 監聽 `SERVER_PORT`,而不是預設的 8000。
 純前端 + Docker 會包成 nginx image,可以再設定 API 反向代理與 nginx 參數,說明見

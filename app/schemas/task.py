@@ -488,6 +488,10 @@ class VerifyResult(BaseModel):
     # Folders the program created where it ran (relative names): what a Docker
     # build declares as volumes when none are set.
     created_dirs: list[str] = Field(default_factory=list)
+    # What was started: the binary on the build host, or the Docker image.
+    target: Literal["binary", "image"] | None = None
+    # The smoke container's name, for an image test (it is removed afterwards).
+    container: str | None = None
     # TCP ports the program listened on during the run.
     listeners: list[ListenerInfo] = Field(default_factory=list)
 

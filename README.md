@@ -32,7 +32,8 @@ what comes next.
   image and exported as `.tar.gz`). Images carry only the system libraries the program's extensions
   load, onefile binaries are compressed, the program runs as a non-root user, and its state folders
   (found by the smoke test) are declared as volumes, with a suggested `docker run` that keeps them. The
-  smoke test warns when the program listens on another port than the image exposes.
+  smoke test starts the image itself and warns when the program listens on another port than the
+  image exposes.
 - **Quick build.** Give it a folder or a Git URL and it reads the project: backend, frontend or full
   stack, the entry point, where `package.json` is, the Python version and dependency groups. One click
   starts the build; every setting is still there under *All settings*.

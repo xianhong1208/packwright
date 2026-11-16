@@ -231,7 +231,9 @@ async def _build_docker_standard(task_id: str, config: BuildConfig, db: AsyncSes
         await task_manager.update_task(task_id, "status_msg", "Docker image built")
     else:
         await task_manager.update_task(task_id, "status", TaskStatus.FAILED, db)
-        await task_manager.update_task(task_id, "status_msg", "Docker build failed")
+        await task_manager.update_task(
+            task_id, "status_msg", await _backend_failure_message(task_id, "Docker build failed")
+        )
 
 
 async def _build_docker_nuitka(task_id: str, config: BuildConfig, db: AsyncSession) -> None:
@@ -312,7 +314,9 @@ async def _build_docker_nuitka(task_id: str, config: BuildConfig, db: AsyncSessi
         await task_manager.update_task(task_id, "status_msg", "Docker image built")
     else:
         await task_manager.update_task(task_id, "status", TaskStatus.FAILED, db)
-        await task_manager.update_task(task_id, "status_msg", "Docker build failed")
+        await task_manager.update_task(
+            task_id, "status_msg", await _backend_failure_message(task_id, "Docker build failed")
+        )
 
 
 async def _build_backend_only(task_id: str, config: BuildConfig, db: AsyncSession) -> None:
