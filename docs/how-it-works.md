@@ -113,6 +113,11 @@ the result into a slim base image (`python:3.13-slim` by default):
   A new named volume starts with the image folder's contents and owner, so the non-root program can
   write to it. For a bind mount, give the host folder to uid 10001 (`chown 10001:10001 <dir>`).
 
+- **Port check.** During the smoke test Packwright notes the TCP ports the program listens on (its
+  process group's sockets in `/proc`). When the image exposes another port, the build log and the build
+  result warn with the port to use ("The program listens on 4598, but the image exposes 8000"). The
+  setting is not changed for you: a program can listen on several ports.
+
 ## Git credentials
 
 Access tokens for private repositories are managed in the console (**Git credentials** in the left rail, `user:manage` permission), not in `.env`:

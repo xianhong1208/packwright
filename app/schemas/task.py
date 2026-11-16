@@ -464,6 +464,21 @@ class ImageInfo(BaseModel):
     user: str = ""
 
 
+class ListenerInfo(BaseModel):
+    port: int
+    address: str
+
+
+class PortCheck(BaseModel):
+    """The ports the program listened on against the image's EXPOSE/PORT.
+    A suggestion only: the setting is never changed for the user."""
+
+    listening: list[int] = Field(default_factory=list)
+    expected: int
+    suggested: int | None = None
+    message: str = ""
+
+
 class VerifyResult(BaseModel):
     """Outcome of the post-build smoke test."""
 
@@ -473,6 +488,8 @@ class VerifyResult(BaseModel):
     # Folders the program created where it ran (relative names): what a Docker
     # build declares as volumes when none are set.
     created_dirs: list[str] = Field(default_factory=list)
+    # TCP ports the program listened on during the run.
+    listeners: list[ListenerInfo] = Field(default_factory=list)
 
 
 class DiagnosisAction(BaseModel):
@@ -529,6 +546,8 @@ class BuildResult(BaseModel):
     compile_cache: CompileCacheSummary | None = None
     # The image, for Docker builds.
     image: ImageInfo | None = None
+    # Docker builds: did the program listen on the exposed port?
+    port_check: PortCheck | None = None
 
 
 class TaskResponse(BaseModel):

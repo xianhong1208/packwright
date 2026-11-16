@@ -39,6 +39,24 @@ export default function BuildResultPanel({ result }: { result: BuildResult | nul
         </div>
       )}
 
+      {result.port_check?.message && (
+        <div
+          className="text-sm mb-4 px-3 py-2 rounded-lg flex items-start gap-2"
+          style={{ background: 'color-mix(in srgb, var(--color-signal-500) 14%, transparent)', color: 'var(--color-signal-400)', lineHeight: 1.6 }}
+          role="alert"
+        >
+          <WarningIcon style={{ marginTop: 3 }} />
+          <span>
+            {result.port_check.message}
+            {result.port_check.suggested != null && (
+              <>
+                {' '}Suggested port: <b>{result.port_check.suggested}</b>.
+              </>
+            )}
+          </span>
+        </div>
+      )}
+
       {result.artifact && (
         <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-4">
           <div className="rounded-lg p-3 bg-void-950">
