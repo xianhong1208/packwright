@@ -1,8 +1,9 @@
 import { Tooltip, message } from 'antd'
-import { CheckCircleIcon, FileZipIcon, WarningIcon, XCircleIcon } from '../ui/icons'
+import { CheckCircleIcon, FileZipIcon, HardDrivesIcon, WarningIcon, XCircleIcon } from '../ui/icons'
 import type { BuildResult } from '../../api/types'
 import { VERIFY_META } from '../../utils/statusMeta'
 import { hasBuildResult } from './stages'
+import { formatImageSize } from '../../utils/bytes'
 
 /**
  * Verification, artifact and preflight checks of one build. Shared by the live
@@ -72,6 +73,30 @@ export default function BuildResultPanel({ result }: { result: BuildResult | nul
                   {result.artifact.sha256.slice(0, 32)}…
                 </code>
               </Tooltip>
+            </div>
+          )}
+        </div>
+      )}
+
+      {result.image && (
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-4">
+          <div className="rounded-lg p-3 col-span-2 md:col-span-3 bg-void-950 min-w-0">
+            <div className="text-xs mb-1" style={{ color: 'var(--ink-faint)' }}>
+              <HardDrivesIcon className="mr-1" />
+              Docker image
+            </div>
+            <code className="text-sm font-mono break-all" style={{ color: 'var(--ink)' }}>
+              {result.image.name}
+            </code>
+          </div>
+          {result.image.size_bytes != null && (
+            <div className="rounded-lg p-3 col-span-2 md:col-span-1 bg-void-950">
+              <div className="text-xs mb-1" style={{ color: 'var(--ink-faint)' }}>
+                Image size
+              </div>
+              <div className="text-lg font-semibold" style={{ color: 'var(--ink)' }}>
+                {formatImageSize(result.image.size_bytes)}
+              </div>
             </div>
           )}
         </div>

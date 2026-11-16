@@ -16,7 +16,7 @@ export const STAGE_LABELS: Record<string, string> = {
 
 /** Whether a result has anything for the panel to show (a duration alone does not). */
 export function hasBuildResult(result: BuildResult | null | undefined): result is BuildResult {
-  return Boolean(result && (result.verify || result.artifact || result.preflight?.length || result.report_file))
+  return Boolean(result && (result.verify || result.artifact || result.preflight?.length || result.report_file || result.image))
 }
 
 export type TrackState = 'done' | 'on' | 'todo' | 'failed' | 'stopped'

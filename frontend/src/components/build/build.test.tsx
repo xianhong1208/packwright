@@ -37,6 +37,12 @@ describe('BuildResultPanel', () => {
     expect(screen.getByText('SHA-256')).toBeInTheDocument()
   })
 
+  it('shows the Docker image and its size in decimal megabytes, as docker image ls does', () => {
+    render(<BuildResultPanel result={{ ...base, image: { name: 'mcp_gate:1.4.0', size_bytes: 228_400_000 } }} />)
+    expect(screen.getByText('mcp_gate:1.4.0')).toBeInTheDocument()
+    expect(screen.getByText('228.4 MB')).toBeInTheDocument()
+  })
+
   it('says how many C files came from the compile cache', () => {
     render(<BuildResultPanel result={{ ...base, verify: { status: 'pass', detail: '', exit_code: 0 }, compile_cache: { hits: 80, compiled: 1 } }} />)
     expect(screen.getByText('Compile cache: reused 80 of 81 C files.')).toBeInTheDocument()

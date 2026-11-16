@@ -29,7 +29,8 @@ what comes next.
 
 - **Four build modes.** Backend only (Nuitka), frontend only (any Node package manager), full stack
   (the frontend bundled into the Nuitka build as data), and Docker output (the build packaged into an
-  image and exported as `.tar.gz`).
+  image and exported as `.tar.gz`). Images carry only the system libraries the program's extensions
+  load, and onefile binaries are compressed.
 - **Quick build.** Give it a folder or a Git URL and it reads the project: backend, frontend or full
   stack, the entry point, where `package.json` is, the Python version and dependency groups. One click
   starts the build; every setting is still there under *All settings*.

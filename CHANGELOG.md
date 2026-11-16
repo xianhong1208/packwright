@@ -6,6 +6,16 @@ follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this proje
 
 ## [Unreleased]
 
+### Changed
+- Backend Docker images are smaller (#37). Every image installed the same system packages, GUI and OpenGL
+  libraries included: 221 MB of MCP Gate's 449 MB image, for a program that loads none of them. An image now
+  installs `libpq5 zlib1g libxml2 libxslt1.1`, plus a GUI/graphics package only when a shipped `.so` needs one of
+  its libraries (read from the ELF `DT_NEEDED` entries; OpenCV and Qt are the usual ones), and the build log says
+  which file needs it. Onefile binaries are compressed: Packwright now depends on `nuitka[onefile]` (zstandard),
+  `scripts/setup_nuitka_venvs.sh` installs it too, and a preflight check says when it is missing. The finder of an
+  editable install (`__editable___<name>_finder.py`, written by uv for a Git project and pointing at the deleted
+  build workspace) is no longer copied into `libs/`. The build log and the build result show the image's size.
+
 ### Fixed
 - Backend Docker images no longer store files twice. The binary got its execute bit from a `RUN chmod` after its
   `COPY`, which stores the whole binary again in a new layer (MCP Gate: 2 × 49.7 MB); it is now

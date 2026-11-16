@@ -81,6 +81,24 @@ Put `GIT_WORKSPACE_DIR` on the same filesystem as `BOOTSTRAP_UV_CACHE_DIR` so `u
 
 On a successful build the workspace is also trimmed automatically: a non-Docker build's workspace is shrunk to just its output (dropping the clone, `.venv` and `.git`), and a Docker build's workspace is deleted outright since the image tarball already holds the result.
 
+## Docker images
+
+A backend or full-stack build with Docker on is compiled on the host first, and the image only copies
+the result into a slim base image (`python:3.13-slim` by default):
+
+- **System packages.** The image installs `libpq5 zlib1g libxml2 libxslt1.1`, plus a GUI or graphics
+  library (OpenGL, GLib, X11, xcb, fontconfig…) only when a shipped extension needs it: Packwright reads
+  the libraries each `.so` in the output asks for (ELF `DT_NEEDED`). OpenCV or Qt bring theirs; most
+  programs need none. The build log names each extra package and the file that needs it. A library a
+  program loads with `dlopen()` or `ctypes` is not listed anywhere: add it with an `apt-get` line under
+  *Custom commands*.
+- **Compression.** A onefile binary is compressed with zstandard (`nuitka[onefile]`, installed with
+  Packwright and by `scripts/setup_nuitka_venvs.sh`); without it the preflight check *Onefile compression*
+  says so.
+- **No build leftovers.** The finder of an editable install (`__editable___<name>_finder.py`, which uv
+  writes for a Git project) is left out of `libs/`: the program's own code is compiled into the binary.
+- The build log and the build result show the image's size.
+
 ## Git credentials
 
 Access tokens for private repositories are managed in the console (**Git credentials** in the left rail, `user:manage` permission), not in `.env`:
