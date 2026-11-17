@@ -120,3 +120,12 @@ uv run python main.py         # 先套用 migration,再於 http://0.0.0.0:5018 �
 ## 授權
 
 [MIT](LICENSE)
+
+### 第三方授權
+
+Packwright 本身的程式碼是 MIT。它以獨立程式的方式執行 [Nuitka](https://nuitka.net) 來編譯 Python 專案。
+Nuitka 是 **AGPL-3.0**,Docker 映像原封不動地附帶它,以及建置工具鏈(GCC、patchelf、ccache,GPL)。
+
+Packwright 建置出來的程式**不受** AGPL 約束:Nuitka 的 *Runtime Library Exception*(Nuitka 套件內的
+`LICENSE-RUNTIME.txt`)允許以任何授權散布編譯後的程式,包括閉源;GCC 的 runtime library exception
+對它的執行期函式庫也是如此。AGPL 規範的是 Nuitka 本身,例如散布修改過的 Nuitka 時。

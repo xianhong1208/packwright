@@ -153,3 +153,14 @@ Setup, the checks CI runs, branch and commit conventions and the release steps a
 ## Licence
 
 [MIT](LICENSE)
+
+### Third-party licences
+
+Packwright's own code is MIT. It runs [Nuitka](https://nuitka.net) as a separate program to compile
+Python projects. Nuitka is **AGPL-3.0**, and the Docker image ships it unmodified, together with the
+build toolchain (GCC, patchelf, ccache; GPL).
+
+The programs Packwright builds are **not** bound by the AGPL: Nuitka's *Runtime Library Exception*
+(`LICENSE-RUNTIME.txt` in the Nuitka package) lets you distribute a compiled program under any
+licence, closed-source included, and GCC's runtime library exception does the same for its runtime.
+The AGPL covers Nuitka itself, for example if you distribute a modified Nuitka.
