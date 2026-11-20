@@ -13,6 +13,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.config import get_settings
 from app.models.task import Task
 from app.schemas.task import (
+    BUILD_TRIGGERS,
+    BuildTrigger,
     TaskCreate,
     TaskResponse,
     TaskStatus,
@@ -62,8 +64,17 @@ class TaskManager:
         self,
         request: TaskCreate,
         db: AsyncSession,
+        *,
+        trigger: BuildTrigger = "console",
     ) -> TaskResponse:
-        """Create a new task."""
+        """Create a new task.
+
+        ``trigger`` says what started it. It is the caller's to state (the
+        console route, a webhook, a schedule), never a field of the request
+        body, so nobody can label their own build as something else.
+        """
+        if trigger not in BUILD_TRIGGERS:
+            raise ValueError(f"Unknown build trigger: {trigger!r}")
         task_id = str(uuid4())
         now = datetime.now(timezone.utc)
 
@@ -83,6 +94,8 @@ class TaskManager:
             "logs": [],
             "process": None,
             "project_id": request.project_id,
+            "commit_sha": request.git_commit,
+            "trigger": trigger,
         }
 
         async with self._lock:
@@ -102,6 +115,8 @@ class TaskManager:
             config=request.config.model_dump(),
             version=request.config.version or None,
             project_id=request.project_id,
+            commit_sha=request.git_commit,
+            trigger=trigger,
         )
         db.add(db_task)
         await db.commit()
@@ -389,7 +404,27 @@ class TaskManager:
             logs=task_data["logs"],
             result=task_data.get("result"),
             project_id=task_data.get("project_id"),
+            commit_sha=task_data.get("commit_sha"),
+            trigger=task_data.get("trigger", "console"),
         )
+
+    async def set_commit(self, task_id: str, sha: str) -> None:
+        """Record the exact commit a Git build checks out (memory + DB + broadcast).
+
+        Uses its own session: it runs during workspace preparation, before the
+        dispatcher opens one.
+        """
+        from app.database import async_session
+
+        async with self._lock:
+            if task_id in self._tasks:
+                self._tasks[task_id]["commit_sha"] = sha
+        async with async_session() as db:
+            db_task = (await db.execute(select(Task).where(Task.task_id == task_id))).scalar_one_or_none()
+            if db_task is not None:
+                db_task.commit_sha = sha
+                await db.commit()
+        await self._broadcast_update(task_id, "commit_sha", sha)
 
     async def set_stage(self, task_id: str, stage: str) -> None:
         """Set the coarse build stage (preflight/compile/bundle/verify/done)."""

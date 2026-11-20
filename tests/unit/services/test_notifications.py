@@ -101,7 +101,7 @@ class TestMessages:
         body = n.payload("webhook", _failed())
         assert body == {
             "event": "failed", "project": "shop", "version": "1.2.0", "build_id": "t-1", "status": "failed",
-            "triggered_by": "mei", "duration_seconds": 252.4,
+            "triggered_by": "mei", "trigger": None, "commit": None, "duration_seconds": 252.4,
             "diagnosis": {"problem": "A module is missing at runtime", "suggestion": "Add it under Include packages"},
             "url": "https://pw.example.com/history/t-1", "title": "shop 1.2.0 failed",
         }
@@ -202,3 +202,28 @@ class TestDeliver:
         async with _client(handler) as c:
             assert await n.deliver(HOOK, {}, client=c) == (False, "ci.example.com answered HTTP 302")
         assert calls == [HOOK]
+
+
+SHA = "3f2a9c1d4b5e6f708192a3b4c5d6e7f809a1b2c3"
+
+
+@pytest.mark.unit
+def test_tc_ntf_016_messages_say_how_the_build_started_and_which_commit():
+    """TC-NTF-016: the text names who, how (console, push, schedule ...) and the short
+    commit; the JSON body carries the trigger and the full commit."""
+    o = n.BuildOutcome(event="passed", project="shop", triggered_by="mei", trigger="push", commit=SHA,
+                       duration_seconds=8)
+    assert n.payload("discord", o)["embeds"][0]["description"] == "Started by mei (push), commit 3f2a9c1d4b5e, took 8 s."
+    assert "Started by mei (push), commit 3f2a9c1d4b5e" in n.payload("slack", o)["text"]
+    body = n.payload("webhook", o)
+    assert (body["trigger"], body["commit"]) == ("push", SHA)
+    console = n.BuildOutcome(event="passed", project="shop", triggered_by="mei", trigger="console")
+    assert n.payload("discord", console)["embeds"][0]["description"] == "Started by mei (console)."
+
+
+@pytest.mark.unit
+def test_tc_ntf_017_a_local_build_has_no_commit_line():
+    """TC-NTF-017: no commit (a Local source): nothing about a commit is said."""
+    o = n.BuildOutcome(event="passed", project="shop", triggered_by="mei", trigger="schedule")
+    assert n.payload("discord", o)["embeds"][0]["description"] == "Started by mei (schedule)."
+    assert n.payload("webhook", o)["commit"] is None

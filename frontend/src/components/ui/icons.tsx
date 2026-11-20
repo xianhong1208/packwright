@@ -35,6 +35,7 @@ import {
   GaugeIcon as Gauge,
   GearIcon as Gear,
   GitBranchIcon as GitBranch,
+  GitCommitIcon as GitCommit,
   GithubLogoIcon as GithubLogo,
   GitlabLogoIcon as GitlabLogo,
   GlobeIcon as Globe,
@@ -126,6 +127,7 @@ export const FolderIcon = wrap(Folder, 'FolderIcon')
 export const GaugeIcon = wrap(Gauge, 'GaugeIcon')
 export const GearIcon = wrap(Gear, 'GearIcon')
 export const GitBranchIcon = wrap(GitBranch, 'GitBranchIcon')
+export const GitCommitIcon = wrap(GitCommit, 'GitCommitIcon')
 export const GithubLogoIcon = wrap(GithubLogo, 'GithubLogoIcon')
 export const GitlabLogoIcon = wrap(GitlabLogo, 'GitlabLogoIcon')
 export const GlobeIcon = wrap(Globe, 'GlobeIcon')

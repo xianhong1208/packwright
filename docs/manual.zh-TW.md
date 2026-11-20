@@ -214,7 +214,13 @@ LOCAL_SOURCE_ROOTS=/srv/projects,/data/builds
 2. **列出分支與標籤**,選一個 ref。
 3. **淺層掃描**:不必完整 clone 就能讀出頂層目錄與 `pyproject.toml` 的 `[dependency-groups]`,
    讓你直接勾選要打包的目錄。
-4. 開始建置後 **clone 並建立 `.venv`**(`GIT_AUTO_VENV=true` 時跑 `uv sync`)。
+4. 開始建置時先把分支或標籤**解析成一個 commit**(`git ls-remote`;annotated tag 取它指向的 commit),
+   再**只 checkout 那個 commit**(`git init` + `git fetch --depth 1 <網址> <commit>`,checkout 後比對 `HEAD`)。
+   這個 commit 記在建置上:**Builds** 清單與建置頁面顯示前 7 碼(點一下複製完整 ID),通知也會附上。
+   API 建置可以用 `git_commit` 指定完整的 commit ID(40 或 64 個小寫十六進位字元),之後的 webhook 會用它
+   建置被 push 的那個 commit;只支援舊版 git 協定(v0)的伺服器只給得出分支目前指向的 commit,分支已經往前
+   時建置會失敗並寫明分支現在指向哪裡,不會改建另一個 commit。GitHub、GitLab、Gitea 都支援。
+   接著 **建立 `.venv`**(`GIT_AUTO_VENV=true` 時跑 `uv sync`)。
 5. 完成後依[保留期限](#資料保留期限與備份)清理工作區。
 
 ### Git 憑證(私有 repo)
@@ -269,7 +275,8 @@ LOCAL_SOURCE_ROOTS=/srv/projects,/data/builds
 
 專案設定的 **Notifications** 分頁可以加上通知對象:Discord、Slack 的 incoming webhook,或任何接受
 JSON `POST` 的網址。每個對象可以各自選擇「建置失敗時」與「建置成功時」要不要通知(預設都會)。
-失敗的訊息附上錯誤診斷(問題與建議),成功的訊息附上是誰建置、花了多久。伺服器有設定 `PUBLIC_URL`
+失敗的訊息附上錯誤診斷(問題與建議),成功的訊息附上是誰建置、怎麼開始的(console、API、push、tag push、
+schedule)、Git 建置的 commit、花了多久;JSON 內容另有 `trigger` 與完整的 `commit`。伺服器有設定 `PUBLIC_URL`
 時,訊息會附上建置頁面的連結。
 
 - 誰能改:專案建立者或有 `project:manage` 權限的人;有建置權限的人都看得到清單。
@@ -332,7 +339,7 @@ Docker 環境變數除外),回來時還原;**Clear draft** 可以清掉。
 | Single-file binary | 輸出單一執行檔或資料夾 |
 | Dependency group | `[dependency-groups]` 中的一組(例如不同平台的 PyTorch)。Git 模式不會裝其他群組,連 uv 預設會裝的 `dev` 也不裝,所以 pytest、ruff 這類開發工具不會跟著出貨 |
 | CPU jobs | 平行編譯的程序數。0 = 自動:單獨建置時用全部核心,同時有多個建置時平分核心(每個至少 4)。記憶體用量幾乎跟它成正比 |
-| Include packages | Nuitka 偵測不到的動態 import(例:`litellm, openai`) |
+| Include packages | Nuitka 偵測不到的動態 import(例:`litellm, openai`)。專案沒有 `.venv` 時加這裡沒用:依賴根本沒被打包,失敗診斷會直接說要先建 `.venv`(`uv sync`)再重建 |
 | Include package data | 套件內建的非 `.py` 資料檔(例:`certifi`) |
 | Output directory | 輸出目錄,相對於專案(預設 `dist`) |
 | Extra / data directories | 一起打包的原始碼目錄或資料目錄(輸入路徑後系統會建議) |

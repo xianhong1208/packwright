@@ -147,7 +147,9 @@ async def build_project(
         raise HTTPException(status_code=422, detail=e.errors(include_url=False, include_context=False)) from e
     _validate_build_config_paths(config)
     task = await task_manager.create_task(
-        TaskCreate(project_name=project.name, config=config, project_id=project.id, user_name=current_user.username), db
+        TaskCreate(project_name=project.name, config=config, project_id=project.id, user_name=current_user.username),
+        db,
+        trigger="console",
     )
     background_tasks.add_task(start_build_task, task.id, config)
     return task

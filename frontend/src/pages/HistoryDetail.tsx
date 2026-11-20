@@ -6,6 +6,8 @@ import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { taskApi } from '../api/client'
 import BuildResultPanel from '../components/build/BuildResultPanel'
 import FailureReport from '../components/build/FailureReport'
+import CommitChip from '../components/build/CommitChip'
+import { triggerLabel } from '../utils/buildOrigin'
 import type {} from '../api/types'
 import { triggerUrlDownload } from '../utils/download'
 import { binaryName } from '../utils/buildConfig'
@@ -136,7 +138,8 @@ export default function HistoryDetail() {
   return (
     <div>
       {/* Run header — status glyph + run title + a muted meta line, GitHub-Actions style. */}
-      <div className="flex items-start gap-3 mb-6">
+      {/* On a phone the actions take their own row: beside the title they squeezed the meta line to one word per line. */}
+      <div className="flex flex-wrap sm:flex-nowrap items-start gap-3 mb-6">
         <button
           onClick={() => navigate('/history')}
           aria-label="Back to history"
@@ -182,7 +185,13 @@ export default function HistoryDetail() {
               </>
             )}
             <span aria-hidden>·</span>
-            <span>Triggered by {record.user_name}</span>
+            <span>Triggered by {record.user_name} ({triggerLabel(record.trigger)})</span>
+            {record.commit_sha && (
+              <>
+                <span aria-hidden>·</span>
+                <CommitChip sha={record.commit_sha} />
+              </>
+            )}
             <span aria-hidden>·</span>
             <span>Started {timeAgo(record.start_time)}</span>
             <span aria-hidden>·</span>
@@ -200,7 +209,7 @@ export default function HistoryDetail() {
         </div>
 
         {/* Primary actions */}
-        <div className="flex items-center gap-2 flex-shrink-0">
+        <div className="flex flex-wrap items-center gap-2 flex-shrink-0 w-full sm:w-auto">
           {config && (
             <Button
               icon={<ArrowClockwiseIcon />}
@@ -380,6 +389,13 @@ export default function HistoryDetail() {
                       span={2}
                     >
                       <code style={{ fontSize: 12 }}>{config.git_ref}</code>
+                    </Descriptions.Item>
+                    <Descriptions.Item label="Commit" span={2}>
+                      {record.commit_sha ? (
+                        <code style={{ fontSize: 12, overflowWrap: 'anywhere' }}>{record.commit_sha}</code>
+                      ) : (
+                        <span style={{ color: 'var(--ink-faint)' }}>Not recorded</span>
+                      )}
                     </Descriptions.Item>
                     <Descriptions.Item label="Workspace" span={2}>
                       <code style={{ fontSize: 11, color: 'var(--ink-faint)' }}>

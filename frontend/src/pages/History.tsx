@@ -13,6 +13,8 @@ import { PROJECT_TYPE_META } from '../utils/projectTypeMeta'
 import { outcomeLine } from './dashboard/bench'
 import { parseUtc, timeAgo } from '../utils/time'
 import PageHeader from '../components/layout/PageHeader'
+import CommitChip from '../components/build/CommitChip'
+import { triggerLabel } from '../utils/buildOrigin'
 import { DEFAULT_FILTERS, filterBuilds, statusCounts, type BuildFilters, type StatusFilter } from './builds/filter'
 
 const PAGE_SIZE = 20
@@ -185,6 +187,8 @@ export default function History() {
                         </Tooltip>
                       )}
                       <span>{record.user_name}</span>
+                      <span>{triggerLabel(record.trigger)}</span>
+                      {record.commit_sha && <CommitChip sha={record.commit_sha} />}
                       <Tooltip title={parseUtc(record.start_time).toLocaleString()}><span>{timeAgo(record.start_time)}</span></Tooltip>
                     </div>
                   </div>

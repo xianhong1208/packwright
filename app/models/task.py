@@ -51,6 +51,12 @@ class Task(Base):
     # verdict). Added after the table already existed — see init_db()'s
     # idempotent ALTER for the additive migration on existing databases.
     result: Mapped[dict | None] = mapped_column(JSON, nullable=True)
+    # The exact commit a Git build checked out (40 hex, or 64 for a SHA-256
+    # repository): the ref it named is only where the branch or tag pointed then.
+    commit_sha: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    # What started the build: console, api, push, tag or schedule
+    # (app/schemas/task.BuildTrigger). Rows from before the column are console builds.
+    trigger: Mapped[str] = mapped_column(String(16), nullable=False, default="console", server_default="console")
 
     def __repr__(self) -> str:
         return f"<Task {self.task_id}: {self.project_name} ({self.status})>"

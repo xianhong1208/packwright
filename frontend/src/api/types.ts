@@ -288,6 +288,9 @@ export interface CompileCacheStatus {
   reason: string | null
 }
 
+/** What started a build (set by the server). */
+export type BuildTrigger = 'console' | 'api' | 'push' | 'tag' | 'schedule'
+
 export interface TaskCreate {
   project_name: string
   config: BuildConfig
@@ -308,6 +311,9 @@ export interface TaskResponse {
   logs: string[]
   result: BuildResult | null
   project_id?: number | null
+  /** The exact commit a Git build checked out (null until cloned, and for Local sources). */
+  commit_sha?: string | null
+  trigger?: BuildTrigger
 }
 
 export interface HistoryItem {
@@ -322,6 +328,8 @@ export interface HistoryItem {
   config?: BuildConfig
   result?: BuildResult | null
   project_id?: number | null
+  commit_sha?: string | null
+  trigger?: BuildTrigger
 }
 
 export interface DetectedFrontendConfig {
@@ -363,7 +371,7 @@ export interface ProjectAnalysis {
 }
 
 export interface WebSocketMessage {
-  type: 'log' | 'status' | 'progress' | 'status_msg' | 'stage' | 'result' | 'error' | 'pong'
+  type: 'log' | 'status' | 'progress' | 'status_msg' | 'stage' | 'result' | 'commit_sha' | 'error' | 'pong'
   task_id: string
   // Shape depends on `type`; consumers narrow + cast per case.
   data: unknown

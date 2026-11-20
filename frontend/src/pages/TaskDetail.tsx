@@ -6,6 +6,8 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import LogViewer from '../components/LogViewer'
 import BuildResultPanel from '../components/build/BuildResultPanel'
 import FailureReport from '../components/build/FailureReport'
+import CommitChip from '../components/build/CommitChip'
+import { triggerLabel } from '../utils/buildOrigin'
 import { useWebSocket } from '../hooks/useWebSocket'
 import { taskApi } from '../api/client'
 import type { TaskResponse } from '../api/types'
@@ -86,6 +88,8 @@ export default function TaskDetail() {
             return { ...old, stage: String(msg.data) }
           case 'result':
             return { ...old, result: msg.data as TaskResponse['result'] }
+          case 'commit_sha':
+            return { ...old, commit_sha: String(msg.data) }
           default:
             return old
         }
@@ -142,7 +146,8 @@ export default function TaskDetail() {
   return (
     <div>
       {/* Run header — status glyph + run title + a muted meta line, GitHub-Actions style. */}
-      <div className="flex items-start gap-3 mb-6">
+      {/* On a phone the actions take their own row: beside the title they squeezed the meta line to one word per line. */}
+      <div className="flex flex-wrap sm:flex-nowrap items-start gap-3 mb-6">
         <button
           onClick={() => navigate('/')}
           aria-label="Back to dashboard"
@@ -188,7 +193,13 @@ export default function TaskDetail() {
               </>
             )}
             <span aria-hidden>·</span>
-            <span>Triggered by {task.user_name}</span>
+            <span>Triggered by {task.user_name} ({triggerLabel(task.trigger)})</span>
+            {task.commit_sha && (
+              <>
+                <span aria-hidden>·</span>
+                <CommitChip sha={task.commit_sha} />
+              </>
+            )}
             <span aria-hidden>·</span>
             <span>Started {timeAgo(task.created_at)}</span>
             {typeof result?.duration_seconds === 'number' && (
@@ -204,7 +215,7 @@ export default function TaskDetail() {
         </div>
 
         {/* Primary actions */}
-        <div className="flex items-center gap-2 flex-shrink-0">
+        <div className="flex flex-wrap items-center gap-2 flex-shrink-0 w-full sm:w-auto">
           {isActive ? (
             <Button
               danger
