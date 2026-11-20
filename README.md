@@ -47,6 +47,11 @@ what comes next.
   get argument lists only, and each clone has a time limit.
 - **Git credentials managed in the console.** GitHub, GitLab and self-hosted tokens are stored
   encrypted and chosen by the clone URL's host; no secrets in `.env`.
+- **API tokens for scripts and CI.** Personal tokens (`pwt_…`) start builds, follow them (including the
+  live log WebSocket) and download results with `Authorization: Bearer`. Each has scopes
+  (`builds:read`, `builds:write`, `projects:read`) and an expiry of up to a year, is stored only as a hash,
+  can never reach account or settings endpoints, and can do no more than its owner's role allows at that
+  moment. Revoke it in the console at any time.
 - **Live logs and history.** Every build streams over WebSocket; a finished build keeps the exact
   settings that produced it, so a rebuild does the same thing.
 - **Notifications.** A project can send how its builds end to Discord, Slack or any URL that takes JSON:

@@ -1,11 +1,17 @@
 """WebSocket endpoints for real-time task updates."""
 
-from fastapi import APIRouter, WebSocket, WebSocketDisconnect
+from fastapi import APIRouter, HTTPException, WebSocket, WebSocketDisconnect
 
 from app.database import async_session
 from app.models.user import User
 from app.services.auth import decode_access_token
-from app.services.permission import PermissionCode, get_user_permissions, has_permission
+from app.services.api_tokens import looks_like_token
+from app.services.permission import (
+    PermissionCode,
+    user_from_api_token,
+    get_user_permissions,
+    has_permission,
+)
 from app.services.task_manager import task_manager
 
 router = APIRouter()
@@ -21,12 +27,22 @@ def _extract_ws_token(websocket: WebSocket) -> tuple[str | None, str | None]:
     When the header form is used we must echo the ``bearer`` subprotocol back
     on accept, or the browser aborts the handshake.
     """
+    # Scripts and CI (API tokens) can send a header; browsers cannot.
+    auth = websocket.headers.get("authorization", "")
+    scheme, _, value = auth.partition(" ")
+    if scheme.lower() == "bearer" and value.strip():
+        return value.strip(), None
     proto = websocket.headers.get("sec-websocket-protocol")
     if proto:
         parts = [p.strip() for p in proto.split(",") if p.strip()]
         if len(parts) >= 2 and parts[0] == "bearer":
             return parts[1], "bearer"
-    return websocket.query_params.get("token"), None
+    query_token = websocket.query_params.get("token")
+    if query_token and looks_like_token(query_token):
+        # API tokens live for months; one in a URL ends up in proxy and
+        # access logs. Send it as an Authorization header instead.
+        return None, None
+    return query_token, None
 
 
 async def _authenticate_websocket(
@@ -42,6 +58,18 @@ async def _authenticate_websocket(
     if not token:
         await websocket.close(code=4401, reason="Missing token")
         return None
+
+    if looks_like_token(token):
+        # API token: same checks as the REST layer (scope builds:read for these
+        # routes, owner active, not revoked or expired), all audited there.
+        async with async_session() as db:
+            try:
+                user = await user_from_api_token(websocket, token, db)
+            except HTTPException as e:
+                code = 4403 if e.status_code == 403 else 4401
+                await websocket.close(code=code, reason=str(e.detail))
+                return None
+        return user.username, user.permissions, subprotocol
 
     payload = decode_access_token(token)
     if not payload:

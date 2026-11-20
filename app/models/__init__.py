@@ -11,6 +11,7 @@ from app.models.audit_log import AuditLog
 from app.models.git_credential import GitCredential
 from app.models.project import Project
 from app.models.notification import ProjectNotification
+from app.models.api_token import ApiToken
 
 __all__ = [
     "Task",
@@ -25,4 +26,5 @@ __all__ = [
     "GitCredential",
     "Project",
     "ProjectNotification",
+    "ApiToken",
 ]

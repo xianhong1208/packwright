@@ -18,3 +18,15 @@ export function timeAgo(iso: string, now = Date.now()): string {
   if (d < 30) return `${d} days ago`
   return parseUtc(iso).toLocaleDateString()
 }
+
+/** "expires in 12 days", "expires tomorrow", "expired 3 days ago". */
+export function expiryText(iso: string, now = Date.now()): string {
+  const ms = parseUtc(iso).getTime() - now
+  if (ms <= 0) return `expired ${timeAgo(iso, now)}`
+  const days = Math.floor(ms / 86_400_000)
+  if (days === 0) {
+    const hours = Math.max(1, Math.floor(ms / 3_600_000))
+    return `expires in ${hours} h`
+  }
+  return days === 1 ? 'expires tomorrow' : `expires in ${days} days`
+}
