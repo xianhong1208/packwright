@@ -638,7 +638,7 @@ async def _prepare_venv(
         )
 
 
-async def _prepare_git_workspace(task_id: str, config: BuildConfig) -> BuildConfig:
+async def _prepare_git_workspace(task_id: str, config: BuildConfig, commit: str | None = None) -> BuildConfig:
     """Clone the git repo into a fresh per-task workspace and return a
     derived BuildConfig whose ``project_path`` points at that workspace.
 
@@ -646,6 +646,10 @@ async def _prepare_git_workspace(task_id: str, config: BuildConfig) -> BuildConf
     ``git_url`` / ``git_ref`` fields as the source of truth so Rebuild
     works deterministically and the workspace dir can be re-derived from
     ``task_id`` on demand.
+
+    The build is of one exact commit: ``commit`` when the build was created for
+    it (a pushed commit), otherwise where the ref points right now. It is
+    recorded on the build (history.commit_sha) before the checkout.
     """
     from app.config import get_settings
     from app.database import async_session
@@ -670,23 +674,32 @@ async def _prepare_git_workspace(task_id: str, config: BuildConfig) -> BuildConf
 
     # Masked log line — token, if any, is never visible here.
     masked_url = git_service.mask_token_in_log(config.git_url, token)
-    await task_manager.append_log(
-        task_id,
-        f"Cloning {masked_url} @ {config.git_ref_type}:{config.git_ref}",
-    )
+    kind = "branch" if config.git_ref_type == "branch" else "tag"
 
     try:
-        anonymous = await git_service.clone_repo(
+        if commit is None:
+            commit = await git_service.resolve_ref(
+                config.git_url, config.git_ref, config.git_ref_type, token, provider=provider,
+                timeout=float(settings.git_clone_timeout),
+            )
+            await task_manager.append_log(task_id, f"Resolved {kind} {config.git_ref} to commit {commit}")
+        else:
+            git_service.validate_commit_sha(commit)
+            await task_manager.append_log(task_id, f"Building commit {commit} ({kind} {config.git_ref})")
+        await task_manager.set_commit(task_id, commit)
+        await task_manager.append_log(task_id, f"Cloning {masked_url} @ {commit}")
+        anonymous = await git_service.clone_at_commit(
             url=config.git_url,
             ref=config.git_ref,
             ref_type=config.git_ref_type,
+            commit=commit,
             target_dir=target,
             token=token,
             provider=provider,
             timeout=float(settings.git_clone_timeout),
         )
     except git_service.GitUrlError as e:
-        # clone_repo already cleans up partial state on failure; surface
+        # clone_at_commit already cleans up partial state on failure; surface
         # the (already-masked) error to the task log and re-raise so the
         # outer dispatcher marks the task failed.
         await task_manager.append_log(task_id, f"Clone failed: {e}")
@@ -731,13 +744,14 @@ async def _prepare_git_workspace(task_id: str, config: BuildConfig) -> BuildConf
     return config.model_copy(update={"project_path": str(target)})
 
 
-async def start_build_task(task_id: str, config: BuildConfig) -> None:
+async def start_build_task(task_id: str, config: BuildConfig, commit: str | None = None) -> None:
     """Start a build task in the background.
 
     A local build first waits its turn for the project folder, then for a build
     slot from the semaphore; if all slots are occupied, the task waits in
     "Queued" state. For git-source tasks, the repo is cloned into a fresh
-    per-task workspace AFTER the slot is acquired but BEFORE dispatch.
+    per-task workspace AFTER the slot is acquired but BEFORE dispatch, at
+    ``commit`` when one is given (see _prepare_git_workspace).
     """
     sem = _get_semaphore()
 
@@ -755,10 +769,12 @@ async def start_build_task(task_id: str, config: BuildConfig) -> None:
             if await _is_cancelled():
                 await task_manager.append_log(task_id, "Task was cancelled while queued — build skipped")
                 return
-        await _run_in_slot(task_id, config, sem, _is_cancelled)
+        await _run_in_slot(task_id, config, sem, _is_cancelled, commit)
 
 
-async def _run_in_slot(task_id: str, config: BuildConfig, sem: asyncio.Semaphore, _is_cancelled) -> None:
+async def _run_in_slot(
+    task_id: str, config: BuildConfig, sem: asyncio.Semaphore, _is_cancelled, commit: str | None = None
+) -> None:
     """Wait for a build slot, then prepare, build and report. See start_build_task."""
     from app.database import async_session
 
@@ -781,7 +797,7 @@ async def _run_in_slot(task_id: str, config: BuildConfig, sem: asyncio.Semaphore
         effective_config = config
         if config.source_type == SourceType.GIT:
             try:
-                effective_config = await _prepare_git_workspace(task_id, config)
+                effective_config = await _prepare_git_workspace(task_id, config, commit)
             except Exception as e:
                 async with async_session() as db:
                     await task_manager.update_task(task_id, "status", TaskStatus.FAILED, db)
@@ -818,8 +834,12 @@ async def _run_in_slot(task_id: str, config: BuildConfig, sem: asyncio.Semaphore
                 # to act on, people simply retried. The report falls
                 # back to naming the failed stage and the log's error lines,
                 # which is at least something to act on or forward.
+                # The preflight checks are passed as well: a missing project
+                # .venv is recorded there even when the log ring has dropped the
+                # line that said so (#21).
+                preflight = [c.model_dump() for c in current.result.preflight] if current.result else None
                 report = build_failure_report(
-                    "\n".join(logs), stage=getattr(current, "stage", None)
+                    "\n".join(logs), stage=getattr(current, "stage", None), preflight=preflight
                 )
                 async with async_session() as db:
                     await task_manager.merge_result(task_id, report, db)

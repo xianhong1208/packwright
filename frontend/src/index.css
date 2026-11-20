@@ -974,6 +974,13 @@ a.bench-card:focus-visible { outline: 2px solid var(--color-cyber-400); outline-
 .build-name:focus-visible { outline: 2px solid var(--color-cyber-400); outline-offset: 2px; border-radius: 4px; }
 .build-meta { display: flex; flex-wrap: wrap; gap: 4px 14px; margin-top: 2px; font-size: 13.5px; color: var(--ink-faint); }
 .build-verdict { font-weight: 600; text-align: right; flex: none; }
+/* The commit a Git build checked out (components/build/CommitChip): copies the full id. */
+.commit-chip {
+  display: inline-flex; align-items: center; gap: 4px;
+  font-family: var(--font-mono); font-size: 12.5px; color: inherit;
+  background: none; border: 0; padding: 0; cursor: pointer;
+}
+.commit-chip:hover, .commit-chip:focus-visible { color: var(--ink); text-decoration: underline; text-underline-offset: 3px; }
 @media (max-width: 640px) {
   .build-row { flex-wrap: wrap; gap: 8px 12px; }
   .build-verdict { text-align: left; order: 3; flex-basis: 100%; padding-left: 30px; }

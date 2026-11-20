@@ -85,6 +85,10 @@ class BuildOutcome:
     version: str | None = None
     task_id: str | None = None
     triggered_by: str | None = None
+    # What started the build (console, api, push, tag, schedule) and the exact
+    # commit a Git build checked out.
+    trigger: str | None = None
+    commit: str | None = None
     duration_seconds: float | None = None
     problem: str | None = None
     suggestion: str | None = None
@@ -118,6 +122,9 @@ def title(o: BuildOutcome) -> str:
     return f"{name} {'passed' if o.event == 'passed' else 'failed'}"
 
 
+_TRIGGER_TEXT = {"console": "console", "api": "API", "push": "push", "tag": "tag push", "schedule": "schedule"}
+
+
 def _details(o: BuildOutcome) -> list[str]:
     """Plain-text lines under the title."""
     if o.event == "test":
@@ -128,8 +135,12 @@ def _details(o: BuildOutcome) -> list[str]:
         if o.suggestion:
             lines.append(o.suggestion)
     who = f"Started by {o.triggered_by}" if o.triggered_by else None
+    if o.trigger:
+        how = _TRIGGER_TEXT.get(o.trigger, o.trigger)
+        who = f"{who} ({how})" if who else f"Started by a {how}"
     took = _duration(o.duration_seconds)
-    tail = ", ".join(x for x in (who, f"took {took}" if took else None) if x)
+    commit = f"commit {o.commit[:12]}" if o.commit else None
+    tail = ", ".join(x for x in (who, commit, f"took {took}" if took else None) if x)
     if tail:
         lines.append(tail + ".")
     return lines
@@ -164,6 +175,8 @@ def payload(kind: str, o: BuildOutcome) -> dict[str, Any]:
         "build_id": o.task_id,
         "status": {"passed": "completed", "failed": "failed"}.get(o.event, "test"),
         "triggered_by": o.triggered_by,
+        "trigger": o.trigger,
+        "commit": o.commit,
         "duration_seconds": o.duration_seconds,
         "diagnosis": {"problem": o.problem, "suggestion": o.suggestion} if o.problem else None,
         "url": o.link,
@@ -258,6 +271,8 @@ async def notify_build(task_id: str) -> None:
                 version=task.version,
                 task_id=task.task_id,
                 triggered_by=task.user_name,
+                trigger=task.trigger,
+                commit=task.commit_sha,
                 duration_seconds=result.get("duration_seconds"),
                 problem=diagnosis.get("problem") if isinstance(diagnosis, dict) else None,
                 suggestion=diagnosis.get("suggestion") if isinstance(diagnosis, dict) else None,

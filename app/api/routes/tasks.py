@@ -724,10 +724,12 @@ async def create_task(
     request.project_id = project.id
     request.project_name = project.name
 
-    task = await task_manager.create_task(request, db)
+    # Every request here comes from a signed-in console session; API tokens
+    # (a later PR) will pass "api".
+    task = await task_manager.create_task(request, db, trigger="console")
 
     # Start build in background
-    background_tasks.add_task(start_build_task, task.id, request.config)
+    background_tasks.add_task(start_build_task, task.id, request.config, request.git_commit)
 
     return task
 
@@ -909,6 +911,8 @@ async def get_history(
             config=_config_for(t.config),
             result=_result_summary(t.result),
             project_id=t.project_id,
+            commit_sha=t.commit_sha,
+            trigger=t.trigger or "console",
         )
         for t in tasks
     ]
@@ -1027,6 +1031,8 @@ async def export_history(
         "end_time",
         "status",
         "output_dir",
+        "commit_sha",
+        "trigger",
     ])
 
     # Write data
@@ -1040,6 +1046,8 @@ async def export_history(
             t.end_time.isoformat() if t.end_time else "",
             t.status,
             t.output_dir or "",
+            t.commit_sha or "",
+            t.trigger or "console",
         ])
 
     output.seek(0)
@@ -1083,6 +1091,8 @@ async def get_history_item(
         config=_config_for(task.config),
         result=task.result,
         project_id=task.project_id,
+        commit_sha=task.commit_sha,
+        trigger=task.trigger or "console",
     )
 
 

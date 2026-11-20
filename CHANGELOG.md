@@ -6,6 +6,31 @@ follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this proje
 
 ## [Unreleased]
 
+### Added
+- A Git build checks out one exact commit and records it (first part of #3). The branch or tag is resolved to
+  its commit when the build starts (`git ls-remote`; an annotated tag is peeled to the commit it tags), and the
+  workspace gets exactly that commit (`git init` + `git fetch --depth 1 <url> <commit>` + `checkout --detach`,
+  then `HEAD` is compared with it). A build can also be created for a given commit (`git_commit` on
+  `POST /api/tasks`, a full 40- or 64-hex id only; the webhooks of a later release pass the pushed commit). A
+  server that serves only the commits its refs point at (git protocol v0) fails such a build when the branch has
+  moved on, saying where it points now, instead of building another commit. The Builds list, a build's page and
+  notifications show the commit (seven characters, the full id copied on click; notifications give twelve and
+  the JSON body the full id). Local sources record no commit.
+- Each build records what started it: `console`, `api`, `push`, `tag` or `schedule` (only `console` exists in
+  this release; API tokens, webhooks and schedules follow). It is set by the server, never taken from the
+  request body, and shown in the Builds list, on a build's page, in the CSV export and in notifications
+  ("Started by mei (console)"; `trigger` in the JSON body). Migration `b4e8d2f6a9c1` adds `history.commit_sha`
+  and `history.trigger`; existing builds become `console` with no commit.
+
+### Fixed
+- A build of a project without a `.venv` is diagnosed as such (#21). A module missing at run time was explained
+  as a dynamic import ("add it to Include packages"), but without the project's `.venv` no dependency was bundled
+  at all. The diagnosis now says the project has no `.venv` and to create it (`uv sync`, or `python -m venv
+  .venv` and install the requirements) and rebuild. It reads the build's preflight check ("Project .venv
+  present"), which is kept with the build, rather than only the log, whose early lines a long build drops.
+- On a phone, a build's page put Rebuild / Download / Delete workspace beside the title, which squeezed the line
+  under it to one word per line and pushed a button off the screen; the actions now take their own row.
+
 ### Changed
 - A Docker build smoke-tests the image, not the binary on the build host (#34). The host test ran with the Docker
   ENV, which describes the container: MCP Gate's `MCP_GATE_CONFIG_DIR=/app/config` does not exist on the host, so a

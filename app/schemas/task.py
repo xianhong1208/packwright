@@ -10,6 +10,15 @@ from pydantic import BaseModel, Field, field_validator, model_validator
 
 _VERSION_RE = re.compile(r"[A-Za-z0-9][A-Za-z0-9._+-]{0,63}")
 
+# A full commit id: 40 hex (SHA-1) or 64 hex (SHA-256 repositories), lower case.
+# Never an abbreviation or a ref name: it is passed to git as a positional argument.
+COMMIT_SHA_RE = re.compile(r"[0-9a-f]{40}(?:[0-9a-f]{24})?")
+
+# What started a build. Set by the server on the path that creates the build,
+# never read from a request body.
+BuildTrigger = Literal["console", "api", "push", "tag", "schedule"]
+BUILD_TRIGGERS: tuple[str, ...] = ("console", "api", "push", "tag", "schedule")
+
 
 class TaskStatus(str, Enum):
     """Task status enumeration."""
@@ -416,6 +425,24 @@ class TaskCreate(BaseModel):
     # project with its name and source (created if there is none).
     project_id: int | None = None
     user_name: str | None = Field(default=None, exclude=True)
+    # Build exactly this commit of a Git source instead of where its ref points
+    # when the build starts (a webhook passes the pushed commit). A full id only.
+    git_commit: str | None = Field(default=None, description="Full commit id to build (Git sources only)")
+
+    @field_validator("git_commit")
+    @classmethod
+    def _full_commit_id(cls, v: str | None) -> str | None:
+        if v is None or v == "":
+            return None
+        if not COMMIT_SHA_RE.fullmatch(v):
+            raise ValueError("git_commit must be a full commit id: 40 or 64 lower-case hex characters")
+        return v
+
+    @model_validator(mode="after")
+    def _commit_needs_git(self) -> "TaskCreate":
+        if self.git_commit and self.config.source_type != SourceType.GIT:
+            raise ValueError("git_commit applies only to Git sources")
+        return self
 
 
 class TaskUpdate(BaseModel):
@@ -571,6 +598,8 @@ class TaskResponse(BaseModel):
     logs: list[str] = Field(default_factory=list)
     result: BuildResult | None = None
     project_id: int | None = None
+    commit_sha: str | None = None
+    trigger: BuildTrigger = "console"
 
 
 class HistoryItem(BaseModel):
@@ -587,6 +616,8 @@ class HistoryItem(BaseModel):
     config: BuildConfig | None = None
     result: BuildResult | None = None
     project_id: int | None = None
+    commit_sha: str | None = None
+    trigger: BuildTrigger = "console"
 
 
 class WebSocketMessage(BaseModel):

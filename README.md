@@ -41,7 +41,8 @@ what comes next.
   project's page lists its versions and builds a new one in one dialog; the version is read from the Git
   tag, `pyproject.toml` or `package.json`, names the download, tags the Docker image and is written into
   a `VERSION` file. Projects are shared by everyone who may build.
-- **Local path or Git URL sources.** Git mode clones the repository, bootstraps a `.venv` with
+- **Local path or Git URL sources.** Git mode resolves the branch or tag to one commit, checks out
+  exactly that commit (recorded with the build and shown next to it), bootstraps a `.venv` with
   `uv sync`, builds, and cleans the workspace afterwards. URLs are validated against SSRF, subprocesses
   get argument lists only, and each clone has a time limit.
 - **Git credentials managed in the console.** GitHub, GitLab and self-hosted tokens are stored
