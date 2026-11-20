@@ -19,6 +19,7 @@ from app.api.routes.git_credentials import router as git_credentials_router
 from app.api.routes.projects import router as projects_router
 from app.api.routes.notifications import router as notifications_router
 from app.api.routes.monitoring import router as monitoring_router
+from app.api.routes.api_tokens import router as api_tokens_router
 from app.api.websocket import router as websocket_router
 from app.config import get_settings
 from app.database import close_db, init_db
@@ -168,6 +169,7 @@ app.include_router(git_credentials_router)
 app.include_router(projects_router)
 app.include_router(notifications_router)
 app.include_router(monitoring_router)
+app.include_router(api_tokens_router)
 app.include_router(websocket_router)
 
 

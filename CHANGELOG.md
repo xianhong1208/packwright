@@ -16,11 +16,26 @@ follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this proje
   moved on, saying where it points now, instead of building another commit. The Builds list, a build's page and
   notifications show the commit (seven characters, the full id copied on click; notifications give twelve and
   the JSON body the full id). Local sources record no commit.
-- Each build records what started it: `console`, `api`, `push`, `tag` or `schedule` (only `console` exists in
-  this release; API tokens, webhooks and schedules follow). It is set by the server, never taken from the
+- Each build records what started it: `console`, `api`, `push`, `tag` or `schedule` (`console` and `api` exist in
+  this release; webhooks and schedules follow). It is set by the server, never taken from the
   request body, and shown in the Builds list, on a build's page, in the CSV export and in notifications
   ("Started by mei (console)"; `trigger` in the JSON body). Migration `b4e8d2f6a9c1` adds `history.commit_sha`
   and `history.trigger`; existing builds become `console` with no commit.
+
+- API tokens for scripts and CI (#5). Everyone signed in creates their own under the account menu → *API tokens*:
+  a name, scopes (`builds:read`, `builds:write`, `projects:read`) and an expiry of 7, 30 or 90 days or a year (365
+  at most; one is required). The token (`pwt_` + 43 base62 characters + a 6-character CRC32 checksum, so scanners
+  and the server can tell a typo without a lookup) is shown once; only its SHA-256 and its first 12 characters are
+  stored. Send it as `Authorization: Bearer pwt_…` to start builds (`POST /api/tasks`,
+  `POST /api/projects/{id}/builds`), cancel them, list and read builds and their logs, download results and list
+  projects; the live log WebSocket takes it in an `Authorization` header (never in `?token=`). Every other
+  endpoint (users, roles, Git credentials, notifications, tokens, `/auth/*`, the wizard helpers, monitoring) answers
+  403 to a token whatever its scopes: there is no admin scope. What a token may do is its scopes intersected with
+  its owner's role as it is on that request, and a deactivated owner's tokens get 401 at once. Revoked, expired,
+  unknown and malformed tokens all get the same 401; the reason goes to the audit log (`api_token_rejected`, and
+  `api_token_denied` for a missing scope), as do creating and revoking. Builds started with a token are recorded as
+  `api`. Last use is written at most once a minute. Admins (`user:manage`) see everyone's tokens, never the secrets,
+  and can revoke them. Migration `c9d4e1f7a2b6` adds the `api_tokens` table.
 
 ### Fixed
 - A build of a project without a `.venv` is diagnosed as such (#21). A module missing at run time was explained

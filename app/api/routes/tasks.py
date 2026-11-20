@@ -724,9 +724,9 @@ async def create_task(
     request.project_id = project.id
     request.project_name = project.name
 
-    # Every request here comes from a signed-in console session; API tokens
-    # (a later PR) will pass "api".
-    task = await task_manager.create_task(request, db, trigger="console")
+    # Set here from how the caller signed in, never from the request body.
+    trigger = "api" if current_user.via_api_token else "console"
+    task = await task_manager.create_task(request, db, trigger=trigger)
 
     # Start build in background
     background_tasks.add_task(start_build_task, task.id, request.config, request.git_commit)

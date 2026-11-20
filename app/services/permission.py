@@ -3,7 +3,7 @@
 from enum import Enum
 from typing import Annotated
 
-from fastapi import Depends, HTTPException, status
+from fastapi import Depends, HTTPException, Request, WebSocket, status
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -260,6 +260,8 @@ class CurrentUser:
         permissions: list[str],
         role: str | None,
         session_id: int | None = None,
+        api_token_id: int | None = None,
+        token_scopes: list[str] | None = None,
     ):
         self.id = id
         self.username = username
@@ -268,6 +270,14 @@ class CurrentUser:
         # Refresh-token row this access token was issued with (JWT ``sid``);
         # None for tokens minted before the claim existed.
         self.session_id = session_id
+        # Set when the request was authenticated with an API token (pwt_…)
+        # rather than a console session.
+        self.api_token_id = api_token_id
+        self.token_scopes = frozenset(token_scopes) if token_scopes is not None else None
+
+    @property
+    def via_api_token(self) -> bool:
+        return self.api_token_id is not None
 
     def has_permission(self, permission: str | PermissionCode) -> bool:
         """Check if user has a specific permission (supports wildcards)."""
@@ -283,12 +293,106 @@ class CurrentUser:
 security = HTTPBearer()
 
 
+_INVALID_TOKEN = HTTPException(
+    status_code=status.HTTP_401_UNAUTHORIZED,
+    detail="Invalid or expired token",
+    headers={"WWW-Authenticate": "Bearer"},
+)
+
+
+async def user_from_api_token(request: "Request | WebSocket", raw: str, db: AsyncSession) -> CurrentUser:
+    """Authenticate an API token and check it may call this route.
+
+    Every refusal is audited with its reason; the caller only ever learns
+    "invalid or expired" (401) or which scope or endpoint is out of reach (403).
+    """
+    from app.config import get_settings
+    from app.middleware.client_ip import resolve_client_ip
+    from app.services import api_tokens
+    from app.services.audit import AuditAction, AuditStatus, ResourceType, log_action
+
+    ip = resolve_client_ip(request, get_settings().trusted_proxies)
+    route = request.scope.get("route")
+    path = getattr(route, "path", request.url.path)
+    method = "WS" if request.scope.get("type") == "websocket" else request.method
+
+    try:
+        user, token = await api_tokens.authenticate(db, raw)
+    except api_tokens.TokenRejected as rejected:
+        tok = rejected.token
+        await log_action(
+            db,
+            AuditAction.API_TOKEN_REJECTED,
+            ResourceType.API_TOKEN,
+            AuditStatus.FAILED,
+            resource_id=tok.id if tok else None,
+            actor_id=tok.user_id if tok else None,
+            ip_address=ip,
+            user_agent=request.headers.get("user-agent"),
+            error_message=rejected.reason,
+            details={"endpoint": f"{method} {path}", "prefix": api_tokens.display_prefix(raw)},
+        )
+        raise _INVALID_TOKEN
+
+    needed = api_tokens.scope_for_route(method, path)
+    if needed is None or needed not in token.scope_list:
+        detail = (
+            "API tokens cannot be used for this endpoint"
+            if needed is None
+            else f"This token does not have the {needed} scope"
+        )
+        await log_action(
+            db,
+            AuditAction.API_TOKEN_DENIED,
+            ResourceType.API_TOKEN,
+            AuditStatus.DENIED,
+            resource_id=token.id,
+            actor_id=user.id,
+            actor_name=user.username,
+            ip_address=ip,
+            user_agent=request.headers.get("user-agent"),
+            error_message=detail,
+            details={"endpoint": f"{method} {path}"},
+        )
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=detail)
+
+    # The owner's role as it is now: the route's own permission checks then
+    # apply on top of the scope check above (scopes ∩ role).
+    role = (
+        await db.execute(
+            select(Role)
+            .where(Role.id == user.role_id)
+            .options(selectinload(Role.permissions))
+        )
+    ).scalar_one_or_none() if user.role_id is not None else None
+    if role is not None and role.is_active:
+        permissions = list(await resolve_role_permissions(db, role))
+        role_name: str | None = role.name
+    else:
+        permissions, role_name = [], None
+
+    return CurrentUser(
+        id=user.id,
+        username=user.username,
+        permissions=permissions,
+        role=role_name,
+        api_token_id=token.id,
+        token_scopes=token.scope_list,
+    )
+
+
 async def get_current_user(
+    request: Request,
     credentials: Annotated[HTTPAuthorizationCredentials, Depends(security)],
     db: AsyncSession = Depends(get_db),
 ) -> CurrentUser:
-    """Get the current authenticated user from JWT token."""
+    """Get the current authenticated user from a session JWT or an API token."""
+    from app.services.api_tokens import looks_like_token
+
     token = credentials.credentials
+    if looks_like_token(token):
+        return await user_from_api_token(request, token, db)
+
     payload = decode_access_token(token)
 
     if not payload:
@@ -341,6 +445,7 @@ async def get_current_user(
 
 
 async def get_optional_current_user(
+    request: Request,
     credentials: Annotated[HTTPAuthorizationCredentials | None, Depends(HTTPBearer(auto_error=False))],
     db: AsyncSession = Depends(get_db),
 ) -> CurrentUser | None:
@@ -349,6 +454,6 @@ async def get_optional_current_user(
         return None
 
     try:
-        return await get_current_user(credentials, db)
+        return await get_current_user(request, credentials, db)
     except HTTPException:
         return None

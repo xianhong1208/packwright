@@ -149,7 +149,7 @@ async def build_project(
     task = await task_manager.create_task(
         TaskCreate(project_name=project.name, config=config, project_id=project.id, user_name=current_user.username),
         db,
-        trigger="console",
+        trigger="api" if current_user.via_api_token else "console",
     )
     background_tasks.add_task(start_build_task, task.id, config)
     return task

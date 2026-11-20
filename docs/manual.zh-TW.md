@@ -16,6 +16,7 @@
 - [Docker 輸出](#docker-輸出)
 - [使用者、角色與權限](#使用者角色與權限)
 - [個人安全設定](#個人安全設定)
+- [API token(腳本與 CI)](#api-token腳本與-ci)
 - [安全性與信任模型](#安全性與信任模型)
 - [資料、保留期限與備份](#資料保留期限與備份)
 - [附錄:API 端點](#附錄api-端點)
@@ -511,6 +512,48 @@ docker run --rm --env-file .env my-service:latest
 
 ---
 
+## API token(腳本與 CI)
+
+左下角頭像選單 → **API tokens**(`/settings/api-tokens`)。腳本與 CI 用 token 代替密碼,開始建置、追蹤建置、下載產物。
+
+- **建立**:填名稱(用在哪裡,之後才知道要撤銷哪一個)、勾選範圍、選期限(7 / 30 / 90 天或 1 年,最長 365 天,一定要有期限)。
+  token 只在建立當下顯示一次,馬上存到 CI 的 secrets;伺服器只存它的 SHA-256,之後誰都看不到,遺失就撤銷再建一個。
+- **格式**:`pwt_` + 43 個英數字(32 bytes 亂數)+ 6 個字的 CRC32 檢查碼。檢查碼讓 secret scanner 與伺服器不查資料庫就能認出
+  打錯或亂湊的字串;列表上顯示的是前 12 個字(`pwt_` 加 8 個字)。
+- **範圍**:
+
+  | 範圍 | 可以用的端點 |
+  |---|---|
+  | `builds:read` | `GET /api/tasks`、`/api/tasks/{id}`、`/api/tasks/{id}/logs`、`/api/history`、`/api/history/{id}`、`/api/history/versions`、`/api/history/export`、`/api/history/{id}/download`,WebSocket `/ws/tasks`、`/ws/tasks/{id}` |
+  | `builds:write` | `POST /api/tasks`、`DELETE /api/tasks/{id}`(取消)、`POST /api/projects/{id}/builds` |
+  | `projects:read` | `GET /api/projects`、`/api/projects/{id}` |
+
+  不在表上的端點(使用者、角色、Git 憑證、通知、token 管理、`/auth/*`、精靈輔助、監控等)一律回 **403**,不管 token 有哪些
+  範圍、擁有者是不是管理員 —— 1.4 沒有管理用的範圍。
+- **權限 = 範圍 ∩ 擁有者目前的角色**,每個請求都重算:角色拿掉 `task:create`,`builds:write` 的 token 也立刻不能建置;
+  只有 `*_own` 權限的人,token 也只看得到自己的建置。帳號被停用,他所有的 token 立刻 401。
+- **用 token 開始的建置**記為 `api`(Builds 列表、建置頁、CSV、通知都看得到),由伺服器決定,request body 寫什麼都沒用。
+- **撤銷**:自己的 token 在列表按 **Revoke**;有 `user:manage` 的人可以切到 **Everyone** 看所有人的 token(看不到 token 本身)
+  並撤銷。撤銷、過期、不存在、檢查碼錯的 token 都回同一個 401 `Invalid or expired token`,原因只寫在稽核日誌
+  (`api_token_rejected`);缺範圍或碰到不開放的端點是 403(`api_token_denied`)。建立與撤銷也記在稽核日誌。
+- **最後使用時間**最多一分鐘寫一次,輪詢建置的 CI 不會每次都寫資料庫。
+
+```bash
+export PACKWRIGHT_TOKEN=pwt_...        # 從 CI 的 secrets 讀
+H="Authorization: Bearer $PACKWRIGHT_TOKEN"
+# 用專案的設定建置新版本
+curl -s -X POST -H "$H" -H 'Content-Type: application/json' \
+  -d '{"version": "1.2.0"}' https://packwright.example.com/api/projects/3/builds
+# 查狀態、下載產物
+curl -s -H "$H" https://packwright.example.com/api/history/<task_id>
+curl -s -H "$H" -o out.tar.gz https://packwright.example.com/api/history/<task_id>/download
+```
+
+即時日誌的 WebSocket 一樣用 `Authorization: Bearer` header(瀏覽器以外的用戶端都能送 header)。token **不能**放在
+`?token=` 網址參數裡:token 活好幾個月,網址會留在代理與 access log。
+
+---
+
 ## 安全性與信任模型
 
 ### 核心假設:建立建置 ≈ 這台機器的 shell
@@ -582,7 +625,8 @@ access token 以子協定傳遞,不放在網址(網址會進 access log 與代�
 new WebSocket(url, ['bearer', accessToken])
 ```
 
-舊版用戶端的 `?token=` 查詢參數目前仍被接受,但不建議使用。
+舊版用戶端的 `?token=` 查詢參數目前仍被接受,但不建議使用(API token 不接受這種寫法)。腳本可以改送
+`Authorization: Bearer <token>` header,session 與 API token 都可以。
 
 ---
 
@@ -649,7 +693,7 @@ gunzip -c packwright-<時間>.sql.gz | psql -h HOST -U USER -d DBNAME    # Postg
 
 ## 附錄:API 端點
 
-「權限」欄:*公開* 不需登入;*登入* 只需有效的 access token;其餘為需要的權限碼(`A / B` 表示
+「權限」欄:*公開* 不需登入;*登入* 只需有效的 access token(API token 能用哪些端點見 [API token](#api-token腳本與-ci));其餘為需要的權限碼(`A / B` 表示
 有其一即可,只有 `*_own` 的人只看得到自己的資料)。互動式文件在 `/docs`。
 
 ### 認證 `/auth`
@@ -723,6 +767,16 @@ gunzip -c packwright-<時間>.sql.gz | psql -h HOST -U USER -d DBNAME    # Postg
 | GET | `/api/users/roles/{id}` | `role:view` | 單一角色 |
 | POST · PUT · DELETE | `/api/users/roles[/{id}]` | `role:manage` | 管理角色 |
 | GET · POST · PUT · DELETE | `/api/settings/git-credentials[/{id}]` | `user:manage` | Git 憑證 |
+
+### API token `/api/tokens`
+
+這些端點只接受管理台的登入,用 API token 呼叫一律 403。
+
+| 方法 | 路徑 | 權限 | 說明 |
+|---|---|---|---|
+| GET | `/api/tokens` | 登入 | 自己的 token(不含 token 本身);`?everyone=true` 列出所有人的,需要 `user:manage` |
+| POST | `/api/tokens` | 登入 | 建立:`{"name", "scopes", "expires_in_days"}`,回應裡的 `token` 只出現這一次 |
+| DELETE | `/api/tokens/{id}` | 擁有者或 `user:manage` | 撤銷(重複撤銷沒有影響;別人的 token 回 404) |
 
 ### 監控與其他
 

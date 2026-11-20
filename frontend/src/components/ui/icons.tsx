@@ -64,6 +64,7 @@ import {
   SlidersIcon as Sliders,
   SquaresFourIcon as SquaresFour,
   TagIcon as Tag,
+  TerminalWindowIcon as TerminalWindow,
   TrashIcon as Trash,
   UserIcon as User,
   UsersIcon as Users,
@@ -156,6 +157,7 @@ export const SlackLogoIcon = wrap(SlackLogo, 'SlackLogoIcon')
 export const SlidersIcon = wrap(Sliders, 'SlidersIcon')
 export const SquaresFourIcon = wrap(SquaresFour, 'SquaresFourIcon')
 export const TagIcon = wrap(Tag, 'TagIcon')
+export const TerminalWindowIcon = wrap(TerminalWindow, 'TerminalWindowIcon')
 export const TrashIcon = wrap(Trash, 'TrashIcon')
 export const UserIcon = wrap(User, 'UserIcon')
 export const UsersIcon = wrap(Users, 'UsersIcon')
