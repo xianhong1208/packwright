@@ -35,6 +35,10 @@ pnpm 或 bun 建置前端、把兩者打包在一起，還能把結果匯出成 
 - **給腳本與 CI 用的 API token。** 個人 token（`pwt_…`）以 `Authorization: Bearer` 開始建置、追蹤建置（含即時日誌
   WebSocket）、下載產物。每個 token 有範圍（`builds:read`、`builds:write`、`projects:read`）與最長一年的期限，只存雜湊值，
   永遠碰不到帳號與設定的端點，能做的也不會超過擁有者當下角色允許的。隨時可以在管理台撤銷。
+- **push 或 tag 時自動建置。** 每個專案可以設定 GitHub、GitLab、Gitea 的 webhook，各有自己的密鑰（只顯示一次、加密儲存），
+  每次送達都驗證：內容的 HMAC-SHA256、GitLab 的 secret token 或它的簽章。push 會建置被推上來的那一個 commit，只有符合
+  webhook 分支與 tag 樣式的才建置，並以設定它的人的身分執行。ping、刪除與 `[skip ci]` 會回應但不建置，重複送達只建置一次，
+  每次送達都列出結果。另有附 token 的通用網址，讓其他工具也能觸發建置。
 - **即時日誌與歷史。** 每個建置都透過 WebSocket 串流；完成的建置保留當時完整的設定，重新打包會做一模一樣的事。
 - **通知。** 專案可以把建置結果送到 Discord、Slack 或任何接收 JSON 的網址：失敗的附上診斷，成功的附上花了多久。
 - **重建更快。** 裝了 [ccache](https://ccache.dev/)，Nuitka 會重用沒變的 C 檔；同時進行的建置會分攤機器的核心。

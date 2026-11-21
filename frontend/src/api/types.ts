@@ -640,3 +640,44 @@ export interface ProjectNotification {
   last_ok: boolean | null
   last_error: string | null
 }
+
+/** Where an incoming webhook comes from. */
+export type HookProvider = 'github' | 'gitlab' | 'gitea' | 'generic'
+
+/** An incoming webhook of a project (its secret is never listed). */
+export interface ProjectHook {
+  id: number
+  provider: HookProvider
+  /** Path of the payload URL; `url` is the full URL as the server knows it. */
+  path: string
+  url: string
+  branches: string[]
+  tags: string[]
+  enabled: boolean
+  /** Why Packwright turned it off (its creator may no longer build). */
+  disabled_reason: string | null
+  has_signing_key: boolean
+  /** Builds it starts run as this person. */
+  created_by: string
+  created_at: string
+  secret_rotated_at: string | null
+  last_delivery_at: string | null
+  can_edit: boolean
+}
+
+/** The answer to creating a hook or rotating its secret: the only time the secret is shown. */
+export interface CreatedProjectHook extends ProjectHook {
+  secret: string
+}
+
+export interface HookDelivery {
+  id: number
+  received_at: string
+  delivery_id: string | null
+  event: string | null
+  ref: string | null
+  commit_sha: string | null
+  result: 'built' | 'ignored' | 'rejected'
+  reason: string | null
+  task_id: string | null
+}

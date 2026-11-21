@@ -56,6 +56,14 @@ class AuditAction(str, Enum):
     # A valid token asked for an endpoint or scope it does not have: 403.
     API_TOKEN_DENIED = "api_token_denied"
 
+    # Incoming webhooks
+    HOOK_CREATE = "hook_create"
+    HOOK_UPDATE = "hook_update"
+    HOOK_ROTATE = "hook_rotate"
+    HOOK_DELETE = "hook_delete"
+    # Packwright turned a hook off because its creator may no longer build.
+    HOOK_DISABLED = "hook_disabled"
+
 
 class AuditStatus(str, Enum):
     """Audit log status values."""
@@ -75,6 +83,7 @@ class ResourceType(str, Enum):
     AUTH = "auth"
     TASK = "task"
     API_TOKEN = "api_token"
+    HOOK = "hook"
 
 
 async def log_action(

@@ -52,6 +52,12 @@ what comes next.
   (`builds:read`, `builds:write`, `projects:read`) and an expiry of up to a year, is stored only as a hash,
   can never reach account or settings endpoints, and can do no more than its owner's role allows at that
   moment. Revoke it in the console at any time.
+- **Build on push or tag.** Each project can have webhooks for GitHub, GitLab and Gitea, each with its own
+  secret (shown once, stored encrypted), checked on every delivery: HMAC-SHA256 of the body, GitLab's secret
+  token or its signed deliveries. A push builds exactly the pushed commit, only for branches and tags matching
+  the webhook's patterns, as the person who set it up. Pings, deletions and `[skip ci]` are answered and
+  ignored, repeats are built once, and every delivery is listed with what came of it. A generic URL with a
+  token starts a build from any other tool.
 - **Live logs and history.** Every build streams over WebSocket; a finished build keeps the exact
   settings that produced it, so a rebuild does the same thing.
 - **Notifications.** A project can send how its builds end to Discord, Slack or any URL that takes JSON:
