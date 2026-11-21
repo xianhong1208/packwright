@@ -2,6 +2,7 @@
 
 import asyncio
 import logging
+import re
 from contextlib import asynccontextmanager
 from pathlib import Path
 from typing import AsyncGenerator
@@ -20,6 +21,7 @@ from app.api.routes.projects import router as projects_router
 from app.api.routes.notifications import router as notifications_router
 from app.api.routes.monitoring import router as monitoring_router
 from app.api.routes.api_tokens import router as api_tokens_router
+from app.api.routes.hooks import receive_router as hooks_receive_router, router as hooks_router
 from app.api.websocket import router as websocket_router
 from app.config import get_settings
 from app.database import close_db, init_db
@@ -53,7 +55,27 @@ def _configure_logging() -> None:
     logging.getLogger("watchfiles").setLevel(logging.WARNING)
 
 
+class _RedactQueryTokens(logging.Filter):
+    """Mask ``token=`` in access-log lines.
+
+    A generic webhook may be called as ``/api/hooks/generic/<id>?token=<secret>``
+    by a sender that can only call a URL. The console warns that a proxy in front
+    will log it; this server, at least, does not.
+    """
+
+    _TOKEN = re.compile(r"([?&]token=)[^&\s]*")
+
+    def filter(self, record: logging.LogRecord) -> bool:
+        if isinstance(record.args, tuple):
+            record.args = tuple(
+                self._TOKEN.sub(r"\1[redacted]", a) if isinstance(a, str) and "token=" in a else a
+                for a in record.args
+            )
+        return True
+
+
 _configure_logging()
+logging.getLogger("uvicorn.access").addFilter(_RedactQueryTokens())
 logger = logging.getLogger(__name__)
 
 # Frontend build directory
@@ -149,6 +171,9 @@ rate_limit_config = RateLimitConfig(
         # this method-qualified key claws back the one verb that must not be
         # free, and takes precedence over that exclusion.
         "POST /api/tasks": settings.build_submit_per_minute,
+        # Webhook deliveries: unauthenticated until the signature is checked,
+        # so they get their own budget rather than the console's.
+        "/api/hooks": settings.webhook_per_minute,
     },
     # Building a project's new version starts a build just the same, and had no
     # limit at all: it shares POST /api/tasks's allowance and count.
@@ -170,6 +195,8 @@ app.include_router(projects_router)
 app.include_router(notifications_router)
 app.include_router(monitoring_router)
 app.include_router(api_tokens_router)
+app.include_router(hooks_router)
+app.include_router(hooks_receive_router)
 app.include_router(websocket_router)
 
 

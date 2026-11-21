@@ -16,6 +16,7 @@ import FrontendStep from './createTask/sections/FrontendStep'
 import DockerStep from './createTask/sections/DockerStep'
 import CommandPreview from './projects/CommandPreview'
 import Notifications from './projects/Notifications'
+import Webhooks from './projects/Webhooks'
 
 /** A project's settings — what new versions are built with — as tabs. */
 export default function ProjectSettingsPage() {
@@ -66,6 +67,14 @@ function Settings({ project }: { project: ProjectDetail }) {
     { key: 'docker', label: 'Docker', children: <DockerStep /> },
     { key: 'commands', label: 'Commands', children: <CommandPreview /> },
     { key: 'notifications', label: 'Notifications', children: <Notifications projectId={project.id} canEdit={project.can_edit} /> },
+    {
+      key: 'webhooks',
+      label: 'Webhooks',
+      children: (
+        <Webhooks projectId={project.id} canEdit={project.can_edit} fromGit={project.source_type === 'git'}
+          defaultBranch={project.config.git_ref_type === 'branch' ? project.config.git_ref : ''} />
+      ),
+    },
   ]
 
   return (
@@ -78,8 +87,8 @@ function Settings({ project }: { project: ProjectDetail }) {
         <Form form={form} layout="vertical" initialValues={initialValues(preset)}>
           {/* Every tab stays mounted so a field on a hidden tab is still validated and saved. */}
           <Tabs activeKey={tab} onChange={setTab} items={items.map((i) => ({ ...i, forceRender: true }))} />
-          {/* Notifications save as they change; the defaults bar is for the other tabs. */}
-          <div className="settings-bar" hidden={tab === 'notifications'}>
+          {/* Notifications and webhooks save as they change; the defaults bar is for the other tabs. */}
+          <div className="settings-bar" hidden={tab === 'notifications' || tab === 'webhooks'}>
             <span className="text-sm" style={{ color: 'var(--ink-faint)' }}>
               {project.can_edit ? 'Saved settings apply to the next build.' : `Only ${project.created_by} or a project manager can change these.`}
             </span>
