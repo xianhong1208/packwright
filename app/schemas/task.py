@@ -428,6 +428,17 @@ class TaskCreate(BaseModel):
     # Build exactly this commit of a Git source instead of where its ref points
     # when the build starts (a webhook passes the pushed commit). A full id only.
     git_commit: str | None = Field(default=None, description="Full commit id to build (Git sources only)")
+    # Settings the console filled in by looking at the source (Quick build), left
+    # as found. Only recorded as where those values came from; names that are not
+    # settings are dropped.
+    detected_fields: list[str] = Field(
+        default_factory=list, max_length=100, description="Settings filled in by detection (recorded as their origin)"
+    )
+
+    @field_validator("detected_fields")
+    @classmethod
+    def _known_fields(cls, v: list[str]) -> list[str]:
+        return [name for name in dict.fromkeys(v) if name in BuildConfig.model_fields]
 
     @field_validator("git_commit")
     @classmethod
@@ -581,6 +592,33 @@ class BuildResult(BaseModel):
     port_check: PortCheck | None = None
 
 
+class FileKey(BaseModel):
+    """A setting packwright.toml set: its key, line and value."""
+
+    key: str
+    line: int | None = None
+    text: str = ""
+    value: Any = None
+    # The value the file replaced, and where that came from, when they differed.
+    replaced: dict | None = None
+
+
+class FileRecord(BaseModel):
+    path: str = "packwright.toml"
+    fields: dict[str, FileKey] = Field(default_factory=dict)
+
+
+class EffectiveSettings(BaseModel):
+    """What a build was made with and where each value came from
+    (app/services/packwright_toml.record). ``config`` is None until the build's
+    Config stage has read the source; ``file`` is None when it had no packwright.toml."""
+
+    config: dict | None = None
+    # BuildConfig field -> file, override, project or detected
+    origins: dict[str, str] = Field(default_factory=dict)
+    file: FileRecord | None = None
+
+
 class TaskResponse(BaseModel):
     """Response model for a task."""
 
@@ -600,6 +638,7 @@ class TaskResponse(BaseModel):
     project_id: int | None = None
     commit_sha: str | None = None
     trigger: BuildTrigger = "console"
+    effective: EffectiveSettings | None = None
 
 
 class HistoryItem(BaseModel):
@@ -618,6 +657,8 @@ class HistoryItem(BaseModel):
     project_id: int | None = None
     commit_sha: str | None = None
     trigger: BuildTrigger = "console"
+    # The single record only; the history list leaves it out.
+    effective: EffectiveSettings | None = None
 
 
 class WebSocketMessage(BaseModel):

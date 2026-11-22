@@ -5,6 +5,7 @@ Source: app/services/schedules.py
 """
 
 from datetime import datetime, timedelta, timezone
+from types import SimpleNamespace
 from zoneinfo import ZoneInfo
 
 import pytest
@@ -13,6 +14,11 @@ from app.schemas.task import BuildConfig
 from app.services import schedules
 
 UTC = timezone.utc
+
+
+def _built(config, effective=None):
+    """A history row as _same_settings reads it."""
+    return SimpleNamespace(config=config, effective_config=effective)
 NY = "America/New_York"
 
 
@@ -137,6 +143,31 @@ def test_tc_sched_009_settings_fingerprint_is_the_whole_config():
     assert schedules.settings_fingerprint(_cfg(generate_report=True)) != schedules.settings_fingerprint(base)
     assert schedules.settings_fingerprint(_cfg(git_ref="dev")) != schedules.settings_fingerprint(base)
     assert schedules.settings_fingerprint(_cfg(version="1.0")) != schedules.settings_fingerprint(base)
-    assert schedules._same_settings(stored, base)
-    assert not schedules._same_settings(None, base)
-    assert not schedules._same_settings({"project_type": "no-such-type"}, base)
+    assert schedules._same_settings(_built(stored), base)
+    assert not schedules._same_settings(_built(None), base)
+    assert not schedules._same_settings(_built({"project_type": "no-such-type"}), base)
+
+
+@pytest.mark.unit
+def test_tc_sched_010_unchanged_compares_the_effective_settings_with_the_file():
+    """TC-SCHED-010: skip-unchanged compares what was really built, packwright.toml's values
+    included. At the same commit (the same file) a saved setting the file overrides changes
+    nothing; a setting the file leaves alone still counts; a build that read no file is
+    compared on its effective settings too."""
+    from app.services import packwright_toml as pt
+
+    submitted = _cfg(entry_point="main.py")
+    file = pt.parse('schema = 1\n[python]\nentry = "app.py"\n')
+    effective = submitted.model_copy(update=file.values)
+    last = _built(submitted.model_dump(mode="json"), pt.record(None, submitted, effective, file))
+
+    # The project's entry point changed since, but the file sets it: the same build.
+    assert schedules._same_settings(last, _cfg(entry_point="other.py"))
+    assert schedules._same_settings(last, submitted)
+    # A setting the file does not set changed: built again.
+    assert not schedules._same_settings(last, _cfg(entry_point="main.py", generate_report=True))
+
+    # A build without a packwright.toml: its effective settings are what was submitted.
+    plain = _built(submitted.model_dump(mode="json"), pt.record(None, submitted, submitted, None))
+    assert schedules._same_settings(plain, submitted)
+    assert not schedules._same_settings(plain, _cfg(entry_point="other.py"))

@@ -4,7 +4,7 @@ from datetime import datetime
 
 from pydantic import BaseModel, Field
 
-from app.schemas.task import BuildConfig, TaskStatus
+from app.schemas.task import BuildConfig, FileKey, TaskStatus
 
 
 class BuildBrief(BaseModel):
@@ -35,9 +35,20 @@ class ProjectSummary(BaseModel):
     can_edit: bool = False
 
 
+class FromFile(BaseModel):
+    """The settings the project's latest build took from its packwright.toml. The
+    console shows them read-only: they are changed in the repository."""
+
+    task_id: str
+    commit_sha: str | None = None
+    fields: dict[str, FileKey] = Field(default_factory=dict)
+
+
 class ProjectDetail(ProjectSummary):
     config: BuildConfig
     history: list[BuildBrief] = Field(default_factory=list)
+    # None when the latest build that read its source found no packwright.toml.
+    from_file: FromFile | None = None
 
 
 class ProjectUpdate(BaseModel):

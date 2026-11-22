@@ -18,9 +18,10 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.database import get_db
 from app.models.project import Project
 from app.models.task import Task
-from app.schemas.project import BuildBrief, ProjectBuildRequest, ProjectDetail, ProjectSummary, ProjectUpdate
+from app.schemas.project import BuildBrief, FromFile, ProjectBuildRequest, ProjectDetail, ProjectSummary, ProjectUpdate
 from app.schemas.task import TaskCreate, TaskResponse, TaskStatus
 from app.services.build_dispatcher import start_build_task
+from app.services.packwright_toml import base_origins
 from app.services.permission import CurrentUser, PermissionCode, get_current_user, require_permission
 from app.services.projects import config_for_build, defaults_from, may_change, source_of
 from app.services.task_manager import task_manager
@@ -85,7 +86,22 @@ async def get_project(project_id: int, db: DB, current_user: AuthUser, _: None =
         **_summary(project, builds, current_user),
         config=config_for_build(project, {}),
         history=[_brief(b) for b in builds],
+        from_file=_from_file(builds),
     )
+
+
+def _from_file(builds: list[Task]) -> FromFile | None:
+    """What the latest build that read its source took from packwright.toml
+    (builds newest first). Only a build can know: the file lives in the source."""
+    for b in builds:
+        record = b.effective_config or {}
+        if "config" not in record:
+            continue
+        part = record.get("file")
+        if not part:
+            return None
+        return FromFile(task_id=b.task_id, commit_sha=b.commit_sha, fields=part.get("fields") or {})
+    return None
 
 
 @router.put("/{project_id}", response_model=ProjectDetail)
@@ -150,6 +166,7 @@ async def build_project(
         TaskCreate(project_name=project.name, config=config, project_id=project.id, user_name=current_user.username),
         db,
         trigger="api" if current_user.via_api_token else "console",
+        origins=base_origins(config, project.config, overrides=request.overrides),
     )
     background_tasks.add_task(start_build_task, task.id, config)
     return task

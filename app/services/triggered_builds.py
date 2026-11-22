@@ -75,5 +75,9 @@ async def submit_build(
         user_name=user.username,
         git_commit=commit or None,
     )
-    task = await task_manager.create_task(request, db, trigger=trigger)
+    from app.services.packwright_toml import base_origins
+
+    task = await task_manager.create_task(
+        request, db, trigger=trigger, origins=base_origins(config, project.config, overrides=overrides)
+    )
     return task, config

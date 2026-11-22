@@ -66,12 +66,16 @@ class TaskManager:
         db: AsyncSession,
         *,
         trigger: BuildTrigger = "console",
+        origins: dict[str, str] | None = None,
     ) -> TaskResponse:
         """Create a new task.
 
         ``trigger`` says what started it. It is the caller's to state (the
         console route, a webhook, a schedule), never a field of the request
         body, so nobody can label their own build as something else.
+
+        ``origins`` says where each setting came from before packwright.toml is
+        read (packwright_toml.base_origins); the Config stage completes it.
         """
         if trigger not in BUILD_TRIGGERS:
             raise ValueError(f"Unknown build trigger: {trigger!r}")
@@ -96,6 +100,7 @@ class TaskManager:
             "project_id": request.project_id,
             "commit_sha": request.git_commit,
             "trigger": trigger,
+            "effective": {"origins": origins} if origins else None,
         }
 
         async with self._lock:
@@ -117,6 +122,7 @@ class TaskManager:
             project_id=request.project_id,
             commit_sha=request.git_commit,
             trigger=trigger,
+            effective_config={"origins": origins} if origins else None,
         )
         db.add(db_task)
         await db.commit()
@@ -406,6 +412,7 @@ class TaskManager:
             project_id=task_data.get("project_id"),
             commit_sha=task_data.get("commit_sha"),
             trigger=task_data.get("trigger", "console"),
+            effective=task_data.get("effective"),
         )
 
     async def set_commit(self, task_id: str, sha: str) -> None:
@@ -425,6 +432,35 @@ class TaskManager:
                 db_task.commit_sha = sha
                 await db.commit()
         await self._broadcast_update(task_id, "commit_sha", sha)
+
+    def origins_of(self, task_id: str) -> dict[str, str] | None:
+        """Where each setting of a running build came from before its Config stage."""
+        task = self._tasks.get(task_id)
+        return ((task or {}).get("effective") or {}).get("origins")
+
+    async def set_effective(self, task_id: str, record: dict) -> None:
+        """Record what a build is made with after its Config stage (memory + DB +
+        broadcast): packwright_toml.record. The version and output directory
+        columns follow the effective settings, which the file may have changed.
+
+        Uses its own session, like set_commit: it runs before the dispatcher opens one.
+        """
+        from app.database import async_session
+
+        config = record.get("config") or {}
+        async with self._lock:
+            if task_id in self._tasks:
+                self._tasks[task_id]["effective"] = record
+        async with async_session() as db:
+            db_task = (await db.execute(select(Task).where(Task.task_id == task_id))).scalar_one_or_none()
+            if db_task is not None:
+                db_task.effective_config = record
+                if "version" in config:
+                    db_task.version = config["version"] or None
+                if config.get("output_dir"):
+                    db_task.output_dir = config["output_dir"]
+                await db.commit()
+        await self._broadcast_update(task_id, "effective", record)
 
     async def set_stage(self, task_id: str, stage: str) -> None:
         """Set the coarse build stage (preflight/compile/bundle/verify/done)."""

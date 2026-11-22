@@ -168,6 +168,8 @@ def prepare(mocker, tmp_path):
     resolve = mocker.patch.object(git_service, "resolve_ref", mocker.AsyncMock(return_value=SHA1))
     clone = mocker.patch.object(git_service, "clone_at_commit", mocker.AsyncMock(return_value=False))
     mocker.patch.object(build_dispatcher, "_prepare_venv", mocker.AsyncMock())
+    # The Config stage (packwright.toml) has its own tests (test_packwright_toml).
+    mocker.patch.object(build_dispatcher, "_config_stage", mocker.AsyncMock(side_effect=lambda tid, cfg, root: cfg))
     return resolve, clone, set_commit
 
 

@@ -74,7 +74,8 @@ follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this proje
   (`overlap`), and, by default (*Skip when unchanged*, per schedule), when the commit and the effective settings
   equal those of the project's last successful build of that branch or tag (`unchanged`): the effective settings
   are the complete build configuration the run would be filed with (the project's saved settings with the
-  schedule's branch or tag), compared as a SHA-256 of its canonical JSON, so any changed setting builds again.
+  schedule's branch or tag, and `packwright.toml`'s values, see below), compared as a SHA-256 of its canonical
+  JSON, so any changed setting builds again.
   Missed runs are not made up: a run found more than 2 minutes late (Packwright was not running) is recorded once
   as `missed` and the next run is counted from now. The next run time is stored, so it survives a restart, and a
   run is claimed with a conditional update of it, so it fires once even if two scheduler loops look at the same
@@ -86,6 +87,38 @@ follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this proje
   Creating, changing and deleting are audited; API tokens cannot manage schedules. `SCHEDULES_ENABLED=false` stops
   the scheduler. Cron expressions are read by [cronsim](https://github.com/cuu508/cronsim) (BSD-3-Clause, no
   dependencies), a new dependency. Migration `e6b2c8d4f1a3` adds `project_schedules` and `schedule_runs`.
+
+- `packwright.toml`: build settings kept in the repository (#6). A file named `packwright.toml` at the root of the
+  source (the exact commit a Git build checks out, the folder of a local build) sets build settings by the same
+  names the console uses, grouped: `schema = 1`, then `[project]` (type, version, output_dir), `[python]` (version,
+  entry, output_name, onefile, pack_mode, source_dirs, data_dirs, include_packages, dependency_groups and
+  `[python.nuitka]` jobs / anti_bloat / include_package_data / report), `[frontend]` (dir, tool, build_command,
+  output_dir, env_file, env), `[docker]` (enabled, image_name, base_image, port, env, commands, install_node,
+  api_proxy, volumes, run_as_root and `[docker.nginx]`) and `[smoke]` (enabled). Field by field, **the file wins
+  over a build's own changes and over the project's saved settings**, which win over what the console detected;
+  the file's values are never written into the saved settings. It is read at a new first build stage, **Config**,
+  before the venv bootstrap and the compile, so `[python] version` and `dependency_groups` apply to the bootstrap.
+  The build fails there, naming the key and its line, for a TOML syntax error, an unknown key, a wrong type
+  (nothing is coerced: `"8080"` is not a port, `"yes"` is not true), a `schema` other than 1, a value the console
+  would refuse, a path that leaves the project (`..`, absolute, or through a link) and anything that does not
+  belong in a repository: keys whose name says secret (`password`, `token`, `secret`, `api_key`, `*_KEY`, …, in
+  any table, env variable names included), values shaped like credentials (a URL with a password, a private key,
+  a JWT, the prefixes of GitHub, GitLab, Slack, AWS, Google, OpenAI, Stripe, Hugging Face, npm and Packwright
+  tokens, 32+ hex digits, a high-entropy generated key), the source (`git`, `git_url`, …), the project's name,
+  notifications, webhooks, schedules, Git credentials and the build's user, isolation or `BUILD_ENV_PASSTHROUGH`.
+  Ordinary env variables (`LOG_LEVEL = "info"`, URLs without a password) are allowed. Each build records the
+  settings it was made with and where each came from: `file` (with key, line and the value it replaced),
+  `override` (this build's own change), `project` or `detected` (filled in by Quick build and left as found; the
+  console now sends `detected_fields` with a build). A build's page lists every setting with its origin; the stage
+  track starts with Config and its failure is explained like any other. On a project's settings, the fields the
+  latest build took from the file are read-only, tagged *from packwright.toml* (the line on hover) with "edit it
+  in the repo", and saving keeps the project's own values for them. Quick build reads the file too and fills in
+  only what it leaves out, and says when the file cannot be used. Webhook and scheduled builds read it like any
+  other; a schedule's *Skip when unchanged* compares the effective settings, the file's values included (a
+  changed file is a new commit, which is always built). Downloads follow the effective output directory and image
+  name. The JSON Schema for editors is `docs/packwright.schema.json` (`#:schema` in Taplo / Even Better TOML),
+  generated from the same model by `scripts/gen_packwright_schema.py`. Migration `f1c5a8e3d7b2` adds
+  `history.effective_config`; older builds have none and show their submitted settings.
 
 ### Fixed
 - A build of a project without a `.venv` is diagnosed as such (#21). A module missing at run time was explained

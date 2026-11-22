@@ -5,6 +5,7 @@ import type { BuildResult } from '../../api/types'
 // up raw in the UI, so new backend stages belong here too.
 export const STAGE_LABELS: Record<string, string> = {
   queued: 'Queued (waiting for a build slot)',
+  config: 'Config (reading packwright.toml from the source)',
   frontend: 'Frontend (installing dependencies and running the build command)',
   preflight: 'Preflight (checking paths, the Python version and the dependency environment)',
   compile: 'Compile (Nuitka running)',

@@ -47,6 +47,27 @@
 要調更多設定(Docker、打包模式、要一起打包的目錄……)就按 **All settings**,會進入下面的完整精靈,
 快速建置已經偵測到的值都會帶過去。重新建置(Rebuild)一律直接開完整精靈。
 
+### 設定放在 repo 裡(packwright.toml)
+
+不想每次在管理台設定?在專案根目錄放一個 `packwright.toml`,它的值會蓋過專案設定(只用在那次建置,不會寫回去):
+
+```toml
+#:schema https://raw.githubusercontent.com/xianhong1208/packwright/main/docs/packwright.schema.json
+schema = 1
+
+[python]
+entry = "src/app.py"
+data_dirs = ["static"]
+
+[docker]
+enabled = true
+port = 8080
+```
+
+寫錯 key、型別不對、路徑跑出專案、或放了密碼 / token 之類的東西,建置會在第一個 **Config** 階段失敗並告訴你是哪一行。
+建置頁會標出每個值是從檔案、這次建置、專案設定還是偵測來的。完整說明見手冊的
+[packwright.toml](manual.zh-TW.md#packwrighttoml設定放在-repo-裡)。
+
 ### 完整精靈(All settings)
 
 跟著精靈走,每一步上方都有提示。**不確定的欄位保持預設、直接下一步就好。** 步驟會隨專案類型變化:後端是 Basics → Backend → Docker → Review,前端是 Basics → Frontend → Docker → Review,全端五步都有。

@@ -347,8 +347,10 @@ commit**;建置紀錄的觸發方式是 `push`(分支)或 `tag`(tag push,tag 若
 - 這個專案有建置在排隊或進行中 → 跳過(`overlap`),不會疊在一起。
 - 用 `git ls-remote` 讀出分支或 tag 當下的 commit,**建置的就是那一個 commit**。
 - 開著 Skip when unchanged 時,和這個專案、同一分支或 tag **最近一次成功**的建置比較:commit 相同,而且「實際設定」相同 →
-  跳過(`unchanged`,附上那次建置)。「實際設定」= 這次建置會帶的完整設定(專案儲存的設定,加上排程的分支或 tag),
-  整份以 JSON 正規化後取 SHA-256 比較;任何一項設定改了(包括版本字串)就會再建置。失敗的建置不算。
+  跳過(`unchanged`,附上那次建置)。「實際設定」= 這次建置會帶的完整設定(專案儲存的設定,加上排程的分支或 tag,
+  再加上 `packwright.toml` 的值),整份以 JSON 正規化後取 SHA-256 比較;任何一項設定改了(包括版本字串)就會再建置。
+  `packwright.toml` 設定的欄位以檔案為準,所以在專案設定裡改這些欄位不算改變;改了 repo 裡的檔案就是新的 commit,一定會建置。
+  失敗的建置不算。
 - **錯過的不補跑**:Packwright 停機(或檢查晚了 2 分鐘以上)錯過的時間,只記一筆 `missed`,下一次從「現在」往後算,
   不會一次補一堆。下一次的時間存在資料庫,重新啟動也記得。
 - 同一個時間只會執行一次:取得執行權是對 `next_run_at` 做條件式更新,就算有兩個排程迴圈同時檢查也一樣(SQLite 與 PostgreSQL 皆然)。
@@ -358,6 +360,74 @@ commit**;建置紀錄的觸發方式是 `push`(分支)或 `tag`(tag push,tag 若
 - 關閉開關會暫停(沒有下一次);改了 cron 或時區、重新打開,下一次都從現在算。
 - 誰能改:專案建立者或有 `project:manage` 的人;有建置權限的人都看得到排程與執行紀錄。API token 不能管理排程。
 - `SCHEDULES_ENABLED=false` 會停掉排程器(排程保留,停的期間錯過的不補)。
+
+### packwright.toml(設定放在 repo 裡)
+
+在原始碼根目錄放一個 `packwright.toml`,建置設定就跟著程式碼走:Git 建置讀**要建置的那個 commit** 裡的檔案,本機路徑讀
+資料夾裡的檔案。名稱與管理台的設定相同,只是分組:
+
+```toml
+#:schema https://raw.githubusercontent.com/xianhong1208/packwright/main/docs/packwright.schema.json
+schema = 1
+
+[project]
+type = "backend_only"          # backend_only / frontend_only / fullstack
+version = "1.4.0"              # 選用;沒寫就照原本的偵測
+
+[python]
+version = "auto"               # 或 "3.13"
+entry = "src/app.py"
+pack_mode = "external"         # external / full
+onefile = true
+data_dirs = ["static", "templates"]
+dependency_groups = ["server"]
+
+[python.nuitka]
+jobs = 0                       # 0 = 自動
+
+[frontend]
+dir = "web"
+tool = "pnpm"
+build_command = "build"
+env = { VITE_API_BASE = "/api" }
+
+[docker]
+enabled = true
+port = 8080
+env = { LOG_LEVEL = "info" }
+volumes = ["data"]
+
+[smoke]
+enabled = true
+```
+
+全部的 key 與說明在 [docs/packwright.schema.json](packwright.schema.json)(VS Code 裝 Even Better TOML,檔案第一行寫
+`#:schema …` 就有自動完成與檢查)。
+
+- **誰優先**:逐欄位比較,**檔案 > 這次建置自己的修改 > 專案設定 > 偵測**。檔案的值只用在那次建置,**不會寫回專案設定**。
+- **Config 階段**:建置的第一個階段(Git 建置在 clone 之後、建立 `.venv` 之前,所以 `[python] version` 與
+  `dependency_groups` 會用在 `uv sync`)。下列情況建置會在這裡失敗,錯誤會指出 **key 與行號**(例如
+  `packwright.toml:4: python.entyr: unknown key`):
+  - 不是合法的 TOML;
+  - 未知的 key(打錯字不會被默默忽略);
+  - 型別不對(不會自動轉換:`port = "8080"`、`onefile = "yes"` 都不行);
+  - `schema` 不是 1(新版格式要更新 Packwright);
+  - 管理台也會拒絕的值(例如 `build_command` 含 shell 語法、版本字串不合法);
+  - 路徑跑出專案:`..`、絕對路徑,或透過連結指到專案外;
+  - **不該放在 repo 的東西**:名稱看起來是密鑰的 key(`password`、`token`、`secret`、`api_key`、`*_KEY`……,任何層都算,
+    包括 env 變數名);看起來像憑證的值(含密碼的網址、私鑰、JWT、GitHub / GitLab / Slack / AWS / Google / OpenAI /
+    Stripe / Hugging Face / npm / Packwright token 的開頭、32 個以上的十六進位字元、隨機產生的長金鑰);
+    來源(`git`、`git_url`……)、專案名稱、通知、webhook、排程、Git 憑證,以及建置使用者、隔離方式與
+    `BUILD_ENV_PASSTHROUGH`。這些都只能在 Packwright 裡設定。
+  - 一般的 env 變數可以放(`LOG_LEVEL = "info"`、不含密碼的網址);密鑰請放在專案設定的 env 欄位。
+- **建置頁**:「Settings and where they came from」列出每項設定與來源:`packwright.toml · line N`(滑過去看那一行;
+  若取代了這次建置自己改的值,會寫「instead of this build's …」)、`this build`、`project`、`detected`。
+- **專案設定頁**:最近一次讀過原始碼的建置從檔案拿到的欄位會顯示檔案的值、**唯讀**,標「from packwright.toml」並提示
+  「edit it in the repo」;頁面上方列出這些 key 與行號。按 Save as defaults 時,這些欄位保留專案自己的值。最近一次建置
+  沒有這個檔案時,所有欄位都可以編輯。
+- **快速建置**:讀到檔案時,檔案設定的欄位直接用檔案的值,偵測只補檔案沒寫的;檔案有錯時會先列出錯誤。
+- Webhook 與排程觸發的建置一樣會讀檔案。
+- 目前只讀根目錄的 `packwright.toml`(monorepo 子目錄的路徑設定還沒有)。
 
 ## New build
 
@@ -466,12 +536,13 @@ image 名稱留空時,Git 來源用 repo 名稱、本機來源用資料夾名稱
 詳情頁上方顯示目前狀態,後端建置另有階段進度條:
 
 ```
-Queued → Preflight → Compile → Bundle → Verify
+Queued → Config → Preflight → Compile → Bundle → Verify
 ```
 
 | 階段 | 做什麼 |
 |---|---|
 | **Queued** | 等待建置名額(`MAX_CONCURRENT_BUILDS`) |
+| **Config** | 讀原始碼根目錄的 `packwright.toml`(見 [packwright.toml](#packwrighttoml設定放在-repo-裡)),檔案有錯就在這裡失敗並指出 key 與行號 |
 | **Preflight** | 檢查專案路徑、進入點、`.venv`、Nuitka 與 Python 版本;有問題立刻失敗,不用等編譯 |
 | **Compile** | Nuitka 編譯 |
 | **Bundle** | 複製依賴(`libs/`)與資料目錄 |

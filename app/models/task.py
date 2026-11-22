@@ -57,6 +57,11 @@ class Task(Base):
     # What started the build: console, api, push, tag or schedule
     # (app/schemas/task.BuildTrigger). Rows from before the column are console builds.
     trigger: Mapped[str] = mapped_column(String(16), nullable=False, default="console", server_default="console")
+    # What the build was really made with once packwright.toml was read: the
+    # effective settings, each field's origin (file, override, project, detected)
+    # and the keys and lines the file set (app/services/packwright_toml.record).
+    # config above stays what was submitted: a rebuild starts from it.
+    effective_config: Mapped[dict | None] = mapped_column(JSON, nullable=True)
 
     def __repr__(self) -> str:
         return f"<Task {self.task_id}: {self.project_name} ({self.status})>"
