@@ -6,6 +6,8 @@ follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this proje
 
 ## [Unreleased]
 
+## [1.4.0] — 2026-11-22
+
 ### Added
 - A Git build checks out one exact commit and records it (first part of #3). The branch or tag is resolved to
   its commit when the build starts (`git ls-remote`; an annotated tag is peeled to the commit it tags), and the
@@ -567,7 +569,8 @@ role-based permissions.
 - Timezone-safe token expiry on SQLite; portable build statistics.
 - Git credentials feedback in the console; no pre-filled personal paths in New build.
 
-[Unreleased]: https://github.com/xianhong1208/packwright/compare/v1.3.2...dev
+[Unreleased]: https://github.com/xianhong1208/packwright/compare/v1.4.0...dev
+[1.4.0]: https://github.com/xianhong1208/packwright/compare/v1.3.2...v1.4.0
 [1.3.2]: https://github.com/xianhong1208/packwright/compare/v1.3.1...v1.3.2
 [1.3.1]: https://github.com/xianhong1208/packwright/compare/v1.3.0...v1.3.1
 [1.3.0]: https://github.com/xianhong1208/packwright/compare/v1.2.0...v1.3.0
