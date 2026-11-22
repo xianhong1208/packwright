@@ -2,7 +2,7 @@
 
 [繁體中文](ROADMAP.zh-TW.md)
 
-Where Packwright is going after 1.3. Each line names what users get, not how it is built. Versions are
+Where Packwright is going after 1.4. Each line names what users get, not how it is built. Versions are
 minor releases unless a change breaks something. Every item has an issue under its
 [milestone](https://github.com/xianhong1208/packwright/milestones).
 
@@ -37,13 +37,14 @@ no longer holds a build slot; Git credential hosts are checked.
 
 **1.3.2 (2026-11-13), up-to-date dependencies and a roles fix.** The open dependency updates were applied together and checked with a real build (Nuitka 4.3.5, current FastAPI, SQLAlchemy and React libraries; the lint tools' `minimatch` advisory is fixed). The Roles dialog can clear a role's parent.
 
+**1.4.0 (2026-11-22), automation.** Builds start on a push or a tag (webhooks from GitHub, GitLab and Gitea, each checked by its signature, plus a generic URL with a token), on a schedule per project, or from scripts and CI with API tokens. Every Git build checks out one exact commit and records it and what started it. A `packwright.toml` in the repository keeps a project's build settings next to its code: the file wins field by field, a new Config stage stops a build on a mistake with the key and line, and the console marks which values came from the file.
+
 See [CHANGELOG.md](CHANGELOG.md) for every change.
 
 ## Next
 
 | Version | What you get |
 |---|---|
-| **1.4: automation** | **Build on push or tag:** webhooks from GitHub, GitLab and Gitea, each checked by its signature, plus a generic URL with a token for anything else. **Scheduled builds** for a project. **API tokens**, so scripts and CI can start builds and download results without a password. **`packwright.toml` in the repository:** a project can keep its build settings next to its code; the file wins field by field, and the console marks which values came from it. |
 | **1.5: artifacts and publishing** | Every build comes with **`SHA256SUMS`, a manifest and a CycloneDX SBOM**. **Keep the last N artifacts** per project, and **caps for the build caches** (Nuitka, uv, npm) with a sweep, so the disk stops growing. **Publish after a successful build:** files to GitHub or Gitea Releases, and the image pushed to **any registry** (Docker Hub, GHCR, Gitea or a private one). Their tokens are stored encrypted, like Git credentials. |
 | **1.6: isolation** | Each build runs **as a separate user or in its own container**, so it can no longer read the service's files or other builds. **Per-project secrets**, stored encrypted and given only to that project's builds. |
 | **1.7: more platforms** | **Remote build agents** for Windows, macOS and arm64, so one console builds for all of them. **Code signing:** Authenticode on Windows, signing and notarization on macOS. |
