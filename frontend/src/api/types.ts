@@ -63,9 +63,24 @@ export interface DetectedVersion {
   source: string
 }
 
+/** Where a packwright.toml set a setting: its key, line and the line's text. */
+export interface FileKeyRef {
+  key: string
+  line: number | null
+  text: string
+}
+
+/** A source's packwright.toml as New build sees it: the settings it sets, or what is wrong with it. */
+export interface PackwrightTomlPreview {
+  values: Partial<Record<keyof BuildConfig, unknown>>
+  keys: Partial<Record<keyof BuildConfig, FileKeyRef>>
+  errors: string[]
+}
+
 export interface RepoDiagnosis {
   checks: RepoDiagnosisCheck[]
   version?: DetectedVersion | null
+  packwright_toml?: PackwrightTomlPreview | null
 }
 
 /** What scanning a Git repository at a ref returns. */
@@ -76,6 +91,7 @@ export interface GitScanTree {
   /** The same fingerprints a local path gets from diagnoseRepo. */
   checks?: RepoDiagnosisCheck[]
   version?: DetectedVersion | null
+  packwright_toml?: PackwrightTomlPreview | null
 }
 
 // ===== Projects =====
@@ -105,9 +121,29 @@ export interface ProjectSummary {
   can_edit: boolean
 }
 
+/** A setting a build took from packwright.toml. */
+export interface FileKey extends FileKeyRef {
+  value: unknown
+  /** The value the file replaced, and where it came from, when they differed. */
+  replaced?: { origin: SettingOrigin; value: unknown } | null
+}
+
+export type SettingOrigin = 'file' | 'override' | 'project' | 'detected'
+
+/** What a build was made with and where each value came from. */
+export interface EffectiveSettings {
+  /** null until the build's Config stage has read its source. */
+  config: BuildConfig | null
+  origins: Partial<Record<keyof BuildConfig, SettingOrigin>>
+  /** null when the source had no packwright.toml. */
+  file: { path: string; fields: Partial<Record<keyof BuildConfig, FileKey>> } | null
+}
+
 export interface ProjectDetail extends ProjectSummary {
   config: BuildConfig
   history: BuildBrief[]
+  /** What the latest build that read its source took from packwright.toml: read-only here. */
+  from_file?: { task_id: string; commit_sha: string | null; fields: Partial<Record<keyof BuildConfig, FileKey>> } | null
 }
 
 /** An earlier build of the version about to be built. */
@@ -294,6 +330,8 @@ export type BuildTrigger = 'console' | 'api' | 'push' | 'tag' | 'schedule'
 export interface TaskCreate {
   project_name: string
   config: BuildConfig
+  /** Settings filled in by detection and left as found (recorded as their origin). */
+  detected_fields?: string[]
 }
 
 export interface TaskResponse {
@@ -314,6 +352,7 @@ export interface TaskResponse {
   /** The exact commit a Git build checked out (null until cloned, and for Local sources). */
   commit_sha?: string | null
   trigger?: BuildTrigger
+  effective?: EffectiveSettings | null
 }
 
 export interface HistoryItem {
@@ -330,6 +369,7 @@ export interface HistoryItem {
   project_id?: number | null
   commit_sha?: string | null
   trigger?: BuildTrigger
+  effective?: EffectiveSettings | null
 }
 
 export interface DetectedFrontendConfig {
@@ -371,7 +411,7 @@ export interface ProjectAnalysis {
 }
 
 export interface WebSocketMessage {
-  type: 'log' | 'status' | 'progress' | 'status_msg' | 'stage' | 'result' | 'commit_sha' | 'error' | 'pong'
+  type: 'log' | 'status' | 'progress' | 'status_msg' | 'stage' | 'result' | 'commit_sha' | 'effective' | 'error' | 'pong'
   task_id: string
   // Shape depends on `type`; consumers narrow + cast per case.
   data: unknown

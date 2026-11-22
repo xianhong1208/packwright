@@ -7,6 +7,7 @@ import { taskApi } from '../api/client'
 import BuildResultPanel from '../components/build/BuildResultPanel'
 import FailureReport from '../components/build/FailureReport'
 import CommitChip from '../components/build/CommitChip'
+import SettingOrigins from '../components/build/SettingOrigins'
 import { triggerLabel } from '../utils/buildOrigin'
 import type {} from '../api/types'
 import { triggerUrlDownload } from '../utils/download'
@@ -61,7 +62,7 @@ export default function HistoryDetail() {
           <p>
             This removes the task's workspace on the server{workspaceDir ? <> (<code>{workspaceDir}/{record.task_id}</code>)</> : ''} — the cloned source and its <code>.venv</code>.
           </p>
-          {record.status === 'completed' && !record.config?.docker_enabled && (
+          {record.status === 'completed' && !(record.effective?.config ?? record.config)?.docker_enabled && (
             <p className="text-orange-400">
               This is a non-Docker completed run — once deleted, its output <b>can no longer be
               downloaded</b>.
@@ -113,7 +114,9 @@ export default function HistoryDetail() {
   }
 
   const status = STATUS_META[record.status]
-  const config = record.config
+  // What was built (packwright.toml's values included) is shown; a rebuild starts
+  // from what was submitted, so the file is read again from the new source.
+  const config = record.effective?.config ?? record.config
   const projectType = config ? PROJECT_TYPE_META[config.project_type] : null
 
   const formatDuration = (start: string, end: string | null): string => {
@@ -164,7 +167,7 @@ export default function HistoryDetail() {
             >
               {record.project_id ? <Link to={`/projects/${record.project_id}`} className="hover:underline">{record.project_name}</Link> : record.project_name}
             </h1>
-            {record.config?.version && <span className="version-chip">{record.config.version}</span>}
+            {config?.version && <span className="version-chip">{config.version}</span>}
             <span
               className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-medium"
               style={{ backgroundColor: status.bgColor, color: status.color }}
@@ -269,10 +272,10 @@ export default function HistoryDetail() {
           logs={logs}
           logHint="the full log below"
           onApplyFix={
-            config
+            record.config
               ? (overrides) =>
                   navigate('/create', {
-                    state: { rebuild: true, projectName: record.project_name, config: { ...config, ...overrides } },
+                    state: { rebuild: true, projectName: record.project_name, config: { ...record.config, ...overrides } },
                   })
               : undefined
           }
@@ -287,6 +290,9 @@ export default function HistoryDetail() {
           <LogViewer logs={logs} title="Build log" height={360} />
         </div>
       )}
+
+      {/* Every setting and where it came from: packwright.toml, this build, the project, detection. */}
+      {record.config && <SettingOrigins effective={record.effective} config={record.config} />}
 
       {/* Run details + build configuration (secondary panel) */}
       <div className="glass-card p-5">

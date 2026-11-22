@@ -29,6 +29,7 @@ import {
   DeviceTabletIcon as DeviceTablet,
   DiscordLogoIcon as DiscordLogo,
   DownloadSimpleIcon as DownloadSimple,
+  FileTextIcon as FileText,
   FileZipIcon as FileZip,
   FloppyDiskIcon as FloppyDisk,
   FolderIcon as Folder,
@@ -122,6 +123,7 @@ export const DeviceMobileIcon = wrap(DeviceMobile, 'DeviceMobileIcon')
 export const DeviceTabletIcon = wrap(DeviceTablet, 'DeviceTabletIcon')
 export const DiscordLogoIcon = wrap(DiscordLogo, 'DiscordLogoIcon')
 export const DownloadSimpleIcon = wrap(DownloadSimple, 'DownloadSimpleIcon')
+export const FileTextIcon = wrap(FileText, 'FileTextIcon')
 export const FileZipIcon = wrap(FileZip, 'FileZipIcon')
 export const FloppyDiskIcon = wrap(FloppyDisk, 'FloppyDiskIcon')
 export const FolderIcon = wrap(Folder, 'FolderIcon')

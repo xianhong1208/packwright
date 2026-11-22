@@ -713,6 +713,14 @@ async def _prepare_git_workspace(task_id: str, config: BuildConfig, commit: str 
         )
     await task_manager.append_log(task_id, f"Clone completed: {target}")
 
+    # packwright.toml, read from the commit just checked out. Before the venv
+    # bootstrap: the file may name the Python version and dependency groups.
+    try:
+        config = await _config_stage(task_id, config, target)
+    except Exception:
+        await _drop_workspace(task_id, "a packwright.toml that cannot be used")
+        raise
+
     # Auto venv bootstrap — installs Python dependencies so nuitka_worker
     # finds a usable .venv. Failures here abort the task AND delete the
     # partial clone. Rationale: the full uv stderr is already in the task
@@ -723,25 +731,90 @@ async def _prepare_git_workspace(task_id: str, config: BuildConfig, commit: str 
         await _prepare_venv(task_id, target, config)
     except Exception as e:
         await task_manager.append_log(task_id, f"Venv bootstrap failed: {e!s}")
-        try:
-            from app.services import workspace_cleanup
-            await asyncio.to_thread(workspace_cleanup.delete_one_workspace, task_id)
-            await task_manager.append_log(
-                task_id,
-                "Partial workspace removed (bootstrap failures leave nothing "
-                "useful to inspect — full error is above in this log).",
-            )
-        except Exception as cleanup_err:
-            # Don't let cleanup errors mask the original failure.
-            await task_manager.append_log(
-                task_id,
-                f"Cleanup after bootstrap failure also failed (ignored): {cleanup_err!s}",
-            )
+        await _drop_workspace(task_id, "bootstrap failures")
         raise
 
     # Return a derived config — workers from here on see project_path
     # pointing at the fresh clone, and need no changes of their own.
     return config.model_copy(update={"project_path": str(target)})
+
+
+async def _drop_workspace(task_id: str, why: str) -> None:
+    """Delete a Git build's clone after it failed before building."""
+    try:
+        from app.services import workspace_cleanup
+        await asyncio.to_thread(workspace_cleanup.delete_one_workspace, task_id)
+        await task_manager.append_log(
+            task_id,
+            f"Partial workspace removed ({why} leave nothing useful to inspect — the full error is in this log).",
+        )
+    except Exception as cleanup_err:
+        # Don't let cleanup errors mask the original failure.
+        await task_manager.append_log(task_id, f"Cleanup after the failure also failed (ignored): {cleanup_err!s}")
+
+
+async def _config_stage(task_id: str, config: BuildConfig, root: Path) -> BuildConfig:
+    """The Config stage: read packwright.toml at the root of the source, put its
+    values over the build's settings, and record what the build is made with and
+    where each value came from (app/services/packwright_toml).
+
+    Raises packwright_toml.ConfigFileError when the file cannot be used: the
+    build then fails here, before anything heavy runs.
+    """
+    from app.services import packwright_toml as pt
+
+    await task_manager.set_stage(task_id, "config")
+    await task_manager.update_task(task_id, "status_msg", f"Reading {pt.FILE_NAME}...")
+    settings = await asyncio.to_thread(pt.read, root)
+    if settings is None:
+        effective = config
+        await task_manager.append_log(task_id, f"No {pt.FILE_NAME} in the source: the project's settings are used")
+    else:
+        effective = await asyncio.to_thread(pt.apply, config, settings, root)
+        submitted = config.model_dump(mode="json")
+        built = effective.model_dump(mode="json")
+        await task_manager.append_log(
+            task_id, f"{pt.FILE_NAME}: {len(settings.keys)} setting(s) from the file, which win over the project's"
+        )
+        origins = task_manager.origins_of(task_id) or {}
+        for name, where in settings.keys.items():
+            line = f"  {where['key']} = {built.get(name)!r} (line {where['line']})"
+            if submitted.get(name) != built.get(name):
+                before = "this build's" if origins.get(name) == "override" else "the project's"
+                line += f", instead of {before} {submitted.get(name)!r}"
+            await task_manager.append_log(task_id, line)
+    await task_manager.set_effective(task_id, pt.record(task_manager.origins_of(task_id), config, effective, settings))
+    return effective
+
+
+async def _fail_config(task_id: str, error) -> None:
+    """Fail a build whose packwright.toml cannot be used, saying where and why."""
+    from app.database import async_session
+    from app.services import packwright_toml as pt
+
+    lines = [str(i) for i in error.issues]
+    for line in lines:
+        await task_manager.append_log(task_id, f"✗ {line}")
+    first = error.issues[0]
+    where = f" (line {first.line})" if first.line else ""
+    report = {
+        "failed_stage": "config",
+        "diagnosis": [{
+            "problem": f"The repository's {pt.FILE_NAME} cannot be used{where}",
+            "suggestion": (
+                f"Fix {'these lines' if len(lines) > 1 else 'this'} in {pt.FILE_NAME} in the repository and build "
+                "again. Its keys mirror the project settings; secrets, Git credentials, notifications, webhooks and "
+                "schedules stay in Packwright."
+            ),
+            "evidence": "\n".join(lines),
+        }],
+        "error_lines": lines,
+    }
+    async with async_session() as db:
+        await task_manager.update_task(task_id, "status", TaskStatus.FAILED, db)
+        await task_manager.update_task(task_id, "status_msg", f"{pt.FILE_NAME}: {first}")
+        await task_manager.merge_result(task_id, report, db)
+    notifications.notify_build_soon(task_id)
 
 
 async def start_build_task(task_id: str, config: BuildConfig, commit: str | None = None) -> None:
@@ -794,10 +867,15 @@ async def _run_in_slot(
 
         await task_manager.append_log(task_id, "Build slot acquired!")
 
+        from app.services.packwright_toml import ConfigFileError
+
         effective_config = config
         if config.source_type == SourceType.GIT:
             try:
                 effective_config = await _prepare_git_workspace(task_id, config, commit)
+            except ConfigFileError as e:
+                await _fail_config(task_id, e)
+                return
             except Exception as e:
                 async with async_session() as db:
                     await task_manager.update_task(task_id, "status", TaskStatus.FAILED, db)
@@ -813,6 +891,13 @@ async def _run_in_slot(
                 await task_manager.append_log(
                     task_id, "Task was cancelled during clone/bootstrap — build skipped"
                 )
+                return
+
+        else:
+            try:
+                effective_config = await _config_stage(task_id, config, Path(config.project_path))
+            except ConfigFileError as e:
+                await _fail_config(task_id, e)
                 return
 
         started = time.monotonic()

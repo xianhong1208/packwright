@@ -44,6 +44,14 @@ async def _free_name(db: AsyncSession, name: str) -> str:
     return f"{name} ({n})"
 
 
+async def find_project(db: AsyncSession, name: str, config: BuildConfig) -> Project | None:
+    """The project with this name and source, if there is one."""
+    source = source_of(config)
+    return (
+        await db.execute(select(Project).where(Project.name == name, Project.source == source))
+    ).scalar_one_or_none()
+
+
 async def file_build(db: AsyncSession, name: str, config: BuildConfig, user: str) -> Project:
     """The project a build without a project id belongs to.
 
@@ -52,9 +60,7 @@ async def file_build(db: AsyncSession, name: str, config: BuildConfig, user: str
     one is numbered ("shop (2)") rather than mixing two codebases' builds.
     """
     source = source_of(config)
-    found = (
-        await db.execute(select(Project).where(Project.name == name, Project.source == source))
-    ).scalar_one_or_none()
+    found = await find_project(db, name, config)
     if found:
         return found
     project = Project(

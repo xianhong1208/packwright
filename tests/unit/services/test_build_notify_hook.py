@@ -30,6 +30,8 @@ def dispatcher(mocker):
     mocker.patch("app.database.async_session", session)
     mocker.patch.object(build_dispatcher, "dispatch_build", mocker.AsyncMock())
     mocker.patch.object(build_dispatcher, "_record_duration", mocker.AsyncMock())
+    # The Config stage (packwright.toml) has its own tests (test_packwright_toml).
+    mocker.patch.object(build_dispatcher, "_config_stage", mocker.AsyncMock(side_effect=lambda tid, cfg, root: cfg))
     mocker.patch.object(build_dispatcher, "_post_build_cleanup", mocker.AsyncMock())
     return mocker.patch.object(build_dispatcher.notifications, "notify_build_soon")
 

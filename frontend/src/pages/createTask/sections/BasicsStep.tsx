@@ -1,4 +1,5 @@
-import { Form, Input, Select, Row, Col, Spin, AutoComplete, Radio } from 'antd'
+import { Input, Select, Row, Col, Spin, AutoComplete, Radio } from 'antd'
+import { SettingItem } from '../fileFields'
 import { CodeIcon, FolderIcon, GitBranchIcon, GlobeIcon, LinkIcon, ScanIcon, SquaresFourIcon, TagIcon } from '../../../components/ui/icons'
 
 import { useCreateTask } from '../context'
@@ -30,17 +31,17 @@ export default function BasicsStep() {
       <div className="glass-card p-6 mb-4">
       <h3 className="text-base font-semibold mb-4" style={{ color: 'var(--ink)' }}>What do you want to build?</h3>
 
-      <Form.Item
+      <SettingItem
         name="project_name"
         label={<span style={{ color: 'var(--ink-muted)' }}>Project name</span>}
         rules={[{ required: true, message: 'Give the project a name' }]}
       >
         <Input placeholder="my-project" className="input-field" size="large" />
-      </Form.Item>
+      </SettingItem>
 
       {/* A version belongs to a build, not to a project's defaults. */}
       {purpose !== 'settings' && (
-        <Form.Item
+        <SettingItem
           name="version"
           label={<span style={{ color: 'var(--ink-muted)' }}>Version</span>}
           tooltip="Which version of the project this build is. It names the download, tags the Docker image and is written into a VERSION file. Builds with the same name and source are grouped under one project by version."
@@ -48,10 +49,10 @@ export default function BasicsStep() {
           rules={[{ pattern: /^[A-Za-z0-9][A-Za-z0-9._+-]{0,63}$/, message: 'Letters, digits, . - _ + only, e.g. 1.2.0 or v2.0.0-rc.1' }]}
         >
           <Input placeholder="1.2.0" className="input-field" size="large" aria-label="Version" />
-        </Form.Item>
+        </SettingItem>
       )}
 
-      <Form.Item
+      <SettingItem
         name="project_type"
                 extra={<DetectedHint field="project_type" />}
         label={<span style={{ color: 'var(--ink-muted)' }}>Project type</span>}
@@ -68,11 +69,11 @@ export default function BasicsStep() {
             <SquaresFourIcon className="mr-2" />Full stack (frontend + backend)
           </Option>
         </Select>
-      </Form.Item>
+      </SettingItem>
 
       {/* ── Source mode switcher ── */}
       <div ref={sourceModeRef}>
-        <Form.Item
+        <SettingItem
           name="source_type"
           label={<span style={{ color: 'var(--ink-muted)' }}>Source</span>}
           tooltip="Choose Local path to point at a project directory that already exists on the server, or Git URL to have the server clone a branch or tag for you."
@@ -86,12 +87,12 @@ export default function BasicsStep() {
               <LinkIcon /> Git URL
             </Radio.Button>
           </Radio.Group>
-        </Form.Item>
+        </SettingItem>
       </div>
 
       {/* ── Local path mode ── */}
       {sourceType !== 'git' && (
-        <Form.Item
+        <SettingItem
           name="project_path"
           label={<span style={{ color: 'var(--ink-muted)' }}>Project path</span>}
           tooltip="Absolute path to the project on the server. The allowed roots are set by the operator (LOCAL_SOURCE_ROOTS)."
@@ -109,7 +110,7 @@ export default function BasicsStep() {
             className="input-field"
             size="large"
           />
-        </Form.Item>
+        </SettingItem>
       )}
 
       </div>
@@ -119,7 +120,7 @@ export default function BasicsStep() {
         <div className="glass-card p-5 mb-4">
           <SectionHeader icon={<LinkIcon />} title="Git source" />
           <div ref={gitUrlRef}>
-            <Form.Item
+            <SettingItem
               name="git_url"
               label={<span style={{ color: 'var(--ink-muted)' }}>Git URL</span>}
               tooltip="The access token is injected server-side from .env — do not put credentials in the URL."
@@ -138,12 +139,12 @@ export default function BasicsStep() {
                 size="large"
                 suffix={loadingRefs ? <Spin size="small" /> : null}
               />
-            </Form.Item>
+            </SettingItem>
           </div>
 
           <Row gutter={16}>
             <Col xs={24} md={8}>
-              <Form.Item
+              <SettingItem
                 name="git_ref_type"
                 label={<span style={{ color: 'var(--ink-muted)' }}>Ref type</span>}
               >
@@ -160,11 +161,11 @@ export default function BasicsStep() {
                     <TagIcon /> Tag
                   </Radio.Button>
                 </Radio.Group>
-              </Form.Item>
+              </SettingItem>
             </Col>
             <Col xs={24} md={16}>
               <div ref={refSelectRef}>
-                <Form.Item
+                <SettingItem
                   name="git_ref"
                   label={
                     <span style={{ color: 'var(--ink-muted)' }}>
@@ -201,7 +202,7 @@ export default function BasicsStep() {
                     }
                     notFoundContent={loadingRefs ? <Spin size="small" /> : null}
                   />
-                </Form.Item>
+                </SettingItem>
               </div>
             </Col>
           </Row>

@@ -711,7 +711,8 @@ async def create_task(
 
     # File the build under its project: the one asked for, or the project with
     # this name and source (created on its first build).
-    from app.services.projects import file_build
+    from app.services.packwright_toml import base_origins
+    from app.services.projects import file_build, find_project
 
     if request.project_id is not None:
         from app.models.project import Project
@@ -719,14 +720,21 @@ async def create_task(
         project = await db.get(Project, request.project_id)
         if project is None:
             raise HTTPException(status_code=404, detail="Project not found")
+        stored = dict(project.config)
     else:
-        project = await file_build(db, request.project_name, request.config, current_user.username)
+        existing = await find_project(db, request.project_name, request.config)
+        stored = dict(existing.config) if existing is not None else None
+        project = existing or await file_build(db, request.project_name, request.config, current_user.username)
     request.project_id = project.id
     request.project_name = project.name
 
+    # Where each setting came from: this build's own change where it differs from
+    # the project's saved settings; packwright.toml is read when the build starts.
+    origins = base_origins(request.config, stored, detected=request.detected_fields)
+
     # Set here from how the caller signed in, never from the request body.
     trigger = "api" if current_user.via_api_token else "console"
-    task = await task_manager.create_task(request, db, trigger=trigger)
+    task = await task_manager.create_task(request, db, trigger=trigger, origins=origins)
 
     # Start build in background
     background_tasks.add_task(start_build_task, task.id, request.config, request.git_commit)
@@ -1093,6 +1101,7 @@ async def get_history_item(
         project_id=task.project_id,
         commit_sha=task.commit_sha,
         trigger=task.trigger or "console",
+        effective=task.effective_config,
     )
 
 
@@ -1204,7 +1213,12 @@ def _serve_task_output(task) -> Response:
     if task.status != "completed":
         raise HTTPException(status_code=400, detail="Only completed tasks can be downloaded")
 
-    if not task.config:
+    from app.services.packwright_toml import built_config
+
+    # What the build was made with: packwright.toml may have changed the output
+    # directory, the image name or whether it is an image at all.
+    config = built_config(task.effective_config, task.config)
+    if not config:
         raise HTTPException(status_code=400, detail="Task has no config")
 
     from app.services.artifacts import KEPT_OUTPUT_KEY
@@ -1217,13 +1231,13 @@ def _serve_task_output(task) -> Response:
         task_source_root,
     )
 
-    project_path = task_source_root(task.task_id, task.config)
+    project_path = task_source_root(task.task_id, config)
     kept = bool((task.result or {}).get(KEPT_OUTPUT_KEY))
     if kept:
         # A local build's own copy of its output (artifacts.py), not the folder,
         # which by now may hold a later build's files.
         project_path = git_workspace(task.task_id)
-    output_dir_name = task.config.get("output_dir", "dist")
+    output_dir_name = config.get("output_dir", "dist")
     try:
         output_path = safe_join(project_path, output_dir_name)
     except UnsafePathError:
@@ -1238,18 +1252,18 @@ def _serve_task_output(task) -> Response:
     # Content-Length (exact size → clean completion), supports HTTP Range (so an
     # interrupted download can RESUME instead of restarting), and uses sendfile
     # for speed.
-    if task.config.get("docker_enabled"):
+    if config.get("docker_enabled"):
         image_file = docker_export_path(task.task_id)
-        if not image_file.exists() and task.config.get("docker_image_name"):
+        if not image_file.exists() and config.get("docker_image_name"):
             # Exports made before files were keyed by task were named after the
             # image. Only an explicit image name is trusted for the fallback.
-            image_file = legacy_docker_export_path(task.config["docker_image_name"])
+            image_file = legacy_docker_export_path(config["docker_image_name"])
 
         if not image_file.exists():
             raise HTTPException(status_code=404, detail="Docker image export not found")
 
         # Use docker_image_name for download filename, fallback to project name
-        dl_name = _download_name(task.config.get("docker_image_name", "") or task.project_name, task.version)
+        dl_name = _download_name(config.get("docker_image_name", "") or task.project_name, task.version)
         return FileResponse(
             path=image_file,
             media_type="application/gzip",
@@ -1278,7 +1292,7 @@ def _serve_task_output(task) -> Response:
     # chunks to the event loop through a small bounded queue (natural backpressure
     # — the worker parks when the queue is full, so we never buffer the whole
     # archive in RAM).
-    dl_name = _download_name(task.config.get("output_name", "") or task.project_name, task.version)
+    dl_name = _download_name(config.get("output_name", "") or task.project_name, task.version)
     src_dir = str(output_path)
     arcname = output_dir_name
 

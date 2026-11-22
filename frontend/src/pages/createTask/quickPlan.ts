@@ -41,3 +41,16 @@ export function outputSentence(o: { backend: boolean; packMode?: string; onefile
   const verify = o.verify === false ? '' : ' It is run once to check it starts.'
   return `${what}${verify}${docker}`
 }
+
+/**
+ * The settings to report as filled in by detection: those it filled that nobody
+ * changed afterwards and that packwright.toml does not set (the file's own values
+ * are recorded as the file's when the build reads it).
+ */
+export function detectedFields(
+  filled: Iterable<string>,
+  touched: (name: string) => boolean,
+  fileValues: Record<string, unknown>,
+): string[] {
+  return [...filled].filter((name) => !touched(name) && !(name in fileValues)).sort()
+}

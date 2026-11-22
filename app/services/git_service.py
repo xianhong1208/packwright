@@ -792,8 +792,27 @@ async def scan_tree(
             except (asyncio.TimeoutError, FileNotFoundError, OSError):
                 pass
 
+        # packwright.toml at that commit: New build fills in only what it leaves out.
+        from app.services import packwright_toml
+
+        toml_text: str | None = None
+        try:
+            proc6 = await _spawn(
+                "git", "show", f"HEAD:{packwright_toml.FILE_NAME}",
+                stdout=asyncio.subprocess.PIPE,
+                stderr=asyncio.subprocess.PIPE,
+                env=_git_env(url, token, provider),
+                cwd=str(target),
+            )
+            toml_bytes, _ = await asyncio.wait_for(proc6.communicate(), timeout=timeout)
+            if proc6.returncode == 0:
+                toml_text = toml_bytes[: packwright_toml.MAX_BYTES + 1].decode("utf-8", "replace")
+        except (asyncio.TimeoutError, FileNotFoundError, OSError):
+            pass
+
         return {
             "directories": sorted(names),
+            "packwright_toml": packwright_toml.preview(toml_text),
             "analysis": analysis,
             "dependency_groups": dependency_groups,
             "version": version,
@@ -1115,7 +1134,9 @@ def diagnose_repo(path: Path) -> dict:
     if not path.exists() or not path.is_dir():
         return {"checks": []}
     checks = check_repo_paths(lambda rel: (path / rel).exists())
-    return {"checks": checks, "version": _local_version(path, checks)}
+    from app.services.packwright_toml import preview_dir
+
+    return {"checks": checks, "version": _local_version(path, checks), "packwright_toml": preview_dir(path)}
 
 
 def _local_version(path: Path, checks: list[dict]) -> dict | None:

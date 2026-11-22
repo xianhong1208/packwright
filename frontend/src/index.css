@@ -891,6 +891,40 @@ h1, h2, h3, h4, h5 { font-family: var(--font-display); letter-spacing: -0.015em;
   margin-top: 8px; padding: 14px 0;
   border-top: 1px solid var(--seam); background: var(--color-void-950);
 }
+/* packwright.toml: settings from the repository (pages/createTask/fileFields, components/build/SettingOrigins). */
+.from-file-banner {
+  margin: 0 0 16px; padding: 12px 14px; border-radius: 10px;
+  border: 1px solid color-mix(in srgb, var(--color-cyber-500) 35%, transparent);
+  background: color-mix(in srgb, var(--color-cyber-500) 8%, transparent);
+}
+.from-file-banner code, .origin-list code { font-family: var(--font-mono); font-size: 12px; overflow-wrap: anywhere; }
+.from-file-banner a { color: var(--color-cyber-400); }
+.from-file-tag.ant-tag {
+  margin: 0; display: inline-flex; align-items: center; gap: 4px; font-size: 12px;
+  color: var(--color-cyber-400); border-color: color-mix(in srgb, var(--color-cyber-500) 45%, transparent);
+  background: color-mix(in srgb, var(--color-cyber-500) 10%, transparent);
+}
+.origin-groups { display: grid; gap: 16px; }
+.origin-group h4 { margin: 0 0 6px; font-size: 13px; font-weight: 600; color: var(--ink-muted); }
+.origin-list { list-style: none; margin: 0; padding: 0; display: grid; }
+.origin-list li {
+  display: grid; grid-template-columns: minmax(120px, 200px) minmax(0, 1fr) auto; gap: 4px 12px; align-items: baseline;
+  padding: 6px 0; border-bottom: 1px solid var(--seam); font-size: 13px;
+}
+.origin-list .origin-label { color: var(--ink-faint); }
+.origin-list .origin-value { color: var(--ink); min-width: 0; overflow-wrap: anywhere; }
+.origin-list .origin-replaced { display: block; font-size: 12px; color: var(--ink-faint); }
+.origin-badge {
+  justify-self: end; white-space: nowrap; font-size: 12px; padding: 1px 8px; border-radius: 999px;
+  border: 1px solid var(--seam); color: var(--ink-muted);
+}
+.origin-badge[data-origin="file"] { color: var(--color-cyber-400); border-color: color-mix(in srgb, var(--color-cyber-500) 45%, transparent); }
+.origin-badge[data-origin="override"] { color: var(--color-matrix-400); border-color: color-mix(in srgb, var(--color-matrix-400) 40%, transparent); }
+.origin-badge[data-origin="detected"] { color: var(--color-signal-400); border-color: color-mix(in srgb, var(--color-signal-400) 40%, transparent); }
+@media (max-width: 640px) {
+  .origin-list li { grid-template-columns: minmax(0, 1fr) auto; }
+  .origin-list .origin-value { grid-column: 1 / -1; grid-row: 2; }
+}
 .command-steps { list-style: none; margin: 0; padding: 0; display: grid; gap: 14px; }
 .command-stage { font-size: 13px; color: var(--ink-muted); margin-bottom: 4px; }
 .command-line {

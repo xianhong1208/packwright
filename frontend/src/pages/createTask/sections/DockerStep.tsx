@@ -1,4 +1,5 @@
-import { Form, Input, Switch, Row, Col, InputNumber, Collapse } from 'antd'
+import { Input, Switch, Row, Col, InputNumber, Collapse } from 'antd'
+import { SettingItem } from '../fileFields'
 import { GearIcon, HardDrivesIcon } from '../../../components/ui/icons'
 import { useCreateTask } from '../context'
 import { SectionHeader } from '../ui'
@@ -24,13 +25,13 @@ export default function DockerStep() {
               : 'Only local files are produced — no Docker image.'}
           </div>
         </div>
-        <Form.Item name="docker_enabled" valuePropName="checked" style={{ marginBottom: 0 }}>
+        <SettingItem name="docker_enabled" valuePropName="checked" style={{ marginBottom: 0 }}>
           <Switch
             checkedChildren="On"
             unCheckedChildren="Off"
             style={{ transform: 'scale(1.3)' }}
           />
-        </Form.Item>
+        </SettingItem>
       </div>
 
       {/* Docker Settings — shown when enabled */}
@@ -39,36 +40,36 @@ export default function DockerStep() {
           <SectionHeader icon={<HardDrivesIcon />} title="Docker settings" />
           <Row gutter={16}>
             <Col xs={24} md={8}>
-              <Form.Item
+              <SettingItem
                 name="docker_image_name"
                 label={<span style={{ color: 'var(--ink-muted)' }}>Image name</span>}
                 tooltip="e.g. myapp:latest. Empty: named after the Git repository or the folder, tagged with the version."
               >
                 <Input placeholder="myapp:latest" className="input-field" />
-              </Form.Item>
+              </SettingItem>
             </Col>
             <Col xs={24} md={8}>
-              <Form.Item
+              <SettingItem
                 name="docker_base_image"
                 label={<span style={{ color: 'var(--ink-muted)' }}>Base image</span>}
               >
                 <Input placeholder="python:3.13-slim" className="input-field" />
-              </Form.Item>
+              </SettingItem>
             </Col>
             <Col xs={24} md={8}>
-              <Form.Item
+              <SettingItem
                 name="docker_expose_port"
                 label={<span style={{ color: 'var(--ink-muted)' }}>Exposed port</span>}
               >
                 <InputNumber min={1} max={65535} style={{ width: '100%' }} placeholder="8000" />
-              </Form.Item>
+              </SettingItem>
             </Col>
           </Row>
 
           {hasBackend && (
             <Row gutter={16}>
               <Col xs={24}>
-                <Form.Item
+                <SettingItem
                   name="docker_volumes"
                   label={<span style={{ color: 'var(--ink-muted)' }}>Volumes</span>}
                   tooltip="Folders the program keeps its state in, comma-separated, relative to /app or absolute. Each becomes a VOLUME owned by the program's user."
@@ -81,7 +82,7 @@ export default function DockerStep() {
                   rules={[{ pattern: /^[A-Za-z0-9._/\-,\s]*$/, message: 'Folder paths only, e.g. data, secrets' }]}
                 >
                   <Input placeholder="Auto — e.g. data, secrets" className="input-field" />
-                </Form.Item>
+                </SettingItem>
               </Col>
             </Row>
           )}
@@ -90,13 +91,13 @@ export default function DockerStep() {
             <>
               <Row gutter={16}>
                 <Col xs={24} md={16}>
-                  <Form.Item
+                  <SettingItem
                     name="docker_api_proxy"
                     label={<span style={{ color: 'var(--ink-muted)' }}>API proxy URL</span>}
                     tooltip="Nginx reverse-proxies /api to this URL."
                   >
                     <Input placeholder="http://backend:8000" className="input-field" />
-                  </Form.Item>
+                  </SettingItem>
                 </Col>
               </Row>
 
@@ -167,7 +168,7 @@ export default function DockerStep() {
               />
               <Row gutter={16}>
                 <Col xs={24} md={8}>
-                  <Form.Item
+                  <SettingItem
                     name="nginx_client_max_body_size"
                     label={<span style={{ color: 'var(--ink-muted)' }}>Max upload size</span>}
                     tooltip="nginx client_max_body_size. 0 = unlimited. e.g. 50m, 1g, 0"
@@ -176,10 +177,10 @@ export default function DockerStep() {
                     rules={[{ pattern: /^\d+[kKmMgG]?$/, message: 'e.g. 50m / 1g / 0' }]}
                   >
                     <Input placeholder="0 (unlimited)" className="input-field" />
-                  </Form.Item>
+                  </SettingItem>
                 </Col>
                 <Col xs={24} md={8}>
-                  <Form.Item
+                  <SettingItem
                     name="nginx_proxy_read_timeout"
                     label={<span style={{ color: 'var(--ink-muted)' }}>Max backend silence</span>}
                     tooltip="nginx proxy_read_timeout / proxy_send_timeout. This is an idle timeout, not a cap on total request length."
@@ -193,10 +194,10 @@ export default function DockerStep() {
                     rules={[{ pattern: /^\d+[smhdSMHD]?$/, message: 'e.g. 300s / 10m' }]}
                   >
                     <Input placeholder="300s" className="input-field" />
-                  </Form.Item>
+                  </SettingItem>
                 </Col>
                 <Col xs={24} md={8}>
-                  <Form.Item
+                  <SettingItem
                     name="nginx_streaming"
                     label={<span style={{ color: 'var(--ink-muted)' }}>Streaming mode</span>}
                     valuePropName="checked"
@@ -209,12 +210,12 @@ export default function DockerStep() {
                     }
                   >
                     <Switch checkedChildren="On" unCheckedChildren="Off" />
-                  </Form.Item>
+                  </SettingItem>
                 </Col>
               </Row>
               <Row gutter={16}>
                 <Col xs={24} md={8}>
-                  <Form.Item
+                  <SettingItem
                     name="nginx_gzip"
                     label={<span style={{ color: 'var(--ink-muted)' }}>gzip compression</span>}
                     valuePropName="checked"
@@ -222,7 +223,7 @@ export default function DockerStep() {
                     extra={<span className="text-xs" style={{ color: 'var(--ink-faint)' }}>Compresses static assets (recommended on).</span>}
                   >
                     <Switch checkedChildren="On" unCheckedChildren="Off" />
-                  </Form.Item>
+                  </SettingItem>
                 </Col>
               </Row>
             </>
@@ -244,18 +245,18 @@ export default function DockerStep() {
                 <>
                   <Row gutter={16}>
                     <Col xs={24} md={8}>
-                      <Form.Item
+                      <SettingItem
                         name="docker_install_node"
                         label={<span style={{ color: 'var(--ink-muted)' }}>Install Node.js</span>}
                         valuePropName="checked"
                         tooltip="Installs Node.js 20.x inside the Docker image."
                       >
                         <Switch checkedChildren="On" unCheckedChildren="Off" />
-                      </Form.Item>
+                      </SettingItem>
                     </Col>
                     {hasBackend && (
                       <Col xs={24} md={16}>
-                        <Form.Item
+                        <SettingItem
                           name="docker_run_as_root"
                           label={<span style={{ color: 'var(--ink-muted)' }}>Run as root</span>}
                           valuePropName="checked"
@@ -267,11 +268,11 @@ export default function DockerStep() {
                           }
                         >
                           <Switch checkedChildren="On" unCheckedChildren="Off" />
-                        </Form.Item>
+                        </SettingItem>
                       </Col>
                     )}
                   </Row>
-                  <Form.Item
+                  <SettingItem
                     name="docker_env_vars"
                     label={<span style={{ color: 'var(--ink-muted)' }}>Runtime Docker ENV</span>}
                     tooltip="One KEY=VALUE per line. Lines starting with # are skipped."
@@ -282,8 +283,8 @@ export default function DockerStep() {
                       className="input-field"
                       style={{ fontFamily: 'var(--font-mono)' }}
                     />
-                  </Form.Item>
-                  <Form.Item
+                  </SettingItem>
+                  <SettingItem
                     name="docker_custom_commands"
                     label={<span style={{ color: 'var(--ink-muted)' }}>Custom commands</span>}
                     tooltip="One command per line. Only apt-get, pip, npm, mkdir, chmod, and similar are allowed."
@@ -294,7 +295,7 @@ export default function DockerStep() {
                       className="input-field"
                       style={{ fontFamily: 'var(--font-mono)' }}
                     />
-                  </Form.Item>
+                  </SettingItem>
                 </>
               ),
             }]}

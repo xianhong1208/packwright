@@ -63,6 +63,12 @@ what comes next.
   branch points at, is skipped while a build of the project is running and, unless turned off, when neither the
   commit nor the settings changed since the last successful build; runs missed while the server was down are not
   made up. Every run is listed with what came of it.
+- **Settings in the repository.** A `packwright.toml` at the root of the source sets build settings by the
+  console's names (`[python] entry`, `[docker] port`, …). The file wins, field by field, over a build's own changes
+  and the project's settings, is read from the exact commit being built, and never holds secrets: unknown keys,
+  wrong types, paths outside the project and anything secret-like fail the build at its first stage, naming the
+  key and line. Every build shows each setting and where it came from, and the project's settings mark what the
+  file sets as read-only. A [JSON Schema](docs/packwright.schema.json) gives editors completion.
 - **Live logs and history.** Every build streams over WebSocket; a finished build keeps the exact
   settings that produced it, so a rebuild does the same thing.
 - **Notifications.** A project can send how its builds end to Discord, Slack or any URL that takes JSON:

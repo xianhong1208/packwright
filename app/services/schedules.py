@@ -13,9 +13,9 @@ expression and the time zone it is read in. When a run is due the scheduler:
    schedule off with the reason when they can no longer build;
 3. skips when a build of the project is queued or running (no overlap);
 4. resolves the ref to a commit with ``git ls-remote``;
-5. skips when "unchanged": the commit and the effective settings
-   (``settings_fingerprint``) equal those of the project's last successful
-   build of the same ref;
+5. skips when "unchanged": the commit and the effective settings, packwright.toml's
+   values included (``settings_fingerprint``, ``_same_settings``), equal those of
+   the project's last successful build of the same ref;
 6. otherwise files the build of exactly that commit, trigger ``schedule``.
 
 Every run leaves a row in ``schedule_runs`` (the newest ``RUNS_KEPT``).
@@ -343,7 +343,7 @@ async def fire(db: AsyncSession, schedule: ProjectSchedule, due: datetime, now: 
 
     if schedule.skip_unchanged:
         last = await last_successful_build(db, project.id, schedule.ref, schedule.ref_type)
-        if last is not None and last.commit_sha == commit and _same_settings(last.config, config):
+        if last is not None and last.commit_sha == commit and _same_settings(last, config):
             return await _record(
                 db, schedule, due, now, "skipped",
                 f"unchanged: commit {commit[:12]} and the settings were built as {last.task_id[:8]}",
@@ -370,12 +370,27 @@ async def fire(db: AsyncSession, schedule: ProjectSchedule, due: datetime, now: 
     return run
 
 
-def _same_settings(stored: dict | None, config: BuildConfig) -> bool:
-    if not stored:
+def _same_settings(last: Task, config: BuildConfig) -> bool:
+    """Would this run build with exactly the settings ``last`` was built with?
+
+    Compared on the *effective* settings, packwright.toml's values included.
+    The run is only compared with a build of the same commit, so the file is the
+    same file: what this run would build is ``config`` with the values ``last``
+    took from it on top. (A changed packwright.toml is a new commit, and a new
+    commit is always built.) A build from before packwright.toml was read is
+    compared on the settings it was filed with, as before.
+    """
+    from app.services.packwright_toml import file_values
+
+    if not last.config:
         return False
     try:
-        return settings_fingerprint(stored) == settings_fingerprint(config)
-    except (ValidationError, ValueError):
+        taken = file_values(last.effective_config)
+        if taken is None:
+            return settings_fingerprint(last.config) == settings_fingerprint(config)
+        candidate = {**config.model_dump(mode="json"), **taken}
+        return settings_fingerprint(last.effective_config["config"]) == settings_fingerprint(candidate)
+    except (ValidationError, ValueError, KeyError, TypeError):
         return False
 
 

@@ -102,4 +102,37 @@ describe('Project settings', () => {
     expect(await screen.findByRole('button', { name: /Save as defaults/ })).toBeDisabled()
     expect(screen.getByText(/Only tony or a project manager/)).toBeInTheDocument()
   })
+
+  it('shows packwright.toml settings read-only, with the line, and never saves them over the project\'s', async () => {
+    api.project.get.mockResolvedValue(project({
+      from_file: {
+        task_id: 'b-1', commit_sha: 'abc123abc123abc123abc123abc123abc123abcd',
+        fields: { entry_point: { key: 'python.entry', line: 4, text: 'entry = "src/app.py"', value: 'src/app.py' } },
+      },
+    }))
+    openSettings()
+
+    expect(await screen.findByRole('note')).toHaveTextContent('1 setting come from packwright.toml')
+    expect(screen.getByRole('note')).toHaveTextContent('python.entry')
+    // The file's value is shown, read-only, tagged, with where to change it.
+    const entry = await screen.findByDisplayValue('src/app.py')
+    expect(entry).toBeDisabled()
+    expect(screen.getByTestId('from-file-python.entry')).toHaveTextContent('from packwright.toml')
+    expect(screen.getByText(/edit it in the repo/)).toBeInTheDocument()
+
+    await act(async () => {
+      fireEvent.click(screen.getByRole('button', { name: /Save as defaults/ }))
+    })
+    await waitFor(() => expect(api.project.update).toHaveBeenCalledTimes(1))
+    // The project's own value is kept: the file's value belongs to the repository.
+    expect(api.project.update.mock.calls[0][1].config.entry_point).toBe('main.py')
+  })
+
+  it('has nothing read-only when the latest build found no packwright.toml', async () => {
+    api.project.get.mockResolvedValue(project({ from_file: null }))
+    openSettings()
+    expect(await screen.findByDisplayValue('main.py')).not.toBeDisabled()
+    expect(screen.queryByRole('note')).toBeNull()
+    expect(screen.queryByText('from packwright.toml')).toBeNull()
+  })
 })

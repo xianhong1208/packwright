@@ -60,6 +60,7 @@ export default function QuickBuild() {
     repoChecks,
     repoError,
     versionSource,
+    sourceToml,
     analysis,
     depGroups,
     loadingDepGroups,
@@ -92,7 +93,8 @@ export default function QuickBuild() {
   const hasSource = sourceType === 'git' ? Boolean(gitUrl?.trim()) : Boolean(projectPath?.trim().startsWith('/'))
   const reading = !repoError && (sourceType === 'git' ? loadingRefs || scanningTree : repoChecks === null)
   const guess = repoChecks ? guessProject(repoChecks) : null
-  const typeKnown = Boolean(guess?.projectType)
+  const fileKeys = Object.values(sourceToml?.keys ?? {}).filter(Boolean)
+  const typeKnown = Boolean(guess?.projectType) || typeof sourceToml?.values.project_type === 'string'
   const python = analysis?.detected_python?.version
 
   // Open the full wizard at the step that holds a setting.
@@ -204,8 +206,8 @@ export default function QuickBuild() {
 
             {!reading && hasBackend && (
               <Finding state={guess?.entryPoint || entryPoint ? 'found' : 'ask'} label="Starts from">
-                {guess?.entryPoint ? (
-                  <code>{entryPoint || guess.entryPoint}</code>
+                {guess?.entryPoint || sourceToml?.values.entry_point ? (
+                  <code>{entryPoint || guess?.entryPoint}</code>
                 ) : (
                   <>
                     <span>No main.py, app/main.py, src/main.py or run.py. Which file starts the program?</span>
@@ -241,6 +243,29 @@ export default function QuickBuild() {
                   <>
                     In {frontendDir === '.' || !frontendDir ? 'the project root' : <code>{frontendDir}/</code>}:{' '}
                     <code>{buildTool || 'npm'} run {buildCommand || 'build'}</code>, output in <code>{frontendOut || 'dist'}</code>.
+                  </>
+                )}
+              </Finding>
+            )}
+
+            {!reading && sourceToml && (
+              <Finding state={sourceToml.errors.length ? 'error' : 'found'} label="packwright.toml">
+                {sourceToml.errors.length ? (
+                  <>
+                    <span>It cannot be used, so the build would stop at its Config stage. Fix it in the repository:</span>
+                    <ul className="m-0 mt-1 pl-4 text-xs">
+                      {sourceToml.errors.map((e) => <li key={e}><code>{e}</code></li>)}
+                    </ul>
+                  </>
+                ) : (
+                  <>
+                    <span>
+                      {fileKeys.length} setting{fileKeys.length === 1 ? '' : 's'} from the repository's file, which win over
+                      anything set here:{' '}
+                    </span>
+                    {fileKeys.map((k, i) => (
+                      <span key={k!.key}>{i > 0 && ', '}<code>{k!.key}</code></span>
+                    ))}
                   </>
                 )}
               </Finding>

@@ -654,6 +654,7 @@ _ERROR_LINE_MARKERS = (
 # Stage names come from task["stage"]; phrase them the way the UI already does.
 _STAGE_HINTS = {
     "queued": "The build ended while it was still queued",
+    "config": "Failed reading packwright.toml — the file in the repository cannot be used",
     "frontend": "Failed while building the frontend — installing its dependencies or running its build command",
     "docker": "Failed while building or exporting the Docker image",
     "preflight": "Failed during preflight — usually a path, the Python version or the dependency environment",

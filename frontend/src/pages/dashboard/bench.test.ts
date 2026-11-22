@@ -67,13 +67,13 @@ describe('outcomeLine', () => {
 
 describe('stageTrack', () => {
   const keys = (t: TaskResponse) => stageTrack(t).map((s) => s.key)
-  it('follows the stages each kind of build goes through', () => {
-    expect(keys(task({}))).toEqual(['preflight', 'compile', 'bundle', 'verify'])
-    expect(keys(task({ config: { project_type: 'frontend_only' } }))).toEqual(['frontend'])
-    expect(keys(task({ config: { project_type: 'fullstack', docker_enabled: true } }))).toEqual(['frontend', 'preflight', 'compile', 'bundle', 'verify', 'docker'])
+  it('follows the stages each kind of build goes through, packwright.toml first', () => {
+    expect(keys(task({}))).toEqual(['config', 'preflight', 'compile', 'bundle', 'verify'])
+    expect(keys(task({ config: { project_type: 'frontend_only' } }))).toEqual(['config', 'frontend'])
+    expect(keys(task({ config: { project_type: 'fullstack', docker_enabled: true } }))).toEqual(['config', 'frontend', 'preflight', 'compile', 'bundle', 'verify', 'docker'])
   })
   it('marks finished, current and coming stages', () => {
-    expect(stageTrack(task({ stage: 'compile' })).map((s) => s.state)).toEqual(['done', 'on', 'todo', 'todo'])
+    expect(stageTrack(task({ stage: 'compile' })).map((s) => s.state)).toEqual(['done', 'done', 'on', 'todo', 'todo'])
     expect(stageTrack(task({ stage: 'queued' })).every((s) => s.state === 'todo')).toBe(true)
   })
 })
