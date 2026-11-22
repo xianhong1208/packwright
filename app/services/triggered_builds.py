@@ -10,6 +10,8 @@ reason, which the console shows.
 
 from __future__ import annotations
 
+import asyncio
+
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.project import Project
@@ -18,6 +20,12 @@ from app.schemas.task import BuildConfig, BuildTrigger, SourceType, TaskCreate, 
 from app.services.permission import PermissionCode, get_user_permissions, has_permission
 from app.services.projects import config_for_build
 from app.services.task_manager import task_manager
+
+# One process (see CLAUDE.md, "single process"): holding this makes "is this
+# project or commit already being built?" and filing the build one step, so two
+# triggers (two deliveries of one push, a delivery and a schedule) cannot both
+# get past the check.
+submit_lock = asyncio.Lock()
 
 
 async def may_build(db: AsyncSession, user_id: int | None) -> tuple[User | None, str | None]:

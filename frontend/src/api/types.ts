@@ -681,3 +681,55 @@ export interface HookDelivery {
   reason: string | null
   task_id: string | null
 }
+
+/** What one run of a schedule came to. */
+export interface ScheduleRun {
+  id: number
+  /** The slot it was for, and when it was handled. */
+  due_at: string
+  ran_at: string
+  result: 'built' | 'skipped' | 'failed'
+  reason: string | null
+  commit_sha: string | null
+  /** The build it started; for a skip, the build it matched or waited on. */
+  task_id: string | null
+}
+
+/** A project's scheduled build. */
+export interface ProjectSchedule {
+  id: number
+  cron: string
+  /** The expression in words, when it can be said. */
+  description: string | null
+  timezone: string
+  ref: string
+  ref_type: 'branch' | 'tag'
+  skip_unchanged: boolean
+  enabled: boolean
+  /** Why Packwright turned it off (its creator may no longer build). */
+  disabled_reason: string | null
+  next_run_at: string | null
+  last_run_at: string | null
+  last_run: ScheduleRun | null
+  /** Builds it starts run as this person. */
+  created_by: string
+  created_at: string
+  can_edit: boolean
+}
+
+export interface ScheduleInput {
+  cron?: string
+  timezone?: string
+  ref?: string
+  ref_type?: 'branch' | 'tag'
+  skip_unchanged?: boolean
+  enabled?: boolean
+  take_over?: boolean
+}
+
+export interface SchedulePreview {
+  cron: string
+  timezone: string
+  description: string | null
+  next_runs: string[]
+}

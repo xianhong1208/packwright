@@ -64,6 +64,13 @@ class AuditAction(str, Enum):
     # Packwright turned a hook off because its creator may no longer build.
     HOOK_DISABLED = "hook_disabled"
 
+    # Scheduled builds
+    SCHEDULE_CREATE = "schedule_create"
+    SCHEDULE_UPDATE = "schedule_update"
+    SCHEDULE_DELETE = "schedule_delete"
+    # Packwright turned a schedule off because its creator may no longer build.
+    SCHEDULE_DISABLED = "schedule_disabled"
+
 
 class AuditStatus(str, Enum):
     """Audit log status values."""
@@ -84,6 +91,7 @@ class ResourceType(str, Enum):
     TASK = "task"
     API_TOKEN = "api_token"
     HOOK = "hook"
+    SCHEDULE = "schedule"
 
 
 async def log_action(

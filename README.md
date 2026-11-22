@@ -58,6 +58,11 @@ what comes next.
   the webhook's patterns, as the person who set it up. Pings, deletions and `[skip ci]` are answered and
   ignored, repeats are built once, and every delivery is listed with what came of it. A generic URL with a
   token starts a build from any other tool.
+- **Scheduled builds.** A project can build a branch or tag on a cron schedule, in its own time zone, as the
+  person who set it up. The console shows the next run times before saving. A run builds the exact commit the
+  branch points at, is skipped while a build of the project is running and, unless turned off, when neither the
+  commit nor the settings changed since the last successful build; runs missed while the server was down are not
+  made up. Every run is listed with what came of it.
 - **Live logs and history.** Every build streams over WebSocket; a finished build keeps the exact
   settings that produced it, so a rebuild does the same thing.
 - **Notifications.** A project can send how its builds end to Discord, Slack or any URL that takes JSON:

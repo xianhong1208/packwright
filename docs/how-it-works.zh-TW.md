@@ -44,6 +44,7 @@
 | `PUBLIC_URL` | *(空)* | 大家開啟 Packwright 用的網址;建置通知會用它附上建置頁面的連結。 |
 | `TRUSTED_PROXY_IPS` | *(空)* | 可信任 `X-Forwarded-For` 的代理 IP;留空最安全。 |
 | `WEBHOOK_PER_MINUTE` / `WEBHOOK_MAX_BODY_BYTES` | `60` / `1048576` | 每個用戶端位址每分鐘可送的 webhook 次數,以及收得下的最大內容(超過回 413)。 |
+| `SCHEDULES_ENABLED` / `SCHEDULE_TIMEZONE` | `true` / *(伺服器的時區)* | 是否執行排程建置;新排程預設的時區。 |
 | `RATE_LIMIT_PER_MINUTE` / `RATE_LIMIT_PER_HOUR` | `300` / `6000` | 每個用戶端位址可以呼叫 API 的次數(同一個 NAT 或代理後面的人共用);登入、註冊與送出建置另有更嚴的上限。 |
 
 ## 儲存與資料

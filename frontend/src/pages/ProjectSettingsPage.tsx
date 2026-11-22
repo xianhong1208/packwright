@@ -17,6 +17,7 @@ import DockerStep from './createTask/sections/DockerStep'
 import CommandPreview from './projects/CommandPreview'
 import Notifications from './projects/Notifications'
 import Webhooks from './projects/Webhooks'
+import Schedules from './projects/Schedules'
 
 /** A project's settings — what new versions are built with — as tabs. */
 export default function ProjectSettingsPage() {
@@ -75,6 +76,14 @@ function Settings({ project }: { project: ProjectDetail }) {
           defaultBranch={project.config.git_ref_type === 'branch' ? project.config.git_ref : ''} />
       ),
     },
+    {
+      key: 'schedules',
+      label: 'Schedules',
+      children: (
+        <Schedules projectId={project.id} canEdit={project.can_edit} fromGit={project.source_type === 'git'}
+          defaultRef={project.config.git_ref} defaultRefType={project.config.git_ref_type} />
+      ),
+    },
   ]
 
   return (
@@ -87,8 +96,8 @@ function Settings({ project }: { project: ProjectDetail }) {
         <Form form={form} layout="vertical" initialValues={initialValues(preset)}>
           {/* Every tab stays mounted so a field on a hidden tab is still validated and saved. */}
           <Tabs activeKey={tab} onChange={setTab} items={items.map((i) => ({ ...i, forceRender: true }))} />
-          {/* Notifications and webhooks save as they change; the defaults bar is for the other tabs. */}
-          <div className="settings-bar" hidden={tab === 'notifications' || tab === 'webhooks'}>
+          {/* Notifications, webhooks and schedules save as they change; the defaults bar is for the other tabs. */}
+          <div className="settings-bar" hidden={tab === 'notifications' || tab === 'webhooks' || tab === 'schedules'}>
             <span className="text-sm" style={{ color: 'var(--ink-faint)' }}>
               {project.can_edit ? 'Saved settings apply to the next build.' : `Only ${project.created_by} or a project manager can change these.`}
             </span>

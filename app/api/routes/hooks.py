@@ -16,7 +16,6 @@ tag, ``[skip ci]``) answers 200 "ignored": GitLab disables a hook after a few
 
 from __future__ import annotations
 
-import asyncio
 import json
 import time
 from datetime import datetime, timedelta, timezone
@@ -43,7 +42,7 @@ from app.services.build_dispatcher import start_build_task
 from app.services.crypto import DecryptionError, decrypt_secret, encrypt_secret
 from app.services.permission import CurrentUser, PermissionCode, get_current_user, require_permission
 from app.services.projects import may_change
-from app.services.triggered_builds import may_build, submit_build
+from app.services.triggered_builds import may_build, submit_build, submit_lock
 
 router = APIRouter(prefix="/api/projects/{project_id}/hooks", tags=["webhooks"])
 receive_router = APIRouter(prefix="/api/hooks", tags=["webhooks"])
@@ -59,10 +58,6 @@ DELIVERIES_KEPT = 50
 # two hooks on one repository). Older than this, pushing the commit again builds.
 RECENT_SUCCESS_WINDOW = timedelta(minutes=10)
 
-# One process (see CLAUDE.md, "single process"): this makes "is this commit
-# already being built?" and filing the build one step, so two deliveries of the
-# same push cannot both build.
-_submit_lock = asyncio.Lock()
 
 
 # ---------- managing ----------
@@ -499,7 +494,7 @@ async def receive(
 
     trigger = "tag" if push.kind == "tag" else "push"
     version = (hooks_version(push.name) or "") if push.kind == "tag" else ""
-    async with _submit_lock:
+    async with submit_lock:
         if push.sha:
             existing = await _already_built(db, project.id, push)
             if existing is not None:

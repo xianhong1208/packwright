@@ -4,6 +4,10 @@ import type {
   HookDelivery,
   HookProvider,
   ProjectHook,
+  ProjectSchedule,
+  ScheduleInput,
+  SchedulePreview,
+  ScheduleRun,
   NotificationKind,
   ProjectNotification,
   BuildStats,
@@ -424,6 +428,19 @@ export const projectApi = {
   },
   hookDeliveries: async (id: number, hookId: number): Promise<HookDelivery[]> =>
     (await api.get<HookDelivery[]>(`/projects/${id}/hooks/${hookId}/deliveries`)).data,
+  schedules: async (id: number): Promise<ProjectSchedule[]> =>
+    (await api.get<ProjectSchedule[]>(`/projects/${id}/schedules`)).data,
+  previewSchedule: async (id: number, body: { cron: string; timezone?: string }): Promise<SchedulePreview> =>
+    (await api.post<SchedulePreview>(`/projects/${id}/schedules/preview`, body)).data,
+  addSchedule: async (id: number, body: ScheduleInput & { cron: string }): Promise<ProjectSchedule> =>
+    (await api.post<ProjectSchedule>(`/projects/${id}/schedules`, body)).data,
+  updateSchedule: async (id: number, scheduleId: number, body: ScheduleInput): Promise<ProjectSchedule> =>
+    (await api.patch<ProjectSchedule>(`/projects/${id}/schedules/${scheduleId}`, body)).data,
+  removeSchedule: async (id: number, scheduleId: number): Promise<void> => {
+    await api.delete(`/projects/${id}/schedules/${scheduleId}`)
+  },
+  scheduleRuns: async (id: number, scheduleId: number): Promise<ScheduleRun[]> =>
+    (await api.get<ScheduleRun[]>(`/projects/${id}/schedules/${scheduleId}/runs`)).data,
   /** Earlier builds of a version, to ask before building it again. */
   sameVersion: async (projectName: string, version: string): Promise<SameVersionBuild[]> =>
     (await api.get<SameVersionBuild[]>('/history/versions', { params: { project_name: projectName, version } })).data,
