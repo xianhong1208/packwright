@@ -16,8 +16,8 @@ follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this proje
   moved on, saying where it points now, instead of building another commit. The Builds list, a build's page and
   notifications show the commit (seven characters, the full id copied on click; notifications give twelve and
   the JSON body the full id). Local sources record no commit.
-- Each build records what started it: `console`, `api`, `push`, `tag` or `schedule` (`console` and `api` exist in
-  this release; webhooks and schedules follow). It is set by the server, never taken from the
+- Each build records what started it: `console`, `api`, `push`, `tag` or `schedule` (`console`, `api`, `push` and `tag` exist in
+  this release; schedules follow). It is set by the server, never taken from the
   request body, and shown in the Builds list, on a build's page, in the CSV export and in notifications
   ("Started by mei (console)"; `trigger` in the JSON body). Migration `b4e8d2f6a9c1` adds `history.commit_sha`
   and `history.trigger`; existing builds become `console` with no commit.
@@ -36,6 +36,32 @@ follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this proje
   `api_token_denied` for a missing scope), as do creating and revoking. Builds started with a token are recorded as
   `api`. Last use is written at most once a minute. Admins (`user:manage`) see everyone's tokens, never the secrets,
   and can revoke them. Migration `c9d4e1f7a2b6` adds the `api_tokens` table.
+
+- Webhooks: build on push or tag (#3). A project's settings get a **Webhooks** tab; its creator and holders of
+  `project:manage` add, change, turn off and delete webhooks, everyone who may build sees them. Each webhook is for
+  GitHub, GitLab, Gitea or any script, posts to `/api/hooks/{github|gitlab|gitea|generic}/{id}` (the id is 128
+  random bits), and has its own secret (256 bits), shown once with the payload URL and short setup steps, stored
+  encrypted like Git credentials, and replaceable (*New secret*; the old one stops at once). GitHub and Gitea
+  deliveries must carry an HMAC-SHA256 of the raw body (`X-Hub-Signature-256: sha256=…`, or Gitea's
+  `X-Gitea-Signature`); GitLab's carry the secret as `X-Gitlab-Token`, or, once the signing token GitLab 19
+  generates is pasted in, a Standard Webhooks signature (`webhook-signature: v1,…` over id, timestamp and body, at
+  most 5 minutes old), which is then required. The generic URL takes the token as `Authorization: Bearer`,
+  `X-Packwright-Token` or `?token=` (the console warns that a query token ends up in logs) and an optional JSON body
+  `{"ref", "ref_type", "commit"}`. Comparisons are constant-time, bodies over `WEBHOOK_MAX_BODY_BYTES` (1 MiB) get
+  413 without being read, and neither secrets nor bodies are logged. A missing, empty or wrong signature, an
+  unknown webhook and the wrong provider in the URL all get the same 401; the reason is in the webhook's deliveries.
+  A push or tag push builds exactly the pushed commit (trigger `push` or `tag`; a tag that is a valid version
+  becomes the build's version) when the branch or tag matches the webhook's glob patterns and the repository in the
+  payload is the project's (https, ssh and `.git` spellings compared normalised). Pings, other events, deletions,
+  `[skip ci]` / `[ci skip]`, other branches and other repositories answer 200 `ignored` with the reason (GitLab
+  turns off a webhook after repeated 4xx). A delivery id seen before (`X-GitHub-Delivery`, `X-Gitea-Delivery`,
+  GitLab's `webhook-id` / `Idempotency-Key`) is not built again, nor is a commit of the same project and ref that is
+  queued, running or passed in the last 10 minutes. A build answers 202 with its id. Builds run as the person who
+  set the webhook up, checked again each time: if that account is deactivated, gone or without `task:create`, the
+  webhook turns itself off with the reason shown in the console (audited as `hook_disabled`), and someone allowed
+  to change it can take it over. The newest 50 deliveries of each webhook are listed with time, event, ref, commit
+  and result. Webhook deliveries have their own rate limit, `WEBHOOK_PER_MINUTE` (60 per address). Creating,
+  changing, rotating and deleting are audited. Migration `d4f7a9c2e8b1` adds `project_hooks` and `hook_deliveries`.
 
 ### Fixed
 - A build of a project without a `.venv` is diagnosed as such (#21). A module missing at run time was explained

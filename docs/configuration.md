@@ -152,6 +152,8 @@ identified and how much they may do.
 | `BUILD_SUBMIT_PER_MINUTE` | `20` | Per-client cap on build submissions per minute: `POST /api/tasks` and a project's *Build a new version* (`POST /api/projects/{id}/builds`) together. `MAX_CONCURRENT_BUILDS` limits how many builds run at once; this limits how fast the queue can grow. |
 | `RATE_LIMIT_PER_MINUTE` | `300` | API requests a client address may make per minute outside the endpoints above. A page of the console makes one to five (Roles one per role), and everyone behind one NAT or proxy address shares the allowance, so keep it well above a person's browsing. When the console's session check is refused, it waits and asks again instead of signing the person out. |
 | `RATE_LIMIT_PER_HOUR` | `6000` | The same, per hour. |
+| `WEBHOOK_PER_MINUTE` | `60` | Webhook deliveries (`/api/hooks/…`) a client address may send per minute. They have their own budget, apart from the two above: they are unauthenticated until their signature is checked. A forge sends one delivery per push. |
+| `WEBHOOK_MAX_BODY_BYTES` | `1048576` | The largest webhook body read; a bigger one is refused with 413 before it is read. A push payload is usually a few kilobytes (GitHub lists at most 20 commits). |
 
 ## Git source mode
 

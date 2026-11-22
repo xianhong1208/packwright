@@ -43,6 +43,7 @@ Everything is environment-driven, and nothing is required. `.env.example` lists 
 | `MAX_CONCURRENT_BUILDS` | `3` | Simultaneous builds; the rest wait in the queue. |
 | `PUBLIC_URL` | *(empty)* | The address people open Packwright at; build notifications link to the build with it. |
 | `TRUSTED_PROXY_IPS` | *(empty)* | Proxy IPs whose `X-Forwarded-For` may be trusted; empty is safest. |
+| `WEBHOOK_PER_MINUTE` / `WEBHOOK_MAX_BODY_BYTES` | `60` / `1048576` | Webhook deliveries one client address may send per minute, and the largest body accepted (413 above it). |
 | `RATE_LIMIT_PER_MINUTE` / `RATE_LIMIT_PER_HOUR` | `300` / `6000` | API requests one client address may make (everyone behind one NAT or proxy shares it); sign-in, registration and build submission have their own, stricter limits. |
 
 ## Storage & data

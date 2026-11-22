@@ -285,6 +285,46 @@ schedule)、Git 建置的 commit、花了多久;JSON 內容另有 `trigger` 與�
 - 加好之後按 **Send test** 確認訊息送得到;每個對象會顯示最後一次送出的結果,送不出去時會寫原因。
 - 通知在建置結束後才送,不佔建置名額;對方沒回應時會再試一次,不影響建置本身。
 
+### Webhook(push 或 tag 時自動建置)
+
+專案設定的 **Webhooks** 分頁(只限從 Git URL 建置的專案)。push 到 repo 時,Packwright 會建置**被推上來的那一個
+commit**;建置紀錄的觸發方式是 `push`(分支)或 `tag`(tag push,tag 若是合法版本字串也會當成這次的版本)。
+
+1. 選來源:GitHub、GitLab、Gitea(Forgejo 相同)或 **Any script**(通用網址)。
+2. 填要建置的**分支樣式**與 **tag 樣式**(一行一個,`*` 可跨 `/`,例如 `release/*`;留空 = 那一類都不建置)。
+   分支預設帶入專案的分支,tag 預設 `v*`。
+3. 按 **Add webhook**:視窗會顯示 Payload URL 與密鑰(通用網址叫 token),**只顯示這一次**,照視窗裡的步驟貼到 GitHub /
+   GitLab / Gitea:
+   - GitHub:Settings → Webhooks → Add webhook,Content type 選 `application/json`,Secret 貼密鑰,事件選
+     「Just the push event」(分支與 tag 都包含)。
+   - GitLab:Settings → Webhooks,Secret token 貼密鑰,勾 Push events 與 Tag push events。GitLab 19 起可以按
+     **Generate signing token**,再把它(`whsec_…`)貼回 Packwright 的 **Signing token**;設定之後每次送達都必須有簽章,
+     只有 secret token 的請求會被拒絕。
+   - Gitea:Settings → Webhooks → Add webhook → Gitea,POST content type 選 `application/json`,Secret 貼密鑰,
+     Trigger on 選 Push events。
+   - 通用網址:`POST`,token 放 `Authorization: Bearer <token>` 或 `X-Packwright-Token`;內容可省略(建置專案設定的分支),
+     或 `{"ref": "main"}`、`{"ref": "refs/tags/v1.2.0", "commit": "<完整 commit id>"}`。只能呼叫網址的工具可以用
+     `?token=`,但 token 會留在代理與伺服器的 log 裡。
+
+送達時的處理:
+
+- 驗證失敗(簽章或 token 錯、缺少或空白、webhook 不存在、網址的來源不對)一律回 **401**,原因只記在 deliveries 裡。
+  內容超過 `WEBHOOK_MAX_BODY_BYTES`(預設 1 MiB)回 413。比對一律 constant-time,密鑰與內容都不寫進 log。
+- 真的來自 forge 但不需要建置的:ping、其他事件、刪除分支或 tag、commit 訊息有 `[skip ci]` / `[ci skip]`、不符合樣式的
+  分支或 tag、payload 裡的 repo 不是這個專案的(https / ssh / `.git` 寫法視為同一個)——回 **200 `ignored`** 並附原因。
+  GitLab 收到連續的 4xx 會把 webhook 停用,所以這些都不回 4xx。
+- 重複送達不會重複建置:同一個 delivery id(`X-GitHub-Delivery`、`X-Gitea-Delivery`、GitLab 的 `webhook-id` /
+  `Idempotency-Key`)只處理一次;同一專案、同一分支或 tag、同一個 commit 正在排隊、建置中,或 10 分鐘內剛建置成功,也不再建置。
+- 要建置時回 **202** 與建置 id。
+- 建置以**設定 webhook 的人**的身分執行,每次都重新檢查:帳號被停用、被刪除,或已沒有 `task:create` 時,webhook 會自動關閉,
+  分頁上顯示原因(稽核紀錄 `hook_disabled`),送達回 200「hook disabled」。可以改 webhook 的人按
+  **Take it over and turn it on** 接手,之後就以接手的人身分建置。
+- 每個 webhook 的 **Deliveries** 列出最近 50 次送達:時間、事件、ref、commit、結果(Built 連到那次建置 / Ignored 原因 /
+  Rejected 原因)。
+- **New secret** 產生新密鑰(只顯示一次),舊的立刻失效。關閉開關可暫停;**Delete** 之後送到這個網址的請求一律 401。
+- 誰能改:專案建立者或有 `project:manage` 的人;有建置權限的人都看得到清單(看不到密鑰)。API token 不能管理 webhook。
+- webhook 端點有自己的頻率限制 `WEBHOOK_PER_MINUTE`(每個位址每分鐘 60 次),與一般 API 及送出建置的限制分開。
+
 ## New build
 
 左側工具列或頂端的 **New build**。
@@ -777,6 +817,21 @@ gunzip -c packwright-<時間>.sql.gz | psql -h HOST -U USER -d DBNAME    # Postg
 | GET | `/api/tokens` | 登入 | 自己的 token(不含 token 本身);`?everyone=true` 列出所有人的,需要 `user:manage` |
 | POST | `/api/tokens` | 登入 | 建立:`{"name", "scopes", "expires_in_days"}`,回應裡的 `token` 只出現這一次 |
 | DELETE | `/api/tokens/{id}` | 擁有者或 `user:manage` | 撤銷(重複撤銷沒有影響;別人的 token 回 404) |
+
+### Webhook
+
+管理端點只接受管理台的登入(API token 一律 403);接收端點不需要登入,靠 webhook 的密鑰驗證。
+
+| 方法 | 路徑 | 權限 | 說明 |
+|---|---|---|---|
+| GET | `/api/projects/{id}/hooks` | `task:create` | 專案的 webhook(不含密鑰) |
+| POST | `/api/projects/{id}/hooks` | 建立者或 `project:manage` | 新增:`{"provider", "branches", "tags"}`,回應裡的 `secret` 只出現這一次 |
+| PATCH | `/api/projects/{id}/hooks/{hid}` | 建立者或 `project:manage` | 改樣式或開關:`{"branches", "tags", "enabled", "take_over"}` |
+| POST | `/api/projects/{id}/hooks/{hid}/rotate` | 建立者或 `project:manage` | 換新密鑰(只出現這一次) |
+| PUT | `/api/projects/{id}/hooks/{hid}/signing-key` | 建立者或 `project:manage` | GitLab 的 signing token(`null` 移除) |
+| DELETE | `/api/projects/{id}/hooks/{hid}` | 建立者或 `project:manage` | 刪除 |
+| GET | `/api/projects/{id}/hooks/{hid}/deliveries` | `task:create` | 最近 50 次送達 |
+| POST | `/api/hooks/{github,gitlab,gitea,generic}/{webhook id}` | webhook 的密鑰 | 接收送達:202 建置 / 200 ignored / 401 / 413 / 429 |
 
 ### 監控與其他
 
