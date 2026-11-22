@@ -325,6 +325,40 @@ commit**;建置紀錄的觸發方式是 `push`(分支)或 `tag`(tag push,tag 若
 - 誰能改:專案建立者或有 `project:manage` 的人;有建置權限的人都看得到清單(看不到密鑰)。API token 不能管理 webhook。
 - webhook 端點有自己的頻率限制 `WEBHOOK_PER_MINUTE`(每個位址每分鐘 60 次),與一般 API 及送出建置的限制分開。
 
+### 排程建置
+
+專案設定的 **Schedules** 分頁(只限從 Git URL 建置的專案)。排程到了就建置指定的分支或 tag,建置紀錄的觸發方式是
+`schedule`。
+
+1. 按 **Add a schedule**。
+2. **How often**:Hourly(`0 * * * *`)、Nightly(`0 2 * * *`)、Weeknights(`0 2 * * 1-5`)、Weekly(`0 3 * * 1`),
+   或 **Custom** 自己寫 cron:五個欄位依序是分、時、日、月、星期(`@hourly`、`@daily`、`@weekly`、`@monthly`、`@yearly`
+   也可以;不接受第六個「秒」欄位)。
+3. **Time zone**:cron 以這個時區解讀(IANA 名稱,如 `Asia/Taipei`)。預設是 `SCHEDULE_TIMEZONE`,沒設定就用伺服器的時區,
+   再不行就是 UTC。
+4. **What to build**:分支或 tag 與名稱,預設帶入專案的。
+5. **Skip when unchanged**(預設開):commit 與設定都和上次成功的建置一樣就跳過。
+6. 對話框下方會用文字說明這個 cron,並列出接下來 5 次的執行時間(以選的時區顯示);寫錯的 cron 或時區會直接顯示原因,不能儲存。
+
+執行時的處理(每 10 秒檢查一次到期的排程):
+
+- 先以**設定排程的人**的身分檢查:帳號被停用、被刪除,或已沒有 `task:create` 時,排程自動關閉,分頁上顯示原因(稽核紀錄
+  `schedule_disabled`)。可以改排程的人按 **Take it over and turn it on** 接手。專案改成本機路徑時也會關閉。
+- 這個專案有建置在排隊或進行中 → 跳過(`overlap`),不會疊在一起。
+- 用 `git ls-remote` 讀出分支或 tag 當下的 commit,**建置的就是那一個 commit**。
+- 開著 Skip when unchanged 時,和這個專案、同一分支或 tag **最近一次成功**的建置比較:commit 相同,而且「實際設定」相同 →
+  跳過(`unchanged`,附上那次建置)。「實際設定」= 這次建置會帶的完整設定(專案儲存的設定,加上排程的分支或 tag),
+  整份以 JSON 正規化後取 SHA-256 比較;任何一項設定改了(包括版本字串)就會再建置。失敗的建置不算。
+- **錯過的不補跑**:Packwright 停機(或檢查晚了 2 分鐘以上)錯過的時間,只記一筆 `missed`,下一次從「現在」往後算,
+  不會一次補一堆。下一次的時間存在資料庫,重新啟動也記得。
+- 同一個時間只會執行一次:取得執行權是對 `next_run_at` 做條件式更新,就算有兩個排程迴圈同時檢查也一樣(SQLite 與 PostgreSQL 皆然)。
+- 日光節約時間:春天跳過的那一小時裡的時間(例如 02:30,而時鐘從 02:00 直接跳到 03:00)在 03:00 執行一次;秋天重複的那一小時,
+  固定時間只執行一次,`*/30` 這類間隔在兩段都會執行。
+- 每個排程的 **Runs** 列出最近 50 次執行:預定時間、commit、結果(Built 連到建置 / Skipped 與原因 / Failed 與原因)。
+- 關閉開關會暫停(沒有下一次);改了 cron 或時區、重新打開,下一次都從現在算。
+- 誰能改:專案建立者或有 `project:manage` 的人;有建置權限的人都看得到排程與執行紀錄。API token 不能管理排程。
+- `SCHEDULES_ENABLED=false` 會停掉排程器(排程保留,停的期間錯過的不補)。
+
 ## New build
 
 左側工具列或頂端的 **New build**。
@@ -832,6 +866,19 @@ gunzip -c packwright-<時間>.sql.gz | psql -h HOST -U USER -d DBNAME    # Postg
 | DELETE | `/api/projects/{id}/hooks/{hid}` | 建立者或 `project:manage` | 刪除 |
 | GET | `/api/projects/{id}/hooks/{hid}/deliveries` | `task:create` | 最近 50 次送達 |
 | POST | `/api/hooks/{github,gitlab,gitea,generic}/{webhook id}` | webhook 的密鑰 | 接收送達:202 建置 / 200 ignored / 401 / 413 / 429 |
+
+### 排程
+
+只接受管理台的登入(API token 一律 403)。
+
+| 方法 | 路徑 | 權限 | 說明 |
+|---|---|---|---|
+| GET | `/api/projects/{id}/schedules` | `task:create` | 專案的排程,含下一次與最近一次執行 |
+| POST | `/api/projects/{id}/schedules/preview` | `task:create` | `{"cron", "timezone"}` → 文字說明與接下來 5 次時間(錯誤回 422) |
+| POST | `/api/projects/{id}/schedules` | 建立者或 `project:manage` | 新增:`{"cron", "timezone", "ref", "ref_type", "skip_unchanged"}` |
+| PATCH | `/api/projects/{id}/schedules/{sid}` | 建立者或 `project:manage` | 修改或開關:同上欄位,加 `enabled`、`take_over` |
+| DELETE | `/api/projects/{id}/schedules/{sid}` | 建立者或 `project:manage` | 刪除(執行紀錄一起刪,建置保留) |
+| GET | `/api/projects/{id}/schedules/{sid}/runs` | `task:create` | 最近 50 次執行 |
 
 ### 監控與其他
 

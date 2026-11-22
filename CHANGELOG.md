@@ -16,8 +16,7 @@ follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this proje
   moved on, saying where it points now, instead of building another commit. The Builds list, a build's page and
   notifications show the commit (seven characters, the full id copied on click; notifications give twelve and
   the JSON body the full id). Local sources record no commit.
-- Each build records what started it: `console`, `api`, `push`, `tag` or `schedule` (`console`, `api`, `push` and `tag` exist in
-  this release; schedules follow). It is set by the server, never taken from the
+- Each build records what started it: `console`, `api`, `push`, `tag` or `schedule` (all five exist in this release). It is set by the server, never taken from the
   request body, and shown in the Builds list, on a build's page, in the CSV export and in notifications
   ("Started by mei (console)"; `trigger` in the JSON body). Migration `b4e8d2f6a9c1` adds `history.commit_sha`
   and `history.trigger`; existing builds become `console` with no commit.
@@ -62,6 +61,31 @@ follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this proje
   to change it can take it over. The newest 50 deliveries of each webhook are listed with time, event, ref, commit
   and result. Webhook deliveries have their own rate limit, `WEBHOOK_PER_MINUTE` (60 per address). Creating,
   changing, rotating and deleting are audited. Migration `d4f7a9c2e8b1` adds `project_hooks` and `hook_deliveries`.
+
+- Scheduled builds (#4). A project's settings get a **Schedules** tab (Git projects only); its creator and holders
+  of `project:manage` add, change, turn off and delete schedules, everyone who may build sees them and their runs.
+  A schedule is a 5-field cron expression (minute, hour, day of month, month, day of week; `@hourly`, `@daily`,
+  `@weekly`, `@monthly`, `@yearly` too; a sixth, seconds field is refused) with presets (hourly, nightly,
+  weeknights, weekly), an IANA time zone (default `SCHEDULE_TIMEZONE`, else the server's own zone, else UTC) and the
+  branch or tag to build. The dialog shows the expression in words and its next five run times in that zone before
+  saving; a wrong expression or zone is refused with the reason (422). When a run is due, the branch or tag is
+  resolved with `git ls-remote` and exactly that commit is built, trigger `schedule`, as the person who set the
+  schedule up. A run is skipped, and the reason recorded, when a build of the project is queued or running
+  (`overlap`), and, by default (*Skip when unchanged*, per schedule), when the commit and the effective settings
+  equal those of the project's last successful build of that branch or tag (`unchanged`): the effective settings
+  are the complete build configuration the run would be filed with (the project's saved settings with the
+  schedule's branch or tag), compared as a SHA-256 of its canonical JSON, so any changed setting builds again.
+  Missed runs are not made up: a run found more than 2 minutes late (Packwright was not running) is recorded once
+  as `missed` and the next run is counted from now. The next run time is stored, so it survives a restart, and a
+  run is claimed with a conditional update of it, so it fires once even if two scheduler loops look at the same
+  moment (SQLite and PostgreSQL). Daylight-saving time: a run in a skipped hour (02:30 on a spring-forward night)
+  runs once at the jump (03:00); a fixed time in the repeated autumn hour runs once. The creator is checked again
+  at every run: if that account is deactivated, gone or without `task:create`, the schedule turns itself off with
+  the reason (audited as `schedule_disabled`), and someone allowed to change it can take it over. The newest 50
+  runs of each schedule are listed (time, commit, built / skipped / failed with the build and the reason).
+  Creating, changing and deleting are audited; API tokens cannot manage schedules. `SCHEDULES_ENABLED=false` stops
+  the scheduler. Cron expressions are read by [cronsim](https://github.com/cuu508/cronsim) (BSD-3-Clause, no
+  dependencies), a new dependency. Migration `e6b2c8d4f1a3` adds `project_schedules` and `schedule_runs`.
 
 ### Fixed
 - A build of a project without a `.venv` is diagnosed as such (#21). A module missing at run time was explained

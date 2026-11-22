@@ -13,6 +13,7 @@ from app.models.project import Project
 from app.models.notification import ProjectNotification
 from app.models.api_token import ApiToken
 from app.models.hook import HookDelivery, ProjectHook
+from app.models.schedule import ProjectSchedule, ScheduleRun
 
 __all__ = [
     "Task",
@@ -30,4 +31,6 @@ __all__ = [
     "ApiToken",
     "ProjectHook",
     "HookDelivery",
+    "ProjectSchedule",
+    "ScheduleRun",
 ]

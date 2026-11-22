@@ -22,6 +22,7 @@ from app.api.routes.notifications import router as notifications_router
 from app.api.routes.monitoring import router as monitoring_router
 from app.api.routes.api_tokens import router as api_tokens_router
 from app.api.routes.hooks import receive_router as hooks_receive_router, router as hooks_router
+from app.api.routes.schedules import router as schedules_router
 from app.api.websocket import router as websocket_router
 from app.config import get_settings
 from app.database import close_db, init_db
@@ -112,10 +113,20 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
         workspace_cleanup.cleanup_loop(),
         name="workspace_cleanup_loop",
     )
+    # Background task: scheduled builds (off with SCHEDULES_ENABLED=false).
+    from app.services.schedules import scheduler_loop
+    scheduler_task = asyncio.create_task(scheduler_loop(), name="scheduler_loop")
     try:
         yield
     finally:
         # Shutdown
+        scheduler_task.cancel()
+        try:
+            await scheduler_task
+        except asyncio.CancelledError:
+            pass  # expected: we just cancelled it
+        except Exception:
+            logger.exception("Scheduler loop exited with an error")
         cleanup_task.cancel()
         try:
             await cleanup_task
@@ -197,6 +208,7 @@ app.include_router(monitoring_router)
 app.include_router(api_tokens_router)
 app.include_router(hooks_router)
 app.include_router(hooks_receive_router)
+app.include_router(schedules_router)
 app.include_router(websocket_router)
 
 

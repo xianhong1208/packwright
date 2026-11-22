@@ -30,3 +30,28 @@ export function expiryText(iso: string, now = Date.now()): string {
   }
   return days === 1 ? 'expires tomorrow' : `expires in ${days} days`
 }
+
+/** A time as the schedule's own zone tells it, e.g. "Mon, 23 Nov 2026, 02:00 GMT+8". */
+export function zonedTime(iso: string, zone: string): string {
+  const date = parseUtc(iso)
+  const options: Intl.DateTimeFormatOptions = {
+    weekday: 'short', year: 'numeric', month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit',
+    hourCycle: 'h23', timeZoneName: 'short',
+  }
+  try {
+    return new Intl.DateTimeFormat(undefined, { ...options, timeZone: zone }).format(date)
+  } catch {
+    return new Intl.DateTimeFormat(undefined, options).format(date)
+  }
+}
+
+/** "in 5 min", "in 3 h", "in 2 days". */
+export function timeUntil(iso: string, now = Date.now()): string {
+  const s = (parseUtc(iso).getTime() - now) / 1000
+  if (s < 60) return 'in under a minute'
+  const m = Math.round(s / 60)
+  if (m < 60) return `in ${m} min`
+  const h = Math.round(m / 60)
+  if (h < 48) return `in ${h} h`
+  return `in ${Math.round(h / 24)} days`
+}
