@@ -37,6 +37,46 @@ describe('BuildResultPanel', () => {
     expect(screen.getByText('SHA-256')).toBeInTheDocument()
   })
 
+  it('shows the Docker image and its size in decimal megabytes, as docker image ls does', () => {
+    render(<BuildResultPanel result={{ ...base, image: { name: 'mcp_gate:1.4.0', size_bytes: 228_400_000 } }} />)
+    expect(screen.getByText('mcp_gate:1.4.0')).toBeInTheDocument()
+    expect(screen.getByText('228.4 MB')).toBeInTheDocument()
+  })
+
+  it('says whether the image or the binary was smoke-tested', () => {
+    const { rerender } = render(
+      <BuildResultPanel result={{ ...base, verify: { status: 'pass', detail: '', exit_code: null, target: 'image', container: 'mcp_gate-smoke-1a2b3c4d' } }} />,
+    )
+    expect(screen.getByText('Smoke test: started the Docker image as mcp_gate-smoke-1a2b3c4d (removed afterwards).')).toBeInTheDocument()
+    rerender(<BuildResultPanel result={{ ...base, verify: { status: 'pass', detail: '', exit_code: 0, target: 'binary' } }} />)
+    expect(screen.getByText('Smoke test: ran the binary on the build host.')).toBeInTheDocument()
+  })
+
+  it('warns when the program listened on another port than the image exposes', () => {
+    render(
+      <BuildResultPanel
+        result={{
+          ...base,
+          verify: { status: 'pass', detail: '', exit_code: null },
+          port_check: { listening: [4598], expected: 8000, suggested: 4598, message: 'The program listens on 4598, but the image exposes 8000.' },
+        }}
+      />,
+    )
+    expect(screen.getByRole('alert')).toHaveTextContent('The program listens on 4598, but the image exposes 8000. Suggested port: 4598.')
+  })
+
+  it('says nothing about ports when they match', () => {
+    render(<BuildResultPanel result={{ ...base, verify: { status: 'pass', detail: '', exit_code: null }, port_check: { listening: [8000], expected: 8000, suggested: null, message: '' } }} />)
+    expect(screen.queryByRole('alert')).toBeNull()
+  })
+
+  it('suggests a docker run that keeps the state folders', () => {
+    const run = 'docker run -d --name mcp_gate -p 4598:4598 -v mcp_gate-data:/app/data mcp_gate:1.4.0'
+    render(<BuildResultPanel result={{ ...base, image: { name: 'mcp_gate:1.4.0', size_bytes: null, run_command: run, user: 'app (uid 10001)' } }} />)
+    expect(screen.getByText(run)).toBeInTheDocument()
+    expect(screen.getByText(/runs as app \(uid 10001\)/)).toBeInTheDocument()
+  })
+
   it('says how many C files came from the compile cache', () => {
     render(<BuildResultPanel result={{ ...base, verify: { status: 'pass', detail: '', exit_code: 0 }, compile_cache: { hits: 80, compiled: 1 } }} />)
     expect(screen.getByText('Compile cache: reused 80 of 81 C files.')).toBeInTheDocument()

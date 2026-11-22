@@ -61,11 +61,36 @@ def _line_containing(text_lower: str, original: str, needle_lower: str) -> str:
         return ""
 
 
-def diagnose_build_failure(log_text: str) -> list[dict]:
+# What the Nuitka worker logs when the project has no .venv (nuitka_worker.py).
+_NO_VENV_LOG_LINES = (
+    "no .venv found in target project",
+    "no .venv/site-packages found, skipping package copy",
+)
+_VENV_CHECK_LABEL = "Project .venv present"
+
+
+def project_venv_missing(log_text: str | None, preflight: list[dict] | None = None) -> bool:
+    """Whether the build ran without the project's .venv.
+
+    The preflight check is the record that survives: the log is a ring of the
+    last lines, and a long build pushes the early "No .venv found" note out of it.
+    """
+    for check in preflight or []:
+        if isinstance(check, dict) and check.get("label") == _VENV_CHECK_LABEL:
+            return not check.get("passed", True)
+    text_lower = str(log_text or "").lower()
+    return any(line in text_lower for line in _NO_VENV_LOG_LINES)
+
+
+def diagnose_build_failure(log_text: str, *, missing_venv: bool = False) -> list[dict]:
     """Return a list of {"problem": str, "suggestion": str, "evidence": str}
     for known failure patterns found in the build log. Empty list if nothing
     recognized. Ordered most-specific first. 'evidence' is the matched log
-    snippet (trimmed). All text is in English, like the console."""
+    snippet (trimmed). All text is in English, like the console.
+
+    ``missing_venv`` (see project_venv_missing) turns a module missing at run
+    time into "the project has no .venv": without one no package was bundled,
+    so adding the module to "Include packages" would not help."""
     if not log_text:
         return []
 
@@ -234,6 +259,20 @@ def diagnose_build_failure(log_text: str) -> list[dict]:
                 continue
             if re.fullmatch(r"([A-Za-z0-9_]+)\._\1", mod):
                 continue
+            if missing_venv:
+                # #21: without the project's .venv nothing third-party was
+                # bundled, so every import of a dependency fails; blaming a
+                # dynamic import sent people to "Include packages", which
+                # cannot find a package that is not installed anywhere.
+                add(
+                    "The project has no .venv, so its packages were not bundled",
+                    f"Module {mod} is missing because the build found no .venv in the project folder "
+                    "and bundled none of its dependencies. Create it in the project folder: run "
+                    "\"uv sync\", or \"python -m venv .venv\" and install the requirements into it. "
+                    "Then rebuild.",
+                    m.group(0),
+                )
+                break
             add(
                 f"Module {mod} not found at run time",
                 f"The package probably imports it dynamically or lazily, which Nuitka cannot see; "
@@ -268,11 +307,15 @@ def diagnose_build_failure(log_text: str) -> list[dict]:
 
     # ------------------------------------------------------------------
     # 7. npm / frontend build fail
-    #    npm ERR!  OR  (vite build AND error)  OR  Cannot find module
+    #    npm ERR!  OR  vite's "error during build"  OR  Cannot find module
     # ------------------------------------------------------------------
     try:
         npm_err = "npm err!" in text_lower
-        vite_err = "vite build" in text_lower and "error" in text_lower
+        # Vite says "error during build:" when it fails. "vite build" plus the
+        # word "error" anywhere in the log matched every fullstack build that
+        # failed later for any reason: MCP Gate's smoke test ("Error loading
+        # config") was reported as "Frontend build failed".
+        vite_err = "error during build" in text_lower
         cant_find = "cannot find module" in text_lower
         if npm_err or vite_err or cant_find:
             if npm_err:
@@ -280,7 +323,7 @@ def diagnose_build_failure(log_text: str) -> list[dict]:
             elif cant_find:
                 needle = "cannot find module"
             else:
-                needle = "vite build"
+                needle = "error during build"
             evidence = _line_containing(text_lower, text, needle)
             add(
                 "Frontend build failed",
@@ -611,12 +654,13 @@ _ERROR_LINE_MARKERS = (
 # Stage names come from task["stage"]; phrase them the way the UI already does.
 _STAGE_HINTS = {
     "queued": "The build ended while it was still queued",
+    "config": "Failed reading packwright.toml — the file in the repository cannot be used",
     "frontend": "Failed while building the frontend — installing its dependencies or running its build command",
     "docker": "Failed while building or exporting the Docker image",
     "preflight": "Failed during preflight — usually a path, the Python version or the dependency environment",
     "compile": "Failed while compiling — Nuitka reported an error",
     "bundle": "Failed while bundling — copying dependencies or data directories went wrong",
-    "verify": "Failed verification — the binary was built but its test run failed",
+    "verify": "Failed verification — the program (or its Docker image) was built but its test run failed",
     "done": "Failed while finishing up",
 }
 
@@ -644,7 +688,9 @@ def extract_error_lines(log_text: str, limit: int = 6) -> list[str]:
     return list(reversed(hits))
 
 
-def build_failure_report(log_text: str, *, stage: str | None = None) -> dict:
+def build_failure_report(
+    log_text: str, *, stage: str | None = None, preflight: list[dict] | None = None
+) -> dict:
     """Explain a failed build — always, even when no pattern matches.
 
     The pattern rules match only a minority of real failures, and the caller
@@ -655,8 +701,11 @@ def build_failure_report(log_text: str, *, stage: str | None = None) -> dict:
     This never returns an empty diagnosis. When no rule fires it still names
     the stage that failed and surfaces the error lines from the log, which is
     the information someone would otherwise have to go digging for.
+
+    ``preflight`` is the build's stored preflight checks, which say whether the
+    project had a .venv (see project_venv_missing).
     """
-    diagnoses = diagnose_build_failure(log_text)
+    diagnoses = diagnose_build_failure(log_text, missing_venv=project_venv_missing(log_text, preflight))
     error_lines = extract_error_lines(log_text)
 
     if not diagnoses:

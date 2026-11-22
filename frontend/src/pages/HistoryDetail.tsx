@@ -6,6 +6,9 @@ import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { taskApi } from '../api/client'
 import BuildResultPanel from '../components/build/BuildResultPanel'
 import FailureReport from '../components/build/FailureReport'
+import CommitChip from '../components/build/CommitChip'
+import SettingOrigins from '../components/build/SettingOrigins'
+import { triggerLabel } from '../utils/buildOrigin'
 import type {} from '../api/types'
 import { triggerUrlDownload } from '../utils/download'
 import { binaryName } from '../utils/buildConfig'
@@ -59,7 +62,7 @@ export default function HistoryDetail() {
           <p>
             This removes the task's workspace on the server{workspaceDir ? <> (<code>{workspaceDir}/{record.task_id}</code>)</> : ''} — the cloned source and its <code>.venv</code>.
           </p>
-          {record.status === 'completed' && !record.config?.docker_enabled && (
+          {record.status === 'completed' && !(record.effective?.config ?? record.config)?.docker_enabled && (
             <p className="text-orange-400">
               This is a non-Docker completed run — once deleted, its output <b>can no longer be
               downloaded</b>.
@@ -111,7 +114,9 @@ export default function HistoryDetail() {
   }
 
   const status = STATUS_META[record.status]
-  const config = record.config
+  // What was built (packwright.toml's values included) is shown; a rebuild starts
+  // from what was submitted, so the file is read again from the new source.
+  const config = record.effective?.config ?? record.config
   const projectType = config ? PROJECT_TYPE_META[config.project_type] : null
 
   const formatDuration = (start: string, end: string | null): string => {
@@ -136,7 +141,8 @@ export default function HistoryDetail() {
   return (
     <div>
       {/* Run header — status glyph + run title + a muted meta line, GitHub-Actions style. */}
-      <div className="flex items-start gap-3 mb-6">
+      {/* On a phone the actions take their own row: beside the title they squeezed the meta line to one word per line. */}
+      <div className="flex flex-wrap sm:flex-nowrap items-start gap-3 mb-6">
         <button
           onClick={() => navigate('/history')}
           aria-label="Back to history"
@@ -161,7 +167,7 @@ export default function HistoryDetail() {
             >
               {record.project_id ? <Link to={`/projects/${record.project_id}`} className="hover:underline">{record.project_name}</Link> : record.project_name}
             </h1>
-            {record.config?.version && <span className="version-chip">{record.config.version}</span>}
+            {config?.version && <span className="version-chip">{config.version}</span>}
             <span
               className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-medium"
               style={{ backgroundColor: status.bgColor, color: status.color }}
@@ -182,7 +188,13 @@ export default function HistoryDetail() {
               </>
             )}
             <span aria-hidden>·</span>
-            <span>Triggered by {record.user_name}</span>
+            <span>Triggered by {record.user_name} ({triggerLabel(record.trigger)})</span>
+            {record.commit_sha && (
+              <>
+                <span aria-hidden>·</span>
+                <CommitChip sha={record.commit_sha} />
+              </>
+            )}
             <span aria-hidden>·</span>
             <span>Started {timeAgo(record.start_time)}</span>
             <span aria-hidden>·</span>
@@ -200,7 +212,7 @@ export default function HistoryDetail() {
         </div>
 
         {/* Primary actions */}
-        <div className="flex items-center gap-2 flex-shrink-0">
+        <div className="flex flex-wrap items-center gap-2 flex-shrink-0 w-full sm:w-auto">
           {config && (
             <Button
               icon={<ArrowClockwiseIcon />}
@@ -260,10 +272,10 @@ export default function HistoryDetail() {
           logs={logs}
           logHint="the full log below"
           onApplyFix={
-            config
+            record.config
               ? (overrides) =>
                   navigate('/create', {
-                    state: { rebuild: true, projectName: record.project_name, config: { ...config, ...overrides } },
+                    state: { rebuild: true, projectName: record.project_name, config: { ...record.config, ...overrides } },
                   })
               : undefined
           }
@@ -278,6 +290,9 @@ export default function HistoryDetail() {
           <LogViewer logs={logs} title="Build log" height={360} />
         </div>
       )}
+
+      {/* Every setting and where it came from: packwright.toml, this build, the project, detection. */}
+      {record.config && <SettingOrigins effective={record.effective} config={record.config} />}
 
       {/* Run details + build configuration (secondary panel) */}
       <div className="glass-card p-5">
@@ -380,6 +395,13 @@ export default function HistoryDetail() {
                       span={2}
                     >
                       <code style={{ fontSize: 12 }}>{config.git_ref}</code>
+                    </Descriptions.Item>
+                    <Descriptions.Item label="Commit" span={2}>
+                      {record.commit_sha ? (
+                        <code style={{ fontSize: 12, overflowWrap: 'anywhere' }}>{record.commit_sha}</code>
+                      ) : (
+                        <span style={{ color: 'var(--ink-faint)' }}>Not recorded</span>
+                      )}
                     </Descriptions.Item>
                     <Descriptions.Item label="Workspace" span={2}>
                       <code style={{ fontSize: 11, color: 'var(--ink-faint)' }}>
@@ -506,6 +528,14 @@ export default function HistoryDetail() {
                       <code style={{ fontSize: 12 }}>{config.docker_base_image}</code>
                     </Descriptions.Item>
                     <Descriptions.Item label="Exposed port">{config.docker_expose_port}</Descriptions.Item>
+                    {config.project_type !== 'frontend_only' && (
+                      <Descriptions.Item label="Volumes">
+                        <code style={{ fontSize: 12 }}>{config.docker_volumes || '—'}</code>
+                      </Descriptions.Item>
+                    )}
+                    {config.project_type !== 'frontend_only' && (
+                      <Descriptions.Item label="Runs as">{config.docker_run_as_root ? 'root' : 'app (uid 10001)'}</Descriptions.Item>
+                    )}
                     {config.docker_install_node && (
                       <Descriptions.Item label="Node.js">Installed</Descriptions.Item>
                     )}

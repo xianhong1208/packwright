@@ -191,12 +191,14 @@ async def test_tc_int_070_a_refused_stored_credential_falls_back_to_anonymous(tm
     srv = _repo_server(tmp_path, seen, private_login="Basic " + base64.b64encode(b"oauth2:current").decode())
     base = f"http://127.0.0.1:{srv.server_port}"
     try:
-        anonymous = await git_service.clone_repo(f"{base}/public.git", "main", "branch",
-                                                 tmp_path / "clone", "stale-token", provider="generic")
+        sha = await git_service.resolve_ref(f"{base}/public.git", "main", "branch", "stale-token",
+                                            provider="generic")
+        anonymous = await git_service.clone_at_commit(f"{base}/public.git", "main", "branch", sha,
+                                                      tmp_path / "clone", "stale-token", provider="generic")
         refs = await git_service.list_refs(f"{base}/public.git", "stale-token", provider="generic")
         with pytest.raises(git_service.GitUrlError) as exc:
-            await git_service.clone_repo(f"{base}/private.git", "main", "branch",
-                                         tmp_path / "clone2", "stale-token", provider="generic")
+            await git_service.clone_at_commit(f"{base}/private.git", "main", "branch", sha,
+                                              tmp_path / "clone2", "stale-token", provider="generic")
     finally:
         srv.shutdown()
 

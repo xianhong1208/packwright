@@ -1,0 +1,673 @@
+{
+  "$defs": {
+    "DockerSection": {
+      "additionalProperties": false,
+      "description": "The Docker image.",
+      "properties": {
+        "enabled": {
+          "anyOf": [
+            {
+              "type": "boolean"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Package the output as a Docker image",
+          "title": "Enabled"
+        },
+        "image_name": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Image Name"
+        },
+        "base_image": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Base Image"
+        },
+        "port": {
+          "anyOf": [
+            {
+              "maximum": 65535,
+              "minimum": 1,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Port to expose",
+          "title": "Port"
+        },
+        "env": {
+          "anyOf": [
+            {
+              "additionalProperties": {
+                "type": "string"
+              },
+              "type": "object"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "ENV in the image. No secrets: they are refused",
+          "title": "Env"
+        },
+        "commands": {
+          "anyOf": [
+            {
+              "items": {
+                "type": "string"
+              },
+              "type": "array"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "RUN commands, one per entry",
+          "title": "Commands"
+        },
+        "install_node": {
+          "anyOf": [
+            {
+              "type": "boolean"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Install Node"
+        },
+        "api_proxy": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Api Proxy"
+        },
+        "volumes": {
+          "anyOf": [
+            {
+              "items": {
+                "type": "string"
+              },
+              "type": "array"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Folders the program keeps its state in",
+          "title": "Volumes"
+        },
+        "run_as_root": {
+          "anyOf": [
+            {
+              "type": "boolean"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Run the program as root inside the image",
+          "title": "Run As Root"
+        },
+        "nginx": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/NginxSection"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        }
+      },
+      "title": "DockerSection",
+      "type": "object"
+    },
+    "FrontendSection": {
+      "additionalProperties": false,
+      "description": "The frontend (frontend_only and fullstack).",
+      "properties": {
+        "dir": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Frontend directory, relative to the project",
+          "title": "Dir"
+        },
+        "tool": {
+          "anyOf": [
+            {
+              "enum": [
+                "npm",
+                "yarn",
+                "pnpm",
+                "bun"
+              ],
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Package manager",
+          "title": "Tool"
+        },
+        "build_command": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "The package.json script that builds it",
+          "title": "Build Command"
+        },
+        "output_dir": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Build output, relative to the frontend directory",
+          "title": "Output Dir"
+        },
+        "env_file": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Env file written before the build (.env, .env.production)",
+          "title": "Env File"
+        },
+        "env": {
+          "anyOf": [
+            {
+              "additionalProperties": {
+                "type": "string"
+              },
+              "type": "object"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Build-time variables written to env_file. No secrets: they are refused",
+          "title": "Env"
+        }
+      },
+      "title": "FrontendSection",
+      "type": "object"
+    },
+    "NginxSection": {
+      "additionalProperties": false,
+      "description": "nginx in a frontend-only image.",
+      "properties": {
+        "client_max_body_size": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Client Max Body Size"
+        },
+        "proxy_read_timeout": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Proxy Read Timeout"
+        },
+        "streaming": {
+          "anyOf": [
+            {
+              "type": "boolean"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Streaming"
+        },
+        "gzip": {
+          "anyOf": [
+            {
+              "type": "boolean"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Gzip"
+        }
+      },
+      "title": "NginxSection",
+      "type": "object"
+    },
+    "NuitkaSection": {
+      "additionalProperties": false,
+      "description": "Nuitka options.",
+      "properties": {
+        "jobs": {
+          "anyOf": [
+            {
+              "maximum": 1024,
+              "minimum": 0,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Parallel C compile jobs; 0 = automatic",
+          "title": "Jobs"
+        },
+        "anti_bloat": {
+          "anyOf": [
+            {
+              "type": "boolean"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Keep Nuitka's anti-bloat plugin on",
+          "title": "Anti Bloat"
+        },
+        "include_package_data": {
+          "anyOf": [
+            {
+              "items": {
+                "type": "string"
+              },
+              "type": "array"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Packages whose data files are bundled (--include-package-data)",
+          "title": "Include Package Data"
+        },
+        "report": {
+          "anyOf": [
+            {
+              "type": "boolean"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Write Nuitka's compilation report",
+          "title": "Report"
+        }
+      },
+      "title": "NuitkaSection",
+      "type": "object"
+    },
+    "ProjectSection": {
+      "additionalProperties": false,
+      "description": "How the project is built as a whole.",
+      "properties": {
+        "type": {
+          "anyOf": [
+            {
+              "enum": [
+                "backend_only",
+                "frontend_only",
+                "fullstack"
+              ],
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "backend_only (Python), frontend_only, or fullstack",
+          "title": "Type"
+        },
+        "version": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "The version being built (1.2.0, v2.0.0-rc.1)",
+          "title": "Version"
+        },
+        "output_dir": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Output directory, relative to the project",
+          "title": "Output Dir"
+        }
+      },
+      "title": "ProjectSection",
+      "type": "object"
+    },
+    "PythonSection": {
+      "additionalProperties": false,
+      "description": "The Python backend (backend_only and fullstack).",
+      "properties": {
+        "version": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Compile-target Python: auto (recommended) or e.g. 3.13",
+          "title": "Version"
+        },
+        "entry": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Entry point, relative to the project",
+          "title": "Entry"
+        },
+        "output_name": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Name of the program; empty = from the entry point",
+          "title": "Output Name"
+        },
+        "onefile": {
+          "anyOf": [
+            {
+              "type": "boolean"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "A single executable file",
+          "title": "Onefile"
+        },
+        "pack_mode": {
+          "anyOf": [
+            {
+              "enum": [
+                "external",
+                "full"
+              ],
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "external: third-party packages beside the program; full: compiled in",
+          "title": "Pack Mode"
+        },
+        "source_dirs": {
+          "anyOf": [
+            {
+              "items": {
+                "type": "string"
+              },
+              "type": "array"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "More Python source directories to compile",
+          "title": "Source Dirs"
+        },
+        "data_dirs": {
+          "anyOf": [
+            {
+              "items": {
+                "type": "string"
+              },
+              "type": "array"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Data directories copied beside the program",
+          "title": "Data Dirs"
+        },
+        "include_packages": {
+          "anyOf": [
+            {
+              "items": {
+                "type": "string"
+              },
+              "type": "array"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Packages to force-include (dynamic imports Nuitka cannot see)",
+          "title": "Include Packages"
+        },
+        "dependency_groups": {
+          "anyOf": [
+            {
+              "items": {
+                "type": "string"
+              },
+              "type": "array"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "PEP 735 dependency groups installed for Git builds",
+          "title": "Dependency Groups"
+        },
+        "nuitka": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/NuitkaSection"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        }
+      },
+      "title": "PythonSection",
+      "type": "object"
+    },
+    "SmokeSection": {
+      "additionalProperties": false,
+      "description": "The smoke test after a build.",
+      "properties": {
+        "enabled": {
+          "anyOf": [
+            {
+              "type": "boolean"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Run the built program (or image) once after the build",
+          "title": "Enabled"
+        }
+      },
+      "title": "SmokeSection",
+      "type": "object"
+    }
+  },
+  "additionalProperties": false,
+  "description": "packwright.toml: build settings kept in the repository. They win over the\nproject's settings in Packwright and over one build's changes.",
+  "properties": {
+    "schema": {
+      "const": 1,
+      "description": "The file format version: 1",
+      "title": "Schema",
+      "type": "integer"
+    },
+    "project": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/ProjectSection"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null
+    },
+    "python": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/PythonSection"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null
+    },
+    "frontend": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/FrontendSection"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null
+    },
+    "docker": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/DockerSection"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null
+    },
+    "smoke": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/SmokeSection"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null
+    }
+  },
+  "required": [
+    "schema"
+  ],
+  "title": "packwright.toml",
+  "type": "object",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://raw.githubusercontent.com/xianhong1208/packwright/main/docs/packwright.schema.json"
+}

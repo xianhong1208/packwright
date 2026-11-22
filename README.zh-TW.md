@@ -23,14 +23,29 @@ pnpm 或 bun 建置前端、把兩者打包在一起，還能把結果匯出成 
 ## 主要功能
 
 - **四種打包模式。** 純後端（Nuitka）、純前端（任一 Node 套件管理器）、全端（前端產出作為 data 一起編進 Nuitka），以及 Docker
-  輸出（打包成 image 並匯出 `.tar.gz`）。
+  輸出（打包成 image 並匯出 `.tar.gz`）。image 只裝程式的擴充模組實際會載入的系統函式庫，單一執行檔會壓縮；程式以非 root 使用者執行，煙霧測試找到的狀態資料夾會宣告成 volume，並附上保留資料的 `docker run` 建議指令；煙霧測試直接啟動 image，程式監聽的 port 和 image 對外的不同時會提醒。
 - **快速建置。** 指定資料夾或 Git URL，系統會自己讀出專案內容：後端、前端還是全端、進入點、`package.json` 在哪、Python 版本與依賴
   群組。按一下就開始建置；所有設定仍可在 *All settings* 調整。
 - **專案與版本。** 每次建置都歸到一個專案（同名稱、同來源）。專案頁列出所有版本，一個對話框就能建置新版本；版本從 Git tag、
   `pyproject.toml` 或 `package.json` 讀出，用在下載檔名、Docker image 的 tag，並寫進 `VERSION` 檔。專案由所有有建置權限的人共用。
-- **本機路徑或 Git URL 來源。** Git 模式會 clone repo、用 `uv sync` 建立 `.venv`、打包，完成後清理工作區。URL 驗證做了 SSRF 防護、
+- **本機路徑或 Git URL 來源。** Git 模式先把分支或標籤解析成一個 commit，只 checkout 那個 commit（記在建置上、顯示在建置旁），
+  再用 `uv sync` 建立 `.venv`、打包，完成後清理工作區。URL 驗證做了 SSRF 防護、
   subprocess 一律用參數列表，每次 clone 都有逾時上限。
 - **Git 憑證在管理台設定。** GitHub、GitLab 與自架服務的 token 加密儲存，依 clone URL 的主機自動選用；`.env` 裡不放任何密鑰。
+- **給腳本與 CI 用的 API token。** 個人 token（`pwt_…`）以 `Authorization: Bearer` 開始建置、追蹤建置（含即時日誌
+  WebSocket）、下載產物。每個 token 有範圍（`builds:read`、`builds:write`、`projects:read`）與最長一年的期限，只存雜湊值，
+  永遠碰不到帳號與設定的端點，能做的也不會超過擁有者當下角色允許的。隨時可以在管理台撤銷。
+- **push 或 tag 時自動建置。** 每個專案可以設定 GitHub、GitLab、Gitea 的 webhook，各有自己的密鑰（只顯示一次、加密儲存），
+  每次送達都驗證：內容的 HMAC-SHA256、GitLab 的 secret token 或它的簽章。push 會建置被推上來的那一個 commit，只有符合
+  webhook 分支與 tag 樣式的才建置，並以設定它的人的身分執行。ping、刪除與 `[skip ci]` 會回應但不建置，重複送達只建置一次，
+  每次送達都列出結果。另有附 token 的通用網址，讓其他工具也能觸發建置。
+- **排程建置。** 專案可以依 cron 排程、在自己的時區建置某個分支或 tag，以設定它的人的身分執行；儲存前管理台會列出接下來的
+  執行時間。每次執行都建置分支當下指向的那一個 commit；專案有建置在跑時跳過，commit 與設定都和上次成功的建置一樣時也跳過
+  （可關閉）；伺服器停機時錯過的不會補跑。每次執行的結果都列出來。
+- **設定可以放在 repo 裡。** 原始碼根目錄的 `packwright.toml` 用管理台同樣的名稱設定建置（`[python] entry`、`[docker] port`
+  ……）。檔案逐欄位優先於單次建置的修改與專案設定，讀的是要建置的那個 commit，而且不能放任何密鑰：未知的 key、型別錯誤、
+  專案外的路徑與看起來像密鑰的內容，都會讓建置在第一個階段失敗，並指出 key 與行號。每次建置都會列出每項設定與它的來源，
+  專案設定頁會把檔案設定的欄位標示為唯讀。附 [JSON Schema](docs/packwright.schema.json) 讓編輯器自動完成。
 - **即時日誌與歷史。** 每個建置都透過 WebSocket 串流；完成的建置保留當時完整的設定，重新打包會做一模一樣的事。
 - **通知。** 專案可以把建置結果送到 Discord、Slack 或任何接收 JSON 的網址：失敗的附上診斷，成功的附上花了多久。
 - **重建更快。** 裝了 [ccache](https://ccache.dev/)，Nuitka 會重用沒變的 C 檔；同時進行的建置會分攤機器的核心。
@@ -120,3 +135,12 @@ uv run python main.py         # 先套用 migration,再於 http://0.0.0.0:5018 �
 ## 授權
 
 [MIT](LICENSE)
+
+### 第三方授權
+
+Packwright 本身的程式碼是 MIT。它以獨立程式的方式執行 [Nuitka](https://nuitka.net) 來編譯 Python 專案。
+Nuitka 是 **AGPL-3.0**,Docker 映像原封不動地附帶它,以及建置工具鏈(GCC、patchelf、ccache,GPL)。
+
+Packwright 建置出來的程式**不受** AGPL 約束:Nuitka 的 *Runtime Library Exception*(Nuitka 套件內的
+`LICENSE-RUNTIME.txt`)允許以任何授權散布編譯後的程式,包括閉源;GCC 的 runtime library exception
+對它的執行期函式庫也是如此。AGPL 規範的是 Nuitka 本身,例如散布修改過的 Nuitka 時。

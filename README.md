@@ -29,7 +29,11 @@ what comes next.
 
 - **Four build modes.** Backend only (Nuitka), frontend only (any Node package manager), full stack
   (the frontend bundled into the Nuitka build as data), and Docker output (the build packaged into an
-  image and exported as `.tar.gz`).
+  image and exported as `.tar.gz`). Images carry only the system libraries the program's extensions
+  load, onefile binaries are compressed, the program runs as a non-root user, and its state folders
+  (found by the smoke test) are declared as volumes, with a suggested `docker run` that keeps them. The
+  smoke test starts the image itself and warns when the program listens on another port than the
+  image exposes.
 - **Quick build.** Give it a folder or a Git URL and it reads the project: backend, frontend or full
   stack, the entry point, where `package.json` is, the Python version and dependency groups. One click
   starts the build; every setting is still there under *All settings*.
@@ -37,11 +41,34 @@ what comes next.
   project's page lists its versions and builds a new one in one dialog; the version is read from the Git
   tag, `pyproject.toml` or `package.json`, names the download, tags the Docker image and is written into
   a `VERSION` file. Projects are shared by everyone who may build.
-- **Local path or Git URL sources.** Git mode clones the repository, bootstraps a `.venv` with
+- **Local path or Git URL sources.** Git mode resolves the branch or tag to one commit, checks out
+  exactly that commit (recorded with the build and shown next to it), bootstraps a `.venv` with
   `uv sync`, builds, and cleans the workspace afterwards. URLs are validated against SSRF, subprocesses
   get argument lists only, and each clone has a time limit.
 - **Git credentials managed in the console.** GitHub, GitLab and self-hosted tokens are stored
   encrypted and chosen by the clone URL's host; no secrets in `.env`.
+- **API tokens for scripts and CI.** Personal tokens (`pwt_…`) start builds, follow them (including the
+  live log WebSocket) and download results with `Authorization: Bearer`. Each has scopes
+  (`builds:read`, `builds:write`, `projects:read`) and an expiry of up to a year, is stored only as a hash,
+  can never reach account or settings endpoints, and can do no more than its owner's role allows at that
+  moment. Revoke it in the console at any time.
+- **Build on push or tag.** Each project can have webhooks for GitHub, GitLab and Gitea, each with its own
+  secret (shown once, stored encrypted), checked on every delivery: HMAC-SHA256 of the body, GitLab's secret
+  token or its signed deliveries. A push builds exactly the pushed commit, only for branches and tags matching
+  the webhook's patterns, as the person who set it up. Pings, deletions and `[skip ci]` are answered and
+  ignored, repeats are built once, and every delivery is listed with what came of it. A generic URL with a
+  token starts a build from any other tool.
+- **Scheduled builds.** A project can build a branch or tag on a cron schedule, in its own time zone, as the
+  person who set it up. The console shows the next run times before saving. A run builds the exact commit the
+  branch points at, is skipped while a build of the project is running and, unless turned off, when neither the
+  commit nor the settings changed since the last successful build; runs missed while the server was down are not
+  made up. Every run is listed with what came of it.
+- **Settings in the repository.** A `packwright.toml` at the root of the source sets build settings by the
+  console's names (`[python] entry`, `[docker] port`, …). The file wins, field by field, over a build's own changes
+  and the project's settings, is read from the exact commit being built, and never holds secrets: unknown keys,
+  wrong types, paths outside the project and anything secret-like fail the build at its first stage, naming the
+  key and line. Every build shows each setting and where it came from, and the project's settings mark what the
+  file sets as read-only. A [JSON Schema](docs/packwright.schema.json) gives editors completion.
 - **Live logs and history.** Every build streams over WebSocket; a finished build keeps the exact
   settings that produced it, so a rebuild does the same thing.
 - **Notifications.** A project can send how its builds end to Discord, Slack or any URL that takes JSON:
@@ -149,3 +176,14 @@ Setup, the checks CI runs, branch and commit conventions and the release steps a
 ## Licence
 
 [MIT](LICENSE)
+
+### Third-party licences
+
+Packwright's own code is MIT. It runs [Nuitka](https://nuitka.net) as a separate program to compile
+Python projects. Nuitka is **AGPL-3.0**, and the Docker image ships it unmodified, together with the
+build toolchain (GCC, patchelf, ccache; GPL).
+
+The programs Packwright builds are **not** bound by the AGPL: Nuitka's *Runtime Library Exception*
+(`LICENSE-RUNTIME.txt` in the Nuitka package) lets you distribute a compiled program under any
+licence, closed-source included, and GCC's runtime library exception does the same for its runtime.
+The AGPL covers Nuitka itself, for example if you distribute a modified Nuitka.

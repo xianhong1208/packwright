@@ -210,6 +210,59 @@ describe('Quick build', () => {
     })
   })
 
+  it('fills in what packwright.toml sets, detects only the rest, and says what was detected', async () => {
+    api.diagnoseRepo.mockResolvedValue({
+      checks: FULLSTACK,
+      packwright_toml: {
+        values: { entry_point: 'src/server.py', project_type: 'backend_only' },
+        keys: {
+          entry_point: { key: 'python.entry', line: 3, text: 'entry = "src/server.py"' },
+          project_type: { key: 'project.type', line: 2, text: 'type = "backend_only"' },
+        },
+        errors: [],
+      },
+    })
+    renderWizard()
+    await pointAt('/srv/projects/shop')
+
+    expect(await screen.findByText(/2 settings from the repository's file/, {}, { timeout: 3000 })).toBeInTheDocument()
+    expect(screen.getByText('python.entry')).toBeInTheDocument()
+    await act(async () => {
+      fireEvent.click(screen.getByRole('button', { name: /Start build/ }))
+    })
+    await waitFor(() => expect(api.create).toHaveBeenCalledTimes(1))
+    const sent = api.create.mock.calls[0][0]
+    // The file's values, not the fingerprints' guesses (app/main.py, fullstack).
+    expect(sent.config).toMatchObject({ project_type: 'backend_only', entry_point: 'src/server.py' })
+    expect(sent.detected_fields).not.toContain('entry_point')
+    expect(sent.detected_fields).not.toContain('project_type')
+  })
+
+  it('records what detection filled in as detected', async () => {
+    api.diagnoseRepo.mockResolvedValue({ checks: FULLSTACK })
+    renderWizard()
+    await pointAt('/srv/projects/shop')
+    await screen.findByText(/A frontend and a Python backend/, {}, { timeout: 3000 })
+    await act(async () => {
+      fireEvent.click(screen.getByRole('button', { name: /Start build/ }))
+    })
+    await waitFor(() => expect(api.create).toHaveBeenCalledTimes(1))
+    expect(api.create.mock.calls[0][0].detected_fields).toEqual(
+      expect.arrayContaining(['entry_point', 'frontend_dir', 'project_type']),
+    )
+  })
+
+  it('says when packwright.toml cannot be used', async () => {
+    api.diagnoseRepo.mockResolvedValue({
+      checks: FULLSTACK,
+      packwright_toml: { values: {}, keys: {}, errors: ['packwright.toml:4: python.entyr: unknown key'] },
+    })
+    renderWizard()
+    await pointAt('/srv/projects/shop')
+    expect(await screen.findByText(/It cannot be used/, {}, { timeout: 3000 })).toBeInTheDocument()
+    expect(screen.getByText('packwright.toml:4: python.entyr: unknown key')).toBeInTheDocument()
+  })
+
   it('asks for the type when the files do not say, and will not start on a guess nobody made', async () => {
     renderWizard()
     await pointAt('/srv/projects/odd')

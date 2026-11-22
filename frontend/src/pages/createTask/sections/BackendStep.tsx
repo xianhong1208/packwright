@@ -1,4 +1,5 @@
-import { Form, Input, Select, Switch, Button, Row, Col, Checkbox, Spin, Collapse } from 'antd'
+import { Input, Select, Switch, Button, Row, Col, Checkbox, Spin, Collapse } from 'antd'
+import { SettingItem, FileLocked } from '../fileFields'
 import { ArrowsClockwiseIcon, CodeIcon, FolderIcon, GearIcon, WarningIcon } from '../../../components/ui/icons'
 
 import { useCreateTask } from '../context'
@@ -89,7 +90,7 @@ export default function BackendStep() {
 
           <Row gutter={16}>
             <Col xs={24} md={8}>
-              <Form.Item
+              <SettingItem
                 name="python_version"
                 label={<span style={{ color: 'var(--ink-muted)' }}>Python version</span>}
                 rules={[{ required: true }]}
@@ -102,10 +103,10 @@ export default function BackendStep() {
                     <Option key={v} value={v}>Python {v}</Option>
                   ))}
                 </Select>
-              </Form.Item>
+              </SettingItem>
             </Col>
             <Col xs={24} md={8}>
-              <Form.Item
+              <SettingItem
                 name="entry_point"
                 extra={<DetectedHint field="entry_point" />}
                 label={<span style={{ color: 'var(--ink-muted)' }}>Entry point</span>}
@@ -114,10 +115,10 @@ export default function BackendStep() {
                 rules={[{ required: true }]}
               >
                 <Input placeholder="main.py" className="input-field" />
-              </Form.Item>
+              </SettingItem>
             </Col>
             <Col xs={24} md={8}>
-              <Form.Item
+              <SettingItem
                 name="output_name"
                 label={<span style={{ color: 'var(--ink-muted)' }}>Binary name</span>}
                 tooltip="Name of the compiled binary. Leave blank to derive it from the entry point."
@@ -126,13 +127,13 @@ export default function BackendStep() {
                   placeholder={entryPoint ? entryPoint.replace(/\.py$/, '') : 'main'}
                   className="input-field"
                 />
-              </Form.Item>
+              </SettingItem>
             </Col>
           </Row>
 
           <Row gutter={16}>
             <Col xs={24} md={8}>
-              <Form.Item
+              <SettingItem
                 name="pack_mode"
                 label={<span style={{ color: 'var(--ink-muted)' }}>Nuitka pack mode</span>}
                 tooltip="External (recommended): third-party packages go in a separate libs/ directory and compile faster. Full: every dependency is packed into a single binary, but Nuitka takes a very long time — hours on a large project."
@@ -142,21 +143,21 @@ export default function BackendStep() {
                   <Option value="external">External (recommended, libs/)</Option>
                   <Option value="full">Full (very slow build)</Option>
                 </Select>
-              </Form.Item>
+              </SettingItem>
             </Col>
             <Col xs={24} md={8}>
-              <Form.Item
+              <SettingItem
                 name="onefile"
                 label={<span style={{ color: 'var(--ink-muted)' }}>Single-file binary</span>}
                 valuePropName="checked"
               >
                 <Switch checkedChildren="On" unCheckedChildren="Off" />
-              </Form.Item>
+              </SettingItem>
             </Col>
           </Row>
 
           {/* ── Dependency Group (PEP 735) — single-select from pyproject ── */}
-          <Form.Item
+          <SettingItem
             name="dependency_group"
             label={
               <span style={{ color: 'var(--ink-muted)' }}>
@@ -168,7 +169,7 @@ export default function BackendStep() {
                 <div>Options are read from the <code>[dependency-groups]</code> section of pyproject.toml.</div>
                 <div className="mt-2">At build time this becomes <code>uv sync --group &lt;name&gt;</code>.</div>
                 <div className="mt-2">Typical use: pick the right PyTorch wheel per platform (rocm / cuda / cpu).</div>
-                <div className="mt-2" style={{ color: 'var(--ink-muted)' }}>Single-select. Leave blank to omit the --group flag (the default).</div>
+                <div className="mt-2" style={{ color: 'var(--ink-muted)' }}>Single-select. Leave blank to install no group: Git builds skip even <code>dev</code>, which uv installs by default.</div>
               </div>
             }
             extra={
@@ -186,7 +187,7 @@ export default function BackendStep() {
               notFoundContent={loadingDepGroups ? <Spin size="small" /> : null}
               options={depGroups.map((g) => ({ label: g, value: g }))}
             />
-          </Form.Item>
+          </SettingItem>
 
           {/* Advanced Backend Settings — default open on dedicated Backend step */}
           <Collapse
@@ -205,7 +206,7 @@ export default function BackendStep() {
                 <>
                   <Row gutter={16}>
                     <Col xs={24} md={8}>
-                      <Form.Item
+                      <SettingItem
                         name="nuitka_jobs"
                         label={<span style={{ color: 'var(--ink-muted)' }}>CPU parallelism</span>}
                         tooltip="Number of parallel C-compile jobs. More is faster, but uses more memory. Auto uses every core when this build runs alone, and shares them with the other builds running at the same time."
@@ -221,28 +222,28 @@ export default function BackendStep() {
                               <Option key={n} value={n}>{n} cores</Option>
                             ))}
                         </Select>
-                      </Form.Item>
+                      </SettingItem>
                     </Col>
                     <Col xs={24} md={16}>
-                      <Form.Item
+                      <SettingItem
                         name="include_packages"
                         label={<span style={{ color: 'var(--ink-muted)' }}>Force-include packages</span>}
                         tooltip="Comma-separated. For packages Nuitka can't detect because they load dynamically or lazily."
                       >
                         <Input placeholder="e.g. litellm, openai" className="input-field" />
-                      </Form.Item>
+                      </SettingItem>
                     </Col>
                   </Row>
 
                   <Row gutter={16}>
                     <Col xs={24} md={12}>
-                      <Form.Item
+                      <SettingItem
                         name="output_dir"
                         label={<span style={{ color: 'var(--ink-muted)' }}>Output directory</span>}
                         tooltip="Leave blank to use the default, 'dist'."
                       >
                         <Input placeholder="dist (default)" className="input-field" />
-                      </Form.Item>
+                      </SettingItem>
                     </Col>
                   </Row>
 
@@ -257,7 +258,7 @@ export default function BackendStep() {
                   </div>
                   <Row gutter={16}>
                     <Col xs={24} md={8}>
-                      <Form.Item
+                      <SettingItem
                         name="enable_anti_bloat"
                         label={<span style={{ color: 'var(--ink-muted)' }}>Shrink binary</span>}
                         valuePropName="checked"
@@ -265,10 +266,10 @@ export default function BackendStep() {
                         extra={<span className="text-xs" style={{ color: 'var(--ink-faint)' }}>Removes unused tests and docs to make the binary smaller (on by default).</span>}
                       >
                         <Switch checkedChildren="On" unCheckedChildren="Off" />
-                      </Form.Item>
+                      </SettingItem>
                     </Col>
                     <Col xs={24} md={8}>
-                      <Form.Item
+                      <SettingItem
                         name="generate_report"
                         label={<span style={{ color: 'var(--ink-muted)' }}>Compilation report</span>}
                         valuePropName="checked"
@@ -276,10 +277,10 @@ export default function BackendStep() {
                         extra={<span className="text-xs" style={{ color: 'var(--ink-faint)' }}>Use it to find what got left out when a package is missing.</span>}
                       >
                         <Switch checkedChildren="On" unCheckedChildren="Off" />
-                      </Form.Item>
+                      </SettingItem>
                     </Col>
                     <Col xs={24} md={8}>
-                      <Form.Item
+                      <SettingItem
                         name="verify_after_build"
                         label={<span style={{ color: 'var(--ink-muted)' }}>Verify after build</span>}
                         valuePropName="checked"
@@ -287,21 +288,22 @@ export default function BackendStep() {
                         extra={<span className="text-xs" style={{ color: 'var(--ink-faint)' }}>Runs the binary once to confirm it starts (on by default, strongly recommended).</span>}
                       >
                         <Switch checkedChildren="On" unCheckedChildren="Off" />
-                      </Form.Item>
+                      </SettingItem>
                     </Col>
                   </Row>
-                  <Form.Item
+                  <SettingItem
                     name="include_package_data"
                     label={<span style={{ color: 'var(--ink-muted)' }}>Force-include package data files</span>}
                     tooltip="Comma-separated package names. Bundles the non-.py data files inside a package (JSON, certificates, templates). Common ones (certifi, litellm, and so on) are detected automatically — list only the extras here."
                     extra={<span className="text-xs" style={{ color: 'var(--ink-faint)' }}>Only needed when a runtime FileNotFoundError is missing a data file that ships inside a package.</span>}
                   >
                     <Input placeholder="e.g. certifi, litellm" className="input-field" />
-                  </Form.Item>
+                  </SettingItem>
 
                   <div className="border-t border-[var(--seam)] my-3" />
 
                   {/* Extra Source Directories */}
+                  <FileLocked field="extra_dirs">
                   <div className="mt-2">
                     <div className="flex items-center justify-between mb-3">
                       <label className="text-sm" style={{ color: 'var(--ink-muted)' }}>
@@ -365,7 +367,10 @@ export default function BackendStep() {
                     )}
                   </div>
 
+                  </FileLocked>
+
                   {/* Data Directories */}
+                  <FileLocked field="data_dirs">
                   <div className="mt-4">
                     <div className="flex items-center justify-between mb-3">
                       <label className="text-sm" style={{ color: 'var(--ink-muted)' }}>
@@ -409,6 +414,7 @@ export default function BackendStep() {
                       </div>
                     )}
                   </div>
+                  </FileLocked>
                 </>
               ),
             }]}

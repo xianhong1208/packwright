@@ -1,4 +1,5 @@
-import { Form, Input, Select, Button, Row, Col, AutoComplete } from 'antd'
+import { Input, Select, Button, Row, Col, AutoComplete } from 'antd'
+import { SettingItem } from '../fileFields'
 import { DownloadSimpleIcon, GlobeIcon, ScanIcon } from '../../../components/ui/icons'
 
 import { useCreateTask } from '../context'
@@ -45,17 +46,17 @@ export default function FrontendStep() {
           />
           <Row gutter={16}>
             <Col xs={24} md={8}>
-              <Form.Item
+              <SettingItem
                 name="frontend_dir"
                 extra={<DetectedHint field="frontend_dir" />}
                 label={<span style={{ color: 'var(--ink-muted)' }}>Frontend directory</span>}
                 tooltip="Use '.' for the project root. If the frontend lives in a subdirectory, enter its name, e.g. 'frontend'."
               >
                 <Input placeholder=". (project root)" className="input-field" />
-              </Form.Item>
+              </SettingItem>
             </Col>
             <Col xs={24} md={8}>
-              <Form.Item
+              <SettingItem
                 name="frontend_build_tool"
                 extra={<DetectedHint field="frontend_build_tool" />}
                 label={<span style={{ color: 'var(--ink-muted)' }}>Build tool</span>}
@@ -66,29 +67,29 @@ export default function FrontendStep() {
                   <Option value="pnpm">pnpm</Option>
                   <Option value="bun">bun</Option>
                 </Select>
-              </Form.Item>
+              </SettingItem>
             </Col>
             <Col xs={24} md={8}>
-              <Form.Item
+              <SettingItem
                 name="frontend_build_command"
                 extra={<DetectedHint field="frontend_build_command" />}
                 label={<span style={{ color: 'var(--ink-muted)' }}>Build command</span>}
                 tooltip="e.g. build, build:prod"
               >
                 <Input placeholder="build" className="input-field" />
-              </Form.Item>
+              </SettingItem>
             </Col>
           </Row>
           <Row gutter={16}>
             <Col xs={24} md={8}>
-              <Form.Item
+              <SettingItem
                 name="frontend_output_dir"
                 extra={<DetectedHint field="frontend_output_dir" />}
                 label={<span style={{ color: 'var(--ink-muted)' }}>Output directory</span>}
                 tooltip="Where the frontend build lands, e.g. dist."
               >
                 <Input placeholder="dist" className="input-field" />
-              </Form.Item>
+              </SettingItem>
             </Col>
           </Row>
 
@@ -119,7 +120,7 @@ export default function FrontendStep() {
           </div>
           <Row gutter={16}>
             <Col xs={24} md={8}>
-              <Form.Item
+              <SettingItem
                 name="frontend_env_filename"
                 label={<span style={{ color: 'var(--ink-muted)' }}>Env filename</span>}
                 tooltip="e.g. .env.production (takes priority over .env at build time)."
@@ -134,10 +135,10 @@ export default function FrontendStep() {
                     (option?.value as string)?.toLowerCase().includes(input.toLowerCase())
                   }
                 />
-              </Form.Item>
+              </SettingItem>
             </Col>
           </Row>
-          <Form.Item
+          <SettingItem
             name="frontend_env_content"
             label={<span style={{ color: 'var(--ink-muted)' }}>Env content</span>}
             tooltip="Written into the frontend directory before the build. One KEY=VALUE per line."
@@ -148,7 +149,7 @@ export default function FrontendStep() {
               className="input-field"
               style={{ fontFamily: 'var(--font-mono)' }}
             />
-          </Form.Item>
+          </SettingItem>
         </div>
       )}
     </>

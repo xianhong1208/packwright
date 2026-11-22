@@ -18,7 +18,7 @@
                           產物 + Docker image .tar.gz
 ```
 
-- **來源。** 一個建置不是*本機路徑*(限制在 `LOCAL_SOURCE_ROOTS` 內)就是 *Git URL*。Git 模式會驗證 URL(拒絕 `file://`、`ssh://`、localhost、link-local、或帶帳密的 URL),clone 到指定 branch/tag,Python 專案還會先建 `.venv` 再打包。git 只會送出 Packwright 裡存的憑證,絕不使用伺服器帳號自己的 git 設定或登入。
+- **來源。** 一個建置不是*本機路徑*(限制在 `LOCAL_SOURCE_ROOTS` 內)就是 *Git URL*。Git 模式會驗證 URL(拒絕 `file://`、`ssh://`、localhost、link-local、或帶帳密的 URL),把指定的 branch/tag 解析成一個 commit,只 checkout 那個 commit(記在建置上),Python 專案還會先建 `.venv` 再打包。git 只會送出 Packwright 裡存的憑證,絕不使用伺服器帳號自己的 git 設定或登入。
 - **Token 注入。** 私有 repo 會依主機查出對應 token、解密,只在那一次呼叫 `git` 時,以限定在該 repo 來源的 HTTP 認證 header 交給它(經由 `GIT_CONFIG_*` 環境變數,所以也不會出現在命令列)。不會出現在網址、保存的建置設定或日誌,API 也不會回傳。
 - **併發。** `MAX_CONCURRENT_BUILDS` 以 semaphore 限制同時進行的建置(各種類型都算),其餘排隊;同一個本機資料夾的建置一次一個,等待時不佔名額;行程刻意單一 worker,因為任務狀態、WebSocket 連線與 build semaphore 都在行程記憶體裡。
 - **清理。** 背景迴圈依狀態與時間刪除各任務工作區與匯出的 image,並可將成功建置的工作區縮到只剩產出。
@@ -43,6 +43,8 @@
 | `MAX_CONCURRENT_BUILDS` | `3` | 同時進行的建置數,其餘排隊。 |
 | `PUBLIC_URL` | *(空)* | 大家開啟 Packwright 用的網址;建置通知會用它附上建置頁面的連結。 |
 | `TRUSTED_PROXY_IPS` | *(空)* | 可信任 `X-Forwarded-For` 的代理 IP;留空最安全。 |
+| `WEBHOOK_PER_MINUTE` / `WEBHOOK_MAX_BODY_BYTES` | `60` / `1048576` | 每個用戶端位址每分鐘可送的 webhook 次數,以及收得下的最大內容(超過回 413)。 |
+| `SCHEDULES_ENABLED` / `SCHEDULE_TIMEZONE` | `true` / *(伺服器的時區)* | 是否執行排程建置;新排程預設的時區。 |
 | `RATE_LIMIT_PER_MINUTE` / `RATE_LIMIT_PER_HOUR` | `300` / `6000` | 每個用戶端位址可以呼叫 API 的次數(同一個 NAT 或代理後面的人共用);登入、註冊與送出建置另有更嚴的上限。 |
 
 ## 儲存與資料
@@ -80,6 +82,41 @@ DATABASE_URL=sqlite+aiosqlite:////srv/packwright/build_center.db
 | `DOCKER_IMAGES_TTL_DAYS` | `30` | 匯出的 image tarball。 |
 
 建置成功時工作區也會自動精簡:非 Docker 建置只留下產物(丟掉 clone、`.venv`、`.git`),Docker 建置則直接刪除整個工作區,因為 image tarball 已保存結果。
+
+## Docker image
+
+後端或全端開啟 Docker 時,程式先在主機上編譯,image 只把產物複製進精簡的基底映像(預設 `python:3.13-slim`):
+
+- **系統套件。** image 一律安裝 `libpq5 zlib1g libxml2 libxslt1.1`;圖形介面與繪圖函式庫(OpenGL、GLib、X11、xcb、
+  fontconfig…)只有在打包進去的擴充模組需要時才裝:Packwright 會讀產物裡每個 `.so` 要載入的函式庫(ELF `DT_NEEDED`)。
+  OpenCV、Qt 會帶進它們需要的套件,大多數程式一個都不需要。建置日誌會列出每個額外套件,以及是哪個檔案需要它。
+  用 `dlopen()` 或 `ctypes` 載入的函式庫不會出現在任何清單裡,請在 *Custom commands* 加一行 `apt-get` 安裝。
+- **壓縮。** 單一執行檔用 zstandard 壓縮(`nuitka[onefile]`,隨 Packwright 安裝,`scripts/setup_nuitka_venvs.sh`
+  也會裝);少了它,preflight 的 *Onefile compression* 會提醒。
+- **不帶建置殘留。** editable 安裝的 finder(uv 為 Git 專案寫的 `__editable___<名稱>_finder.py`)不會複製進
+  `libs/`:程式自己的程式碼已經編進執行檔。
+- 建置日誌與建置結果會顯示 image 的大小。
+- **狀態與執行身分。** 程式以使用者 `app`(uid 10001)執行,它擁有自己的檔案(在 `COPY` 時就指定,不會多存一份)
+  與 `/app`。Docker 設定 → Advanced 的 *Run as root* 可以關掉這個行為。**Volumes** 設定列出程式存放狀態的資料夾
+  (相對於 `/app` 或絕對路徑);每個資料夾都會在 image 裡建立、交給 `app`,並宣告成 `VOLUME`。留空時,使用煙霧測試
+  期間程式自己建立的資料夾(MCP Gate:`data`、`logs`、`secrets`),並寫回這次建置的設定;專案還沒設定時也寫進專案,
+  下次建置欄位就會帶入。建置會建議一個保留這些資料的 `docker run`:
+
+  ```bash
+  docker run -d --name mcp_gate -p 4598:4598 -v mcp_gate-data:/app/data -v mcp_gate-secrets:/app/secrets mcp_gate:1.4.0
+  ```
+
+  新的 named volume 會帶著 image 裡該資料夾的內容與擁有者,非 root 的程式可以直接寫入。若改用 bind mount,
+  請把主機資料夾交給 uid 10001(`chown 10001:10001 <目錄>`)。
+
+- **煙霧測試的對象是 image。** image 建好後,用 `docker run -d` 以不重複的名稱(`<repo>-smoke-<hex>`)啟動,
+  Docker ENV 已經在 image 裡,走預設的 bridge 網路(不對外開 port);和執行檔測試一樣等 10 秒,正常結束或仍在執行
+  就算通過,之後連同匿名 volume 一起刪除。啟動失敗會讓建置失敗,並附上容器的輸出。建置主機沒有 Docker 時,改在主機上
+  測執行檔,日誌會註明。Volumes 留空時,以這次執行建立的資料夾(`docker diff`)為準,用它們再建一次 image(走 layer
+  快取,幾秒鐘),並測試這個新 image。
+- **Port 檢查。** 煙霧測試期間,Packwright 會記下程式實際監聽的 TCP port(image 從容器內讀;執行檔從 `/proc` 讀它的
+  process group 的 socket)。在容器裡只綁 127.0.0.1 的程式也會提醒:對外的 port 連不到它。如果 image 對外的 port 不是它,建置日誌與建置結果會發出警告並建議該用的值(例如「程式監聽 4598,
+  image 卻開 8000」)。設定不會被自動修改:一個程式可能監聽好幾個 port。
 
 ## Git 憑證
 

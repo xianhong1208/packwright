@@ -1,7 +1,7 @@
 import { Suspense, useEffect, useMemo, useState, type ComponentType } from 'react'
 import { Outlet, useLocation, useNavigate } from 'react-router-dom'
 import { Button, Drawer, Dropdown, Input, Modal, Spin, Tooltip } from 'antd'
-import { ClockCounterClockwiseIcon, ClockIcon, GaugeIcon, GearIcon, HouseIcon, KeyIcon, ListIcon, MagnifyingGlassIcon, PlusIcon, ShieldCheckIcon, SignOutIcon, UsersIcon, PackageIcon } from '../ui/icons'
+import { ClockCounterClockwiseIcon, ClockIcon, GaugeIcon, GearIcon, HouseIcon, KeyIcon, ListIcon, MagnifyingGlassIcon, PlusIcon, ShieldCheckIcon, SignOutIcon, TerminalWindowIcon, UsersIcon, PackageIcon } from '../ui/icons'
 import type { IconProps } from '../ui/icons'
 import Mark from '../ui/Mark'
 import { useQuery } from '@tanstack/react-query'
@@ -31,6 +31,12 @@ const ADMIN_NAV: NavItem[] = [
   { path: '/admin/users', label: 'Users', Icon: UsersIcon, permission: ['user:view'], match: (p) => p.startsWith('/admin/users') },
   { path: '/admin/roles', label: 'Roles', Icon: ShieldCheckIcon, permission: ['role:view'] },
   { path: '/settings/git-credentials', label: 'Git credentials', Icon: KeyIcon, permission: ['user:manage'] },
+]
+
+// Your own settings: in the account menu and the drawer, and found by the quick jump.
+const ACCOUNT_NAV: NavItem[] = [
+  { path: '/settings/security', label: 'Security', Icon: GearIcon },
+  { path: '/settings/api-tokens', label: 'API tokens', Icon: TerminalWindowIcon },
 ]
 
 const isActive = (item: NavItem, pathname: string) =>
@@ -121,7 +127,7 @@ export default function AppShell() {
     items: [
       { key: 'who', label: <span className="text-[var(--ink-muted)]">{user?.username}, {user?.role?.display_name ?? 'User'}</span>, disabled: true },
       { type: 'divider' as const },
-      { key: 'security', icon: <GearIcon />, label: 'Security', onClick: () => go('/settings/security') },
+      ...ACCOUNT_NAV.map((item) => ({ key: item.path, icon: <item.Icon />, label: item.label, onClick: () => go(item.path) })),
       { key: 'logout', icon: <SignOutIcon />, label: 'Sign out', danger: true, onClick: handleLogout },
     ],
   }
@@ -183,7 +189,7 @@ export default function AppShell() {
         <div className="space-y-1">{MAIN_NAV.map(drawerLink)}</div>
         {adminNav.length > 0 && <div className="mt-4 pt-4 border-t border-[var(--seam)] space-y-1">{adminNav.map(drawerLink)}</div>}
         <div className="mt-4 pt-4 border-t border-[var(--seam)] space-y-1">
-          {drawerLink({ path: '/settings/security', label: 'Security', Icon: GearIcon, match: (p) => p === '/settings/security' })}
+          {ACCOUNT_NAV.map(drawerLink)}
           <button type="button" onClick={handleLogout} className="nav-item w-full text-alert-400">
             <span className="text-lg"><SignOutIcon /></span>
             <span className="flex-1 text-left">Sign out {user?.username}</span>
@@ -191,7 +197,7 @@ export default function AppShell() {
         </div>
       </Drawer>
 
-      <QuickJump open={paletteOpen} onClose={() => setPaletteOpen(false)} onGo={go} pages={[...MAIN_NAV, ...adminNav]} />
+      <QuickJump open={paletteOpen} onClose={() => setPaletteOpen(false)} onGo={go} pages={[...MAIN_NAV, ...adminNav, ...ACCOUNT_NAV]} />
 
       {/* Idle timeout warning */}
       <Modal

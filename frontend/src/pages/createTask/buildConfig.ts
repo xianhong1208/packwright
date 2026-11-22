@@ -82,6 +82,10 @@ export function assembleTaskCreate({
     docker_custom_commands: str(values.docker_custom_commands),
     docker_install_node: (values.docker_install_node as boolean) ?? false,
     docker_api_proxy: str(values.docker_api_proxy),
+    // Empty means "not set yet" (null), not "no volumes": the build then uses
+    // the folders the program created in its smoke run, and saves them here.
+    docker_volumes: str(values.docker_volumes).trim() || null,
+    docker_run_as_root: (values.docker_run_as_root as boolean) ?? false,
 
     nginx_client_max_body_size: str(values.nginx_client_max_body_size, '0'),
     // 300s, not nginx's 60s: an idle timeout that short kills speech-to-text

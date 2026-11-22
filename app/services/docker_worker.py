@@ -10,11 +10,13 @@ from textwrap import dedent
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.schemas.task import BuildConfig, ProjectType, PackMode
+from app.schemas.task import BuildConfig, ProjectType, PackMode, SourceType
 from app.services.source_guard import SourceGuard
 from app.services.task_manager import task_manager
 from app.services.build_env import build_environment
 from app.services.process_runner import run_step
+from app.services.system_libs import SystemPackages, system_packages
+from app.services.image_smoke import smoke_test_image
 
 
 async def run_docker_build(
@@ -63,7 +65,7 @@ async def _run_docker_build(
     await task_manager.append_log(task_id, "Docker found, preparing build...")
 
     # Determine image name
-    image_name = image_reference(config.docker_image_name, project_path.name, config.version)
+    image_name = image_reference(config.docker_image_name, default_image_repo(config), config.version)
 
     await task_manager.append_log(task_id, f"Image name: {image_name}")
 
@@ -102,15 +104,34 @@ async def _run_docker_build(
     # Generate Dockerfile based on project type
     dockerfile_path = project_path / "Dockerfile.generated"
 
+    system = None
+    if precompiled:
+        system = await asyncio.to_thread(system_packages, _scan_roots(config))
+        await task_manager.append_log(task_id, f"System packages: {' '.join(system.packages)}")
+        for pkg, (soname, needed_by) in system.reasons.items():
+            await task_manager.append_log(task_id, f"  + {pkg}: {needed_by} needs {soname}")
+
+    if precompiled and config.docker_volumes is None:
+        # Not set yet: the folders the program created when the smoke test ran
+        # it, saved into this build's settings (and the project's, while unset
+        # there) so the next build shows them in the Volumes field.
+        detected = await _smoke_created_dirs(task_id)
+        if detected:
+            config.docker_volumes = ", ".join(detected)
+            await task_manager.append_log(
+                task_id, f"Volumes (from the folders the smoke run created): {config.docker_volumes}"
+            )
+            await task_manager.record_config_value(task_id, "docker_volumes", config.docker_volumes, db)
+
     try:
-        dockerfile_content = _generate_dockerfile(config, precompiled=precompiled)
+        dockerfile_content = _generate_dockerfile(config, precompiled=precompiled, system=system)
         guard.write(dockerfile_path, dockerfile_content)
         await task_manager.append_log(task_id, "Generated Dockerfile")
         await task_manager.append_log(task_id, "")
         await task_manager.append_log(task_id, "=== Dockerfile ===")
-        for line in dockerfile_content.split("\n")[:20]:
+        for line in dockerfile_content.split("\n")[:40]:
             await task_manager.append_log(task_id, line)
-        if dockerfile_content.count("\n") > 20:
+        if dockerfile_content.count("\n") > 40:
             await task_manager.append_log(task_id, "... (truncated)")
         await task_manager.append_log(task_id, "==================")
 
@@ -135,6 +156,10 @@ async def _run_docker_build(
 
     success = await _run_docker_command(task_id, build_cmd, project_path)
 
+    if success and config.verify_after_build:
+        success = await _verify_image(task_id, config, image_name, build_cmd, project_path, precompiled, system,
+                                      guard, dockerfile_path, db)
+
     # Put the project's files back now rather than after the (long) export.
     await _restore_and_log(task_id, guard)
 
@@ -142,9 +167,24 @@ async def _run_docker_build(
         await task_manager.append_log(task_id, "")
         await task_manager.append_log(task_id, "=" * 50)
         await task_manager.append_log(task_id, f"Docker image built successfully: {image_name}")
+        size = await _image_size(image_name)
+        if size is not None:
+            await task_manager.append_log(task_id, f"Image size: {size / 1_000_000:.1f} MB")
+        await task_manager.merge_result(
+            task_id,
+            {"image": {
+                "name": image_name,
+                "size_bytes": size,
+                "run_command": run_hint(config, image_name, precompiled=precompiled),
+                "volumes": [mount_point(v) for v in parse_volumes(config.docker_volumes)] if precompiled else [],
+                "user": "root" if config.docker_run_as_root or not precompiled else f"{APP_USER} (uid {APP_UID})",
+            }},
+            db,
+        )
+        run_command = run_hint(config, image_name, precompiled=precompiled)
         await task_manager.append_log(task_id, "")
         await task_manager.append_log(task_id, "To run the container:")
-        await task_manager.append_log(task_id, f"  docker run --rm --network host {image_name}")
+        await task_manager.append_log(task_id, f"  {run_command}")
         await task_manager.append_log(task_id, "=" * 50)
 
         # Export Docker image as .tar.gz for download
@@ -209,6 +249,84 @@ async def _run_docker_build(
             tar_path.unlink(missing_ok=True)
 
     return success
+
+
+async def _verify_image(
+    task_id: str,
+    config: BuildConfig,
+    image_name: str,
+    build_cmd: list[str],
+    project_path: Path,
+    precompiled: bool,
+    system: SystemPackages | None,
+    guard: SourceGuard,
+    dockerfile_path: Path,
+    db: AsyncSession,
+) -> bool:
+    """Smoke-test the image (see image_smoke); False when it failed.
+
+    With Volumes not set, the folders the program created in the container
+    become volumes: the Dockerfile gets them, the image is built again (every
+    layer but the last few comes from the cache) and that image is tested, so
+    what ships is what passed, with its volumes owned by the program's user.
+    """
+    from app.services.nuitka_worker import docker_port_check
+    from app.services.process_runner import is_cancelled
+
+    await task_manager.set_stage(task_id, "verify")
+    await task_manager.update_task(task_id, "status_msg", "Smoke-testing the image...")
+    await task_manager.append_log(task_id, "")
+    await task_manager.append_log(task_id, f"=== Smoke test: starting the image {image_name} ===")
+
+    async def cancelled() -> bool:
+        return await is_cancelled(task_id)
+
+    verify = await smoke_test_image(image_name, is_cancelled=cancelled)
+    await task_manager.append_log(task_id, f"Ran it as container {verify.get('container')} (removed)")
+    detected = verify.get("created_dirs") or []
+    if detected:
+        await task_manager.append_log(task_id, "The program created " + ", ".join(f"/app/{d}/" for d in detected))
+
+    if precompiled and config.docker_volumes is None and detected and verify["status"] != "fail":
+        config.docker_volumes = ", ".join(detected)
+        await task_manager.record_config_value(task_id, "docker_volumes", config.docker_volumes, db)
+        await task_manager.append_log(
+            task_id, f"Volumes (not set, so taken from that run): {config.docker_volumes} — building the image again"
+        )
+        guard.write(dockerfile_path, _generate_dockerfile(config, precompiled=precompiled, system=system))
+        await task_manager.set_stage(task_id, "docker")
+        first_id = await _image_id(image_name)
+        if not await _run_docker_command(task_id, build_cmd, project_path):
+            return False
+        # The first image lost its tag to the second: remove it rather than
+        # leave an untagged copy on the build host for every such build.
+        if first_id and first_id != await _image_id(image_name):
+            await _docker_quiet("image", "rm", first_id)
+        await task_manager.set_stage(task_id, "verify")
+        await task_manager.append_log(task_id, "=== Smoke test: the image with its volumes ===")
+        verify = await smoke_test_image(image_name, is_cancelled=cancelled)
+        await task_manager.append_log(task_id, f"Ran it as container {verify.get('container')} (removed)")
+        verify["created_dirs"] = detected
+
+    marker = {"pass": "✓", "warn": "⚠", "fail": "✗"}.get(verify["status"], "•")
+    await task_manager.append_log(task_id, f"Verify (image): {marker} {verify['detail']}")
+    if verify.get("listeners"):
+        await task_manager.append_log(
+            task_id, "Listening in the container: "
+            + ", ".join(f"{x['address']}:{x['port']}" for x in verify["listeners"])
+        )
+    patch: dict = {"verify": verify}
+    checked = docker_port_check(config, verify, container=True)
+    if checked:
+        patch["port_check"] = checked
+        if checked["message"]:
+            await task_manager.append_log(task_id, f"⚠ Port: {checked['message']}")
+    await task_manager.merge_result(task_id, patch, db)
+    if verify["status"] == "fail":
+        await task_manager.append_log(task_id, "Smoke test failed — marking build as failed")
+        return False
+    await task_manager.set_stage(task_id, "docker")  # on to the export
+    return True
 
 
 def _compressor_argv(threads: int) -> tuple[list[str], str]:
@@ -364,6 +482,22 @@ def docker_tag(version: str) -> str:
     return tag or "latest"
 
 
+def default_image_repo(config: BuildConfig) -> str:
+    """What an image is named after when no name is set: the repository for a Git
+    build, the folder for a local one.
+
+    A Git build is cloned into a workspace named after the task, so the folder's
+    name is a task id: packaging MCP Gate from Git produced the image
+    "be1d3c22-b30d-479d-8cc7-101d31c6ec90:1.3.1", a new repository on every build.
+    """
+    if config.source_type == SourceType.GIT and config.git_url.strip():
+        last = re.split(r"[/:]", config.git_url.strip().rstrip("/"))[-1]
+        last = re.sub(r"\.git$", "", last, flags=re.IGNORECASE)
+        if last:
+            return last
+    return Path(config.project_path).name
+
+
 def image_reference(configured: str, folder_name: str, version: str) -> str:
     """The image a build is tagged as.
 
@@ -394,7 +528,121 @@ def _version_block(version: str) -> str:
     )
 
 
-def _generate_dockerfile(config: BuildConfig, precompiled: bool = False) -> str:
+# The program's user in a backend image. A fixed number rather than whatever
+# useradd picks, so files on a bind mount can be given to it with one chown.
+APP_USER = "app"
+APP_UID = 10001
+
+_VOLUME_PATH = re.compile(r"^[A-Za-z0-9._/-]+$")
+
+
+def parse_volumes(value: str | None) -> list[str]:
+    """The folders in a Volumes setting, in order, without duplicates.
+
+    Comma- or newline-separated; each relative to /app (the image's WORKDIR) or
+    absolute. Raises ValueError naming an entry that could not be a plain path:
+    it lands in a Dockerfile RUN and VOLUME line.
+    """
+    out: list[str] = []
+    for raw in re.split(r"[,\n]", value or ""):
+        entry = raw.strip()
+        if not entry:
+            continue
+        norm = entry.rstrip("/") or "/"
+        parts = [p for p in norm.split("/") if p]
+        if not _VOLUME_PATH.match(entry) or ".." in parts or not parts:
+            raise ValueError(
+                f"Volume {entry!r} is not a plain folder path: use letters, digits, '.', '_', '-' and '/', "
+                "relative to /app (e.g. data) or absolute (e.g. /var/lib/myapp), without '..'"
+            )
+        if norm not in out:
+            out.append(norm)
+    return out
+
+
+def mount_point(volume: str) -> str:
+    """Where a Volumes entry is inside the image."""
+    return volume if volume.startswith("/") else f"/app/{volume}"
+
+
+def _volume_name(repo: str, volume: str) -> str:
+    """A named volume for the run hint: <repo>-<folder>, e.g. mcp_gate-data."""
+    slug = re.sub(r"[^A-Za-z0-9_.-]+", "-", volume.strip("/")).strip("-.") or "data"
+    return f"{repo}-{slug}"
+
+
+def run_hint(config: BuildConfig, image_name: str, precompiled: bool) -> str:
+    """The `docker run` command the build suggests.
+
+    It used to be `docker run --rm --network host <image>`: --rm threw away
+    everything the program wrote (MCP Gate: a new database, new signing keys and
+    a new encryption key on every start), and host networking hid a wrong EXPOSE.
+    Now a detached container with its port published and a named volume per
+    state folder, which survive restarts and re-creating the container.
+    """
+    last = image_name.rsplit("/", 1)[-1]
+    repo = re.sub(r"[^A-Za-z0-9_.-]+", "-", re.split(r"[:@]", last)[0]).strip("-.") or "app"
+    port = config.docker_expose_port
+    parts = ["docker run -d", f"--name {repo}", f"-p {port}:{port}"]
+    if precompiled:
+        for volume in parse_volumes(config.docker_volumes):
+            parts.append(f"-v {_volume_name(repo, volume)}:{mount_point(volume)}")
+    parts.append(image_name)
+    return " ".join(parts)
+
+
+async def _smoke_created_dirs(task_id: str) -> list[str]:
+    """The folders the program created in its smoke run (see nuitka_worker._smoke_test)."""
+    task = await task_manager.get_task(task_id)
+    verify = task.result.verify if task and task.result else None
+    return list(verify.created_dirs) if verify else []
+
+
+def _scan_roots(config: BuildConfig) -> list[Path]:
+    """Where the shared objects that ship in the image are: the output folder
+    (libs/ or the standalone .dist folder), and for Full mode the project's
+    packages too, since a onefile binary keeps its copies inside itself."""
+    project = Path(config.project_path)
+    roots = [project / (config.output_dir or "dist")]
+    if config.pack_mode == PackMode.FULL:
+        roots.extend(sorted((project / ".venv").glob("lib/python*/site-packages")))
+    return roots
+
+
+async def _docker_quiet(*args: str) -> tuple[int, str]:
+    """A docker CLI call whose output is only returned: (returncode, stdout)."""
+    try:
+        proc = await asyncio.create_subprocess_exec(
+            "docker", *args, stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.DEVNULL,
+        )
+        out, _ = await proc.communicate()
+    except OSError:
+        return -1, ""
+    return proc.returncode or 0, out.decode().strip()
+
+
+async def _image_id(image_name: str) -> str | None:
+    code, out = await _docker_quiet("image", "inspect", "-f", "{{.Id}}", image_name)
+    return out if code == 0 and out else None
+
+
+async def _image_size(image_name: str) -> int | None:
+    """The image's size in bytes as `docker image ls` reports it, or None."""
+    try:
+        proc = await asyncio.create_subprocess_exec(
+            "docker", "image", "inspect", "-f", "{{.Size}}", image_name,
+            stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.DEVNULL,
+        )
+        out, _ = await proc.communicate()
+    except OSError:
+        return None
+    text = out.decode().strip()
+    return int(text) if proc.returncode == 0 and text.isdigit() else None
+
+
+def _generate_dockerfile(
+    config: BuildConfig, precompiled: bool = False, system: SystemPackages | None = None
+) -> str:
     """Generate Dockerfile based on project type and configuration.
 
     Backend/fullstack projects always use precompiled Nuitka binaries
@@ -408,7 +656,9 @@ def _generate_dockerfile(config: BuildConfig, precompiled: bool = False) -> str:
         return _generate_frontend_dockerfile(config, port) + _version_block(config.version)
 
     # Backend and fullstack always use precompiled binary
-    return _generate_precompiled_dockerfile(config, base_image, port) + _version_block(config.version)
+    if system is None:
+        system = system_packages(_scan_roots(config))
+    return _generate_precompiled_dockerfile(config, base_image, port, system) + _version_block(config.version)
 
 
 def _generate_frontend_dockerfile(config: BuildConfig, port: int) -> str:
@@ -641,7 +891,25 @@ def _generate_frontend_dockerfile(config: BuildConfig, port: int) -> str:
     """)
 
 
-def _generate_precompiled_dockerfile(config: BuildConfig, base_image: str, port: int) -> str:
+def _outermost_dirs(dirs: list[str]) -> list[str]:
+    """The listed directories without those inside another listed one, in order.
+
+    A full-stack build adds its frontend output to the data dirs; when that
+    output sits in a data dir already listed (MCP Gate: static/web inside
+    static), COPYing both put the frontend into the image twice.
+    """
+    norm = [os.path.normpath(d) for d in dirs]
+    kept: list[str] = []
+    for d in norm:
+        if d in kept or any(d.startswith(other + os.sep) for other in norm if other != d):
+            continue
+        kept.append(d)
+    return kept
+
+
+def _generate_precompiled_dockerfile(
+    config: BuildConfig, base_image: str, port: int, system: SystemPackages
+) -> str:
     """Generate Dockerfile for precompiled Nuitka binary built on host.
 
     Only copies the compiled output into a slim runtime image.
@@ -665,16 +933,31 @@ def _generate_precompiled_dockerfile(config: BuildConfig, base_image: str, port:
     extra_blocks += _render_docker_env_vars(config.docker_env_vars)
     extra_blocks += _render_custom_commands(config.docker_custom_commands)
 
+    # The program runs as a non-root user unless asked otherwise. Its files are
+    # given to it on the COPY itself (--chown), never by a RUN chown afterwards,
+    # which would store every file a second time (see the --chmod note below).
+    as_root = config.docker_run_as_root
+    own = "" if as_root else f"--chown={APP_USER}:{APP_USER} "
+    if not as_root:
+        extra_blocks += (
+            "\n# The program's own user\n"
+            f"RUN useradd --system --uid {APP_UID} --user-group --home-dir /app --no-create-home {APP_USER}\n"
+        )
+
     # Copy compiled binary
     if config.onefile:
-        copy_binary = f"COPY {output_dir}/{binary_name} ./\nRUN chmod +x ./{binary_name}\n"
+        # --chmod on the COPY, not a RUN chmod afterwards: changing a file's mode
+        # in a later layer stores the whole file again, which doubled the
+        # binary's share of the image (MCP Gate: 2 x 49.7 MB). The build runs
+        # with DOCKER_BUILDKIT=1, which --chmod needs.
+        copy_binary = f"COPY {own}--chmod=755 {output_dir}/{binary_name} ./\n"
     else:
-        copy_binary = f"COPY {output_dir}/{entry_stem}.dist/ ./\n"
+        copy_binary = f"COPY {own}{output_dir}/{entry_stem}.dist/ ./\n"
 
     # Third-party packages (only in EXTERNAL mode — libs/ created by nuitka_worker)
     copy_libs = ""
     if config.pack_mode == PackMode.EXTERNAL:
-        copy_libs = f"COPY {output_dir}/libs/ ./libs/\n"
+        copy_libs = f"COPY {own}{output_dir}/libs/ ./libs/\n"
 
     # Data directories (copied to output_dir by nuitka_worker).
     # Only COPY dirs that actually landed in dist/: nuitka_worker skips (with a
@@ -684,20 +967,39 @@ def _generate_precompiled_dockerfile(config: BuildConfig, base_image: str, port:
     data_copy_lines = ""
     if config.data_dirs:
         dist_root = Path(config.project_path) / output_dir
-        for data_dir in [d.strip() for d in config.data_dirs.split(",") if d.strip()]:
+        for data_dir in _outermost_dirs([d.strip() for d in config.data_dirs.split(",") if d.strip()]):
             if (dist_root / data_dir).is_dir():
-                data_copy_lines += f"COPY {output_dir}/{data_dir}/ ./{data_dir}/\n"
+                data_copy_lines += f"COPY {own}{output_dir}/{data_dir}/ ./{data_dir}/\n"
 
+    # State folders: created in the image and owned by the program's user, so a
+    # new named volume mounted there starts with that owner (Docker copies the
+    # image folder's ownership into an empty volume). Without the folder in the
+    # image, Docker creates the mount point as root and a non-root program
+    # cannot write its own data. /app itself is given to the user too, for the
+    # folders it creates that are not volumes (logs, caches).
+    volumes = [mount_point(v) for v in parse_volumes(config.docker_volumes)]
+    state_block = ""
+    if not as_root:
+        state_block += f"RUN mkdir -p {' '.join(volumes)} && chown {APP_USER}:{APP_USER} /app {' '.join(volumes)}\n" if volumes \
+            else f"RUN chown {APP_USER}:{APP_USER} /app\n"
+    elif volumes:
+        state_block += f"RUN mkdir -p {' '.join(volumes)}\n"
+    if volumes:
+        state_block += "VOLUME [" + ", ".join(f'"{v}"' for v in volumes) + "]\n"
+    if not as_root:
+        state_block += f"USER {APP_USER}\n"
+
+    # Only what the shipped extensions load (see system_libs): the GUI and
+    # OpenGL libraries every image used to get were 221 MB of MCP Gate's 449.
+    packages = " ".join(system.packages)
     return dedent(f"""\
         # === Precompiled Backend Dockerfile ===
         FROM {base_image}
         WORKDIR /app
-        RUN apt-get update && apt-get install -y --no-install-recommends \
-            libpq5 \
-            libxcb1 libglib2.0-0 libsm6 libxrender1 libxext6 libgl1 \
-            zlib1g libxml2 libxslt1.1 \
+        RUN apt-get update && apt-get install -y --no-install-recommends {packages} \\
             && apt-get clean && rm -rf /var/lib/apt/lists/*
-    """) + extra_blocks + "\n# Copy precompiled Nuitka output\n" + copy_binary + copy_libs + data_copy_lines + dedent(f"""\
+    """) + extra_blocks + "\n# Copy precompiled Nuitka output\n" + copy_binary + copy_libs + data_copy_lines \
+        + state_block + dedent(f"""\
         ENV HOST=0.0.0.0
         ENV PORT={port}
         ENV LANG=C.UTF-8

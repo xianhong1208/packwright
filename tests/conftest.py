@@ -23,6 +23,8 @@ os.environ.update({
     "BOOTSTRAP_ADMIN_USERNAME": "admin",
     "BOOTSTRAP_ADMIN_PASSWORD": "integration-admin-pass",
     "WORKSPACE_CLEANUP_ENABLED": "false",
+    # The scheduler loop is driven by hand (app.services.schedules.run_due) in tests.
+    "SCHEDULES_ENABLED": "false",
     # The integration suite submits more than the default 20 builds a minute from
     # one address; the limiter itself is covered by tests/unit/middleware.
     "BUILD_SUBMIT_PER_MINUTE": "1000",

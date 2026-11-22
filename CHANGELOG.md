@@ -6,6 +6,197 @@ follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this proje
 
 ## [Unreleased]
 
+## [1.4.0] — 2026-11-22
+
+### Added
+- A Git build checks out one exact commit and records it (first part of #3). The branch or tag is resolved to
+  its commit when the build starts (`git ls-remote`; an annotated tag is peeled to the commit it tags), and the
+  workspace gets exactly that commit (`git init` + `git fetch --depth 1 <url> <commit>` + `checkout --detach`,
+  then `HEAD` is compared with it). A build can also be created for a given commit (`git_commit` on
+  `POST /api/tasks`, a full 40- or 64-hex id only; the webhooks of a later release pass the pushed commit). A
+  server that serves only the commits its refs point at (git protocol v0) fails such a build when the branch has
+  moved on, saying where it points now, instead of building another commit. The Builds list, a build's page and
+  notifications show the commit (seven characters, the full id copied on click; notifications give twelve and
+  the JSON body the full id). Local sources record no commit.
+- Each build records what started it: `console`, `api`, `push`, `tag` or `schedule` (all five exist in this release). It is set by the server, never taken from the
+  request body, and shown in the Builds list, on a build's page, in the CSV export and in notifications
+  ("Started by mei (console)"; `trigger` in the JSON body). Migration `b4e8d2f6a9c1` adds `history.commit_sha`
+  and `history.trigger`; existing builds become `console` with no commit.
+
+- API tokens for scripts and CI (#5). Everyone signed in creates their own under the account menu → *API tokens*:
+  a name, scopes (`builds:read`, `builds:write`, `projects:read`) and an expiry of 7, 30 or 90 days or a year (365
+  at most; one is required). The token (`pwt_` + 43 base62 characters + a 6-character CRC32 checksum, so scanners
+  and the server can tell a typo without a lookup) is shown once; only its SHA-256 and its first 12 characters are
+  stored. Send it as `Authorization: Bearer pwt_…` to start builds (`POST /api/tasks`,
+  `POST /api/projects/{id}/builds`), cancel them, list and read builds and their logs, download results and list
+  projects; the live log WebSocket takes it in an `Authorization` header (never in `?token=`). Every other
+  endpoint (users, roles, Git credentials, notifications, tokens, `/auth/*`, the wizard helpers, monitoring) answers
+  403 to a token whatever its scopes: there is no admin scope. What a token may do is its scopes intersected with
+  its owner's role as it is on that request, and a deactivated owner's tokens get 401 at once. Revoked, expired,
+  unknown and malformed tokens all get the same 401; the reason goes to the audit log (`api_token_rejected`, and
+  `api_token_denied` for a missing scope), as do creating and revoking. Builds started with a token are recorded as
+  `api`. Last use is written at most once a minute. Admins (`user:manage`) see everyone's tokens, never the secrets,
+  and can revoke them. Migration `c9d4e1f7a2b6` adds the `api_tokens` table.
+
+- Webhooks: build on push or tag (#3). A project's settings get a **Webhooks** tab; its creator and holders of
+  `project:manage` add, change, turn off and delete webhooks, everyone who may build sees them. Each webhook is for
+  GitHub, GitLab, Gitea or any script, posts to `/api/hooks/{github|gitlab|gitea|generic}/{id}` (the id is 128
+  random bits), and has its own secret (256 bits), shown once with the payload URL and short setup steps, stored
+  encrypted like Git credentials, and replaceable (*New secret*; the old one stops at once). GitHub and Gitea
+  deliveries must carry an HMAC-SHA256 of the raw body (`X-Hub-Signature-256: sha256=…`, or Gitea's
+  `X-Gitea-Signature`); GitLab's carry the secret as `X-Gitlab-Token`, or, once the signing token GitLab 19
+  generates is pasted in, a Standard Webhooks signature (`webhook-signature: v1,…` over id, timestamp and body, at
+  most 5 minutes old), which is then required. The generic URL takes the token as `Authorization: Bearer`,
+  `X-Packwright-Token` or `?token=` (the console warns that a query token ends up in logs) and an optional JSON body
+  `{"ref", "ref_type", "commit"}`. Comparisons are constant-time, bodies over `WEBHOOK_MAX_BODY_BYTES` (1 MiB) get
+  413 without being read, and neither secrets nor bodies are logged. A missing, empty or wrong signature, an
+  unknown webhook and the wrong provider in the URL all get the same 401; the reason is in the webhook's deliveries.
+  A push or tag push builds exactly the pushed commit (trigger `push` or `tag`; a tag that is a valid version
+  becomes the build's version) when the branch or tag matches the webhook's glob patterns and the repository in the
+  payload is the project's (https, ssh and `.git` spellings compared normalised). Pings, other events, deletions,
+  `[skip ci]` / `[ci skip]`, other branches and other repositories answer 200 `ignored` with the reason (GitLab
+  turns off a webhook after repeated 4xx). A delivery id seen before (`X-GitHub-Delivery`, `X-Gitea-Delivery`,
+  GitLab's `webhook-id` / `Idempotency-Key`) is not built again, nor is a commit of the same project and ref that is
+  queued, running or passed in the last 10 minutes. A build answers 202 with its id. Builds run as the person who
+  set the webhook up, checked again each time: if that account is deactivated, gone or without `task:create`, the
+  webhook turns itself off with the reason shown in the console (audited as `hook_disabled`), and someone allowed
+  to change it can take it over. The newest 50 deliveries of each webhook are listed with time, event, ref, commit
+  and result. Webhook deliveries have their own rate limit, `WEBHOOK_PER_MINUTE` (60 per address). Creating,
+  changing, rotating and deleting are audited. Migration `d4f7a9c2e8b1` adds `project_hooks` and `hook_deliveries`.
+
+- Scheduled builds (#4). A project's settings get a **Schedules** tab (Git projects only); its creator and holders
+  of `project:manage` add, change, turn off and delete schedules, everyone who may build sees them and their runs.
+  A schedule is a 5-field cron expression (minute, hour, day of month, month, day of week; `@hourly`, `@daily`,
+  `@weekly`, `@monthly`, `@yearly` too; a sixth, seconds field is refused) with presets (hourly, nightly,
+  weeknights, weekly), an IANA time zone (default `SCHEDULE_TIMEZONE`, else the server's own zone, else UTC) and the
+  branch or tag to build. The dialog shows the expression in words and its next five run times in that zone before
+  saving; a wrong expression or zone is refused with the reason (422). When a run is due, the branch or tag is
+  resolved with `git ls-remote` and exactly that commit is built, trigger `schedule`, as the person who set the
+  schedule up. A run is skipped, and the reason recorded, when a build of the project is queued or running
+  (`overlap`), and, by default (*Skip when unchanged*, per schedule), when the commit and the effective settings
+  equal those of the project's last successful build of that branch or tag (`unchanged`): the effective settings
+  are the complete build configuration the run would be filed with (the project's saved settings with the
+  schedule's branch or tag, and `packwright.toml`'s values, see below), compared as a SHA-256 of its canonical
+  JSON, so any changed setting builds again.
+  Missed runs are not made up: a run found more than 2 minutes late (Packwright was not running) is recorded once
+  as `missed` and the next run is counted from now. The next run time is stored, so it survives a restart, and a
+  run is claimed with a conditional update of it, so it fires once even if two scheduler loops look at the same
+  moment (SQLite and PostgreSQL). Daylight-saving time: a run in a skipped hour (02:30 on a spring-forward night)
+  runs once at the jump (03:00); a fixed time in the repeated autumn hour runs once. The creator is checked again
+  at every run: if that account is deactivated, gone or without `task:create`, the schedule turns itself off with
+  the reason (audited as `schedule_disabled`), and someone allowed to change it can take it over. The newest 50
+  runs of each schedule are listed (time, commit, built / skipped / failed with the build and the reason).
+  Creating, changing and deleting are audited; API tokens cannot manage schedules. `SCHEDULES_ENABLED=false` stops
+  the scheduler. Cron expressions are read by [cronsim](https://github.com/cuu508/cronsim) (BSD-3-Clause, no
+  dependencies), a new dependency. Migration `e6b2c8d4f1a3` adds `project_schedules` and `schedule_runs`.
+
+- `packwright.toml`: build settings kept in the repository (#6). A file named `packwright.toml` at the root of the
+  source (the exact commit a Git build checks out, the folder of a local build) sets build settings by the same
+  names the console uses, grouped: `schema = 1`, then `[project]` (type, version, output_dir), `[python]` (version,
+  entry, output_name, onefile, pack_mode, source_dirs, data_dirs, include_packages, dependency_groups and
+  `[python.nuitka]` jobs / anti_bloat / include_package_data / report), `[frontend]` (dir, tool, build_command,
+  output_dir, env_file, env), `[docker]` (enabled, image_name, base_image, port, env, commands, install_node,
+  api_proxy, volumes, run_as_root and `[docker.nginx]`) and `[smoke]` (enabled). Field by field, **the file wins
+  over a build's own changes and over the project's saved settings**, which win over what the console detected;
+  the file's values are never written into the saved settings. It is read at a new first build stage, **Config**,
+  before the venv bootstrap and the compile, so `[python] version` and `dependency_groups` apply to the bootstrap.
+  The build fails there, naming the key and its line, for a TOML syntax error, an unknown key, a wrong type
+  (nothing is coerced: `"8080"` is not a port, `"yes"` is not true), a `schema` other than 1, a value the console
+  would refuse, a path that leaves the project (`..`, absolute, or through a link) and anything that does not
+  belong in a repository: keys whose name says secret (`password`, `token`, `secret`, `api_key`, `*_KEY`, …, in
+  any table, env variable names included), values shaped like credentials (a URL with a password, a private key,
+  a JWT, the prefixes of GitHub, GitLab, Slack, AWS, Google, OpenAI, Stripe, Hugging Face, npm and Packwright
+  tokens, 32+ hex digits, a high-entropy generated key), the source (`git`, `git_url`, …), the project's name,
+  notifications, webhooks, schedules, Git credentials and the build's user, isolation or `BUILD_ENV_PASSTHROUGH`.
+  Ordinary env variables (`LOG_LEVEL = "info"`, URLs without a password) are allowed. Each build records the
+  settings it was made with and where each came from: `file` (with key, line and the value it replaced),
+  `override` (this build's own change), `project` or `detected` (filled in by Quick build and left as found; the
+  console now sends `detected_fields` with a build). A build's page lists every setting with its origin; the stage
+  track starts with Config and its failure is explained like any other. On a project's settings, the fields the
+  latest build took from the file are read-only, tagged *from packwright.toml* (the line on hover) with "edit it
+  in the repo", and saving keeps the project's own values for them. Quick build reads the file too and fills in
+  only what it leaves out, and says when the file cannot be used. Webhook and scheduled builds read it like any
+  other; a schedule's *Skip when unchanged* compares the effective settings, the file's values included (a
+  changed file is a new commit, which is always built). Downloads follow the effective output directory and image
+  name. The JSON Schema for editors is `docs/packwright.schema.json` (`#:schema` in Taplo / Even Better TOML),
+  generated from the same model by `scripts/gen_packwright_schema.py`. Migration `f1c5a8e3d7b2` adds
+  `history.effective_config`; older builds have none and show their submitted settings.
+
+### Fixed
+- A build of a project without a `.venv` is diagnosed as such (#21). A module missing at run time was explained
+  as a dynamic import ("add it to Include packages"), but without the project's `.venv` no dependency was bundled
+  at all. The diagnosis now says the project has no `.venv` and to create it (`uv sync`, or `python -m venv
+  .venv` and install the requirements) and rebuild. It reads the build's preflight check ("Project .venv
+  present"), which is kept with the build, rather than only the log, whose early lines a long build drops.
+- On a phone, a build's page put Rebuild / Download / Delete workspace beside the title, which squeezed the line
+  under it to one word per line and pushed a button off the screen; the actions now take their own row.
+
+### Changed
+- A Docker build smoke-tests the image, not the binary on the build host (#34). The host test ran with the Docker
+  ENV, which describes the container: MCP Gate's `MCP_GATE_CONFIG_DIR=/app/config` does not exist on the host, so a
+  correct image failed the build, while the image itself was never started and a broken one passed. The image is now
+  started with `docker run -d` under a unique name (`<repo>-smoke-<hex>`), judged by the same rules within the same
+  10 seconds, and removed with its anonymous volumes afterwards, also on failure or cancellation; a failed start
+  fails the build ("Smoke test failed") with the container's output. Its listening ports are read inside the
+  container (a port bound only to 127.0.0.1 is reported too), and the folders it created come from `docker diff`;
+  with Volumes empty, the image is built again with them (the first, untagged, image is removed) and that image is
+  tested. Without Docker the binary is
+  tested on the host, and the log says so. The build result says which was tested.
+
+### Added
+- The smoke test checks the port (#35). It notes the TCP ports the program listens on (its process group's
+  sockets, sampled through the run), keeps them in the result, and for a Docker build warns in the log and the
+  build result when the image exposes another port, with the one to use: Quick build suggested 8000 for MCP Gate,
+  which listens on its `SERVER_PORT`, and the image answered nothing on the port it published. The setting is not
+  changed automatically.
+- Docker settings: **Volumes** and **Run as root** (#36). A backend image runs its program as the user `app`
+  (uid 10001), which owns its files (`COPY --chown`, nothing stored twice) and `/app`; *Run as root* turns this off.
+  Each folder in Volumes is created in the image, owned by that user, and declared as a `VOLUME`. Left empty, the
+  folders the program created during the smoke test are used (MCP Gate: `data`, `logs`, `secrets`) and saved into
+  the build's settings, and into the project's while it has none, so the next build shows them. The suggested
+  command was `docker run --rm --network host <image>`, which threw away the program's state on every stop (MCP Gate:
+  new database, signing keys and encryption key); it is now `docker run -d --name <repo> -p <port>:<port> -v
+  <repo>-<folder>:/app/<folder> … <image>`, shown in the build log and, with a Copy button, in the build result.
+  No migration: settings are stored as JSON.
+
+### Changed
+- Backend Docker images are smaller (#37). Every image installed the same system packages, GUI and OpenGL
+  libraries included: 221 MB of MCP Gate's 449 MB image, for a program that loads none of them. An image now
+  installs `libpq5 zlib1g libxml2 libxslt1.1`, plus a GUI/graphics package only when a shipped `.so` needs one of
+  its libraries (read from the ELF `DT_NEEDED` entries; OpenCV and Qt are the usual ones), and the build log says
+  which file needs it. Onefile binaries are compressed: Packwright now depends on `nuitka[onefile]` (zstandard),
+  `scripts/setup_nuitka_venvs.sh` installs it too, and a preflight check says when it is missing. The finder of an
+  editable install (`__editable___<name>_finder.py`, written by uv for a Git project and pointing at the deleted
+  build workspace) is no longer copied into `libs/`. The build log and the build result show the image's size.
+
+### Fixed
+- Backend Docker images no longer store files twice. The binary got its execute bit from a `RUN chmod` after its
+  `COPY`, which stores the whole binary again in a new layer (MCP Gate: 2 × 49.7 MB); it is now
+  `COPY --chmod=755`. A full-stack build whose frontend output sits inside a data dir already listed (MCP Gate's
+  `static/web` inside `static`) copied the frontend twice; a data dir inside another one is now copied once.
+- A failed smoke test is reported as one. The build said "Nuitka compilation failed" although the compile had
+  succeeded, its failure report named the stage "finishing up", and on a full-stack build the diagnosis read
+  "Frontend build failed", because that rule fired on "vite build" plus the word "error" anywhere in the log. The
+  task now says "Smoke test failed", the report names the verification stage, and the frontend rule needs vite's
+  own "error during build".
+### Security
+- The smoke test no longer leaves the program's state in the build output. The binary runs in the output
+  directory, which is what the build hands out: packaging MCP Gate put the smoke run's `data/mcp_gate.db` (with its
+  signing keys), `secrets/secrets.json` (encryption key and setup token) and `logs/` into the downloadable archive,
+  so every deployment of that build would have started with the same keys. Whatever the program creates there is
+  removed after the run, and existing files it changed are named in the build log.
+### Fixed
+- A Git build with no image name set is named after the repository (`mcp_gate:1.4.0`), as the docs say. It was
+  named after the workspace the repository is cloned into, which is the task id, so every build made a new
+  repository such as `be1d3c22-b30d-479d-8cc7-101d31c6ec90:1.3.1`. The Commands tab shows the same name.
+- Git builds no longer ship the project's development tools. The `.venv` was created with `uv sync`, which also
+  installs the `dev` dependency group, and External mode copies the whole `.venv` into `libs/`: packaging MCP Gate
+  put pytest, pytest-asyncio, pytest-cov, pytest-mock, coverage and ruff into its binary's `libs/` and Docker image.
+  The bootstrap now runs `uv sync --no-default-groups`, plus `--group <name>` for a group chosen in the build settings.
+
+### Documentation
+- README's Licence section explains Nuitka's AGPL-3.0 and its Runtime Library Exception (built programs can use any licence).
+
 ## [1.3.2] — 2026-11-13
 
 ### Changed
@@ -378,7 +569,8 @@ role-based permissions.
 - Timezone-safe token expiry on SQLite; portable build statistics.
 - Git credentials feedback in the console; no pre-filled personal paths in New build.
 
-[Unreleased]: https://github.com/xianhong1208/packwright/compare/v1.3.2...dev
+[Unreleased]: https://github.com/xianhong1208/packwright/compare/v1.4.0...dev
+[1.4.0]: https://github.com/xianhong1208/packwright/compare/v1.3.2...v1.4.0
 [1.3.2]: https://github.com/xianhong1208/packwright/compare/v1.3.1...v1.3.2
 [1.3.1]: https://github.com/xianhong1208/packwright/compare/v1.3.0...v1.3.1
 [1.3.0]: https://github.com/xianhong1208/packwright/compare/v1.2.0...v1.3.0

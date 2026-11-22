@@ -18,7 +18,7 @@ Console (React + antd)  ──HTTP / WebSocket──▶  FastAPI
                           artifacts + Docker image .tar.gz
 ```
 
-- **Sources.** A build is either a *local path* (confined to `LOCAL_SOURCE_ROOTS`) or a *Git URL*. Git mode validates the URL (no `file://`, `ssh://`, localhost, link-local or credential-bearing URLs), clones at a specific branch/tag, and — for Python projects — bootstraps a `.venv` before building. git sends only the credentials stored in Packwright, never the server account's own git configuration or login.
+- **Sources.** A build is either a *local path* (confined to `LOCAL_SOURCE_ROOTS`) or a *Git URL*. Git mode validates the URL (no `file://`, `ssh://`, localhost, link-local or credential-bearing URLs), resolves the branch or tag to one commit and checks out exactly that commit (recorded on the build), and — for Python projects — bootstraps a `.venv` before building. git sends only the credentials stored in Packwright, never the server account's own git configuration or login.
 - **Token injection.** For a private repo the token for that host is looked up, decrypted, and handed to `git` only for that call, as an HTTP auth header scoped to the repository's origin (through `GIT_CONFIG_*` environment variables, so it is not on the command line either). It never appears in the URL, the stored build config or the log, and the API never returns it.
 - **Concurrency.** `MAX_CONCURRENT_BUILDS` bounds simultaneous builds (of every kind) behind a semaphore, and the rest queue; builds of one local folder run one at a time and wait for it without holding a slot; the process is intentionally single-worker because task state, WebSocket connections and the build semaphore live in process memory.
 - **Cleanup.** A background loop deletes per-task workspaces and exported images by status and age, and (optionally) shrinks a successful build's workspace to just its output.
@@ -43,6 +43,8 @@ Everything is environment-driven, and nothing is required. `.env.example` lists 
 | `MAX_CONCURRENT_BUILDS` | `3` | Simultaneous builds; the rest wait in the queue. |
 | `PUBLIC_URL` | *(empty)* | The address people open Packwright at; build notifications link to the build with it. |
 | `TRUSTED_PROXY_IPS` | *(empty)* | Proxy IPs whose `X-Forwarded-For` may be trusted; empty is safest. |
+| `WEBHOOK_PER_MINUTE` / `WEBHOOK_MAX_BODY_BYTES` | `60` / `1048576` | Webhook deliveries one client address may send per minute, and the largest body accepted (413 above it). |
+| `SCHEDULES_ENABLED` / `SCHEDULE_TIMEZONE` | `true` / *(server's zone)* | Run scheduled builds; the time zone new schedules start in. |
 | `RATE_LIMIT_PER_MINUTE` / `RATE_LIMIT_PER_HOUR` | `300` / `6000` | API requests one client address may make (everyone behind one NAT or proxy shares it); sign-in, registration and build submission have their own, stricter limits. |
 
 ## Storage & data
@@ -80,6 +82,51 @@ Put `GIT_WORKSPACE_DIR` on the same filesystem as `BOOTSTRAP_UV_CACHE_DIR` so `u
 | `DOCKER_IMAGES_TTL_DAYS` | `30` | Exported image tarballs. |
 
 On a successful build the workspace is also trimmed automatically: a non-Docker build's workspace is shrunk to just its output (dropping the clone, `.venv` and `.git`), and a Docker build's workspace is deleted outright since the image tarball already holds the result.
+
+## Docker images
+
+A backend or full-stack build with Docker on is compiled on the host first, and the image only copies
+the result into a slim base image (`python:3.13-slim` by default):
+
+- **System packages.** The image installs `libpq5 zlib1g libxml2 libxslt1.1`, plus a GUI or graphics
+  library (OpenGL, GLib, X11, xcb, fontconfig…) only when a shipped extension needs it: Packwright reads
+  the libraries each `.so` in the output asks for (ELF `DT_NEEDED`). OpenCV or Qt bring theirs; most
+  programs need none. The build log names each extra package and the file that needs it. A library a
+  program loads with `dlopen()` or `ctypes` is not listed anywhere: add it with an `apt-get` line under
+  *Custom commands*.
+- **Compression.** A onefile binary is compressed with zstandard (`nuitka[onefile]`, installed with
+  Packwright and by `scripts/setup_nuitka_venvs.sh`); without it the preflight check *Onefile compression*
+  says so.
+- **No build leftovers.** The finder of an editable install (`__editable___<name>_finder.py`, which uv
+  writes for a Git project) is left out of `libs/`: the program's own code is compiled into the binary.
+- The build log and the build result show the image's size.
+- **State and user.** The program runs as the user `app` (uid 10001), which owns its files (given on
+  the `COPY`, so nothing is stored twice) and `/app`. *Run as root* (Docker settings → Advanced) turns
+  this off. The **Volumes** setting lists the folders the program keeps its state in (relative to `/app`
+  or absolute); each is created in the image, owned by `app`, and declared as a `VOLUME`. Left empty,
+  the folders the program created during the smoke test are used (MCP Gate: `data`, `logs`, `secrets`)
+  and saved into the build's settings, and into the project's while it has none, so the field shows them
+  next time. The build suggests a `docker run` that keeps them:
+
+  ```bash
+  docker run -d --name mcp_gate -p 4598:4598 -v mcp_gate-data:/app/data -v mcp_gate-secrets:/app/secrets mcp_gate:1.4.0
+  ```
+
+  A new named volume starts with the image folder's contents and owner, so the non-root program can
+  write to it. For a bind mount, give the host folder to uid 10001 (`chown 10001:10001 <dir>`).
+
+- **The image is what is smoke-tested.** Once built, the image is started with `docker run -d` under a
+  unique name (`<repo>-smoke-<hex>`), with its Docker ENV baked in, on the default bridge network (no
+  published ports); after the same 10 seconds as the binary test it passes if it exited 0 or is still
+  running, and is then removed with its anonymous volumes. A failed exit fails the build with the
+  container's output. Without Docker on the build host, the binary is tested on the host instead and the
+  log says so. Volumes left empty are taken from the folders this run created (`docker diff`); the image
+  is then built again with them (from the layer cache, seconds) and that image is tested.
+- **Port check.** During the smoke test Packwright notes the TCP ports the program listens on (inside
+  the container for an image; its process group's sockets in `/proc` for a binary). In a container, a
+  program bound only to 127.0.0.1 is reported too: a published port cannot reach it. When the image exposes another port, the build log and the build
+  result warn with the port to use ("The program listens on 4598, but the image exposes 8000"). The
+  setting is not changed for you: a program can listen on several ports.
 
 ## Git credentials
 

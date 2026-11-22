@@ -29,12 +29,14 @@ import {
   DeviceTabletIcon as DeviceTablet,
   DiscordLogoIcon as DiscordLogo,
   DownloadSimpleIcon as DownloadSimple,
+  FileTextIcon as FileText,
   FileZipIcon as FileZip,
   FloppyDiskIcon as FloppyDisk,
   FolderIcon as Folder,
   GaugeIcon as Gauge,
   GearIcon as Gear,
   GitBranchIcon as GitBranch,
+  GitCommitIcon as GitCommit,
   GithubLogoIcon as GithubLogo,
   GitlabLogoIcon as GitlabLogo,
   GlobeIcon as Globe,
@@ -63,6 +65,7 @@ import {
   SlidersIcon as Sliders,
   SquaresFourIcon as SquaresFour,
   TagIcon as Tag,
+  TerminalWindowIcon as TerminalWindow,
   TrashIcon as Trash,
   UserIcon as User,
   UsersIcon as Users,
@@ -120,12 +123,14 @@ export const DeviceMobileIcon = wrap(DeviceMobile, 'DeviceMobileIcon')
 export const DeviceTabletIcon = wrap(DeviceTablet, 'DeviceTabletIcon')
 export const DiscordLogoIcon = wrap(DiscordLogo, 'DiscordLogoIcon')
 export const DownloadSimpleIcon = wrap(DownloadSimple, 'DownloadSimpleIcon')
+export const FileTextIcon = wrap(FileText, 'FileTextIcon')
 export const FileZipIcon = wrap(FileZip, 'FileZipIcon')
 export const FloppyDiskIcon = wrap(FloppyDisk, 'FloppyDiskIcon')
 export const FolderIcon = wrap(Folder, 'FolderIcon')
 export const GaugeIcon = wrap(Gauge, 'GaugeIcon')
 export const GearIcon = wrap(Gear, 'GearIcon')
 export const GitBranchIcon = wrap(GitBranch, 'GitBranchIcon')
+export const GitCommitIcon = wrap(GitCommit, 'GitCommitIcon')
 export const GithubLogoIcon = wrap(GithubLogo, 'GithubLogoIcon')
 export const GitlabLogoIcon = wrap(GitlabLogo, 'GitlabLogoIcon')
 export const GlobeIcon = wrap(Globe, 'GlobeIcon')
@@ -154,6 +159,7 @@ export const SlackLogoIcon = wrap(SlackLogo, 'SlackLogoIcon')
 export const SlidersIcon = wrap(Sliders, 'SlidersIcon')
 export const SquaresFourIcon = wrap(SquaresFour, 'SquaresFourIcon')
 export const TagIcon = wrap(Tag, 'TagIcon')
+export const TerminalWindowIcon = wrap(TerminalWindow, 'TerminalWindowIcon')
 export const TrashIcon = wrap(Trash, 'TrashIcon')
 export const UserIcon = wrap(User, 'UserIcon')
 export const UsersIcon = wrap(Users, 'UsersIcon')

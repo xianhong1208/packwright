@@ -16,6 +16,7 @@
 - [Docker 輸出](#docker-輸出)
 - [使用者、角色與權限](#使用者角色與權限)
 - [個人安全設定](#個人安全設定)
+- [API token(腳本與 CI)](#api-token腳本與-ci)
 - [安全性與信任模型](#安全性與信任模型)
 - [資料、保留期限與備份](#資料保留期限與備份)
 - [附錄:API 端點](#附錄api-端點)
@@ -214,7 +215,13 @@ LOCAL_SOURCE_ROOTS=/srv/projects,/data/builds
 2. **列出分支與標籤**,選一個 ref。
 3. **淺層掃描**:不必完整 clone 就能讀出頂層目錄與 `pyproject.toml` 的 `[dependency-groups]`,
    讓你直接勾選要打包的目錄。
-4. 開始建置後 **clone 並建立 `.venv`**(`GIT_AUTO_VENV=true` 時跑 `uv sync`)。
+4. 開始建置時先把分支或標籤**解析成一個 commit**(`git ls-remote`;annotated tag 取它指向的 commit),
+   再**只 checkout 那個 commit**(`git init` + `git fetch --depth 1 <網址> <commit>`,checkout 後比對 `HEAD`)。
+   這個 commit 記在建置上:**Builds** 清單與建置頁面顯示前 7 碼(點一下複製完整 ID),通知也會附上。
+   API 建置可以用 `git_commit` 指定完整的 commit ID(40 或 64 個小寫十六進位字元),之後的 webhook 會用它
+   建置被 push 的那個 commit;只支援舊版 git 協定(v0)的伺服器只給得出分支目前指向的 commit,分支已經往前
+   時建置會失敗並寫明分支現在指向哪裡,不會改建另一個 commit。GitHub、GitLab、Gitea 都支援。
+   接著 **建立 `.venv`**(`GIT_AUTO_VENV=true` 時跑 `uv sync`)。
 5. 完成後依[保留期限](#資料保留期限與備份)清理工作區。
 
 ### Git 憑證(私有 repo)
@@ -269,13 +276,158 @@ LOCAL_SOURCE_ROOTS=/srv/projects,/data/builds
 
 專案設定的 **Notifications** 分頁可以加上通知對象:Discord、Slack 的 incoming webhook,或任何接受
 JSON `POST` 的網址。每個對象可以各自選擇「建置失敗時」與「建置成功時」要不要通知(預設都會)。
-失敗的訊息附上錯誤診斷(問題與建議),成功的訊息附上是誰建置、花了多久。伺服器有設定 `PUBLIC_URL`
+失敗的訊息附上錯誤診斷(問題與建議),成功的訊息附上是誰建置、怎麼開始的(console、API、push、tag push、
+schedule)、Git 建置的 commit、花了多久;JSON 內容另有 `trigger` 與完整的 `commit`。伺服器有設定 `PUBLIC_URL`
 時,訊息會附上建置頁面的連結。
 
 - 誰能改:專案建立者或有 `project:manage` 權限的人;有建置權限的人都看得到清單。
 - webhook 網址等同密碼,加密儲存,頁面上只顯示主機名稱與最後 4 個字元;要換網址就貼一個新的。
 - 加好之後按 **Send test** 確認訊息送得到;每個對象會顯示最後一次送出的結果,送不出去時會寫原因。
 - 通知在建置結束後才送,不佔建置名額;對方沒回應時會再試一次,不影響建置本身。
+
+### Webhook(push 或 tag 時自動建置)
+
+專案設定的 **Webhooks** 分頁(只限從 Git URL 建置的專案)。push 到 repo 時,Packwright 會建置**被推上來的那一個
+commit**;建置紀錄的觸發方式是 `push`(分支)或 `tag`(tag push,tag 若是合法版本字串也會當成這次的版本)。
+
+1. 選來源:GitHub、GitLab、Gitea(Forgejo 相同)或 **Any script**(通用網址)。
+2. 填要建置的**分支樣式**與 **tag 樣式**(一行一個,`*` 可跨 `/`,例如 `release/*`;留空 = 那一類都不建置)。
+   分支預設帶入專案的分支,tag 預設 `v*`。
+3. 按 **Add webhook**:視窗會顯示 Payload URL 與密鑰(通用網址叫 token),**只顯示這一次**,照視窗裡的步驟貼到 GitHub /
+   GitLab / Gitea:
+   - GitHub:Settings → Webhooks → Add webhook,Content type 選 `application/json`,Secret 貼密鑰,事件選
+     「Just the push event」(分支與 tag 都包含)。
+   - GitLab:Settings → Webhooks,Secret token 貼密鑰,勾 Push events 與 Tag push events。GitLab 19 起可以按
+     **Generate signing token**,再把它(`whsec_…`)貼回 Packwright 的 **Signing token**;設定之後每次送達都必須有簽章,
+     只有 secret token 的請求會被拒絕。
+   - Gitea:Settings → Webhooks → Add webhook → Gitea,POST content type 選 `application/json`,Secret 貼密鑰,
+     Trigger on 選 Push events。
+   - 通用網址:`POST`,token 放 `Authorization: Bearer <token>` 或 `X-Packwright-Token`;內容可省略(建置專案設定的分支),
+     或 `{"ref": "main"}`、`{"ref": "refs/tags/v1.2.0", "commit": "<完整 commit id>"}`。只能呼叫網址的工具可以用
+     `?token=`,但 token 會留在代理與伺服器的 log 裡。
+
+送達時的處理:
+
+- 驗證失敗(簽章或 token 錯、缺少或空白、webhook 不存在、網址的來源不對)一律回 **401**,原因只記在 deliveries 裡。
+  內容超過 `WEBHOOK_MAX_BODY_BYTES`(預設 1 MiB)回 413。比對一律 constant-time,密鑰與內容都不寫進 log。
+- 真的來自 forge 但不需要建置的:ping、其他事件、刪除分支或 tag、commit 訊息有 `[skip ci]` / `[ci skip]`、不符合樣式的
+  分支或 tag、payload 裡的 repo 不是這個專案的(https / ssh / `.git` 寫法視為同一個)——回 **200 `ignored`** 並附原因。
+  GitLab 收到連續的 4xx 會把 webhook 停用,所以這些都不回 4xx。
+- 重複送達不會重複建置:同一個 delivery id(`X-GitHub-Delivery`、`X-Gitea-Delivery`、GitLab 的 `webhook-id` /
+  `Idempotency-Key`)只處理一次;同一專案、同一分支或 tag、同一個 commit 正在排隊、建置中,或 10 分鐘內剛建置成功,也不再建置。
+- 要建置時回 **202** 與建置 id。
+- 建置以**設定 webhook 的人**的身分執行,每次都重新檢查:帳號被停用、被刪除,或已沒有 `task:create` 時,webhook 會自動關閉,
+  分頁上顯示原因(稽核紀錄 `hook_disabled`),送達回 200「hook disabled」。可以改 webhook 的人按
+  **Take it over and turn it on** 接手,之後就以接手的人身分建置。
+- 每個 webhook 的 **Deliveries** 列出最近 50 次送達:時間、事件、ref、commit、結果(Built 連到那次建置 / Ignored 原因 /
+  Rejected 原因)。
+- **New secret** 產生新密鑰(只顯示一次),舊的立刻失效。關閉開關可暫停;**Delete** 之後送到這個網址的請求一律 401。
+- 誰能改:專案建立者或有 `project:manage` 的人;有建置權限的人都看得到清單(看不到密鑰)。API token 不能管理 webhook。
+- webhook 端點有自己的頻率限制 `WEBHOOK_PER_MINUTE`(每個位址每分鐘 60 次),與一般 API 及送出建置的限制分開。
+
+### 排程建置
+
+專案設定的 **Schedules** 分頁(只限從 Git URL 建置的專案)。排程到了就建置指定的分支或 tag,建置紀錄的觸發方式是
+`schedule`。
+
+1. 按 **Add a schedule**。
+2. **How often**:Hourly(`0 * * * *`)、Nightly(`0 2 * * *`)、Weeknights(`0 2 * * 1-5`)、Weekly(`0 3 * * 1`),
+   或 **Custom** 自己寫 cron:五個欄位依序是分、時、日、月、星期(`@hourly`、`@daily`、`@weekly`、`@monthly`、`@yearly`
+   也可以;不接受第六個「秒」欄位)。
+3. **Time zone**:cron 以這個時區解讀(IANA 名稱,如 `Asia/Taipei`)。預設是 `SCHEDULE_TIMEZONE`,沒設定就用伺服器的時區,
+   再不行就是 UTC。
+4. **What to build**:分支或 tag 與名稱,預設帶入專案的。
+5. **Skip when unchanged**(預設開):commit 與設定都和上次成功的建置一樣就跳過。
+6. 對話框下方會用文字說明這個 cron,並列出接下來 5 次的執行時間(以選的時區顯示);寫錯的 cron 或時區會直接顯示原因,不能儲存。
+
+執行時的處理(每 10 秒檢查一次到期的排程):
+
+- 先以**設定排程的人**的身分檢查:帳號被停用、被刪除,或已沒有 `task:create` 時,排程自動關閉,分頁上顯示原因(稽核紀錄
+  `schedule_disabled`)。可以改排程的人按 **Take it over and turn it on** 接手。專案改成本機路徑時也會關閉。
+- 這個專案有建置在排隊或進行中 → 跳過(`overlap`),不會疊在一起。
+- 用 `git ls-remote` 讀出分支或 tag 當下的 commit,**建置的就是那一個 commit**。
+- 開著 Skip when unchanged 時,和這個專案、同一分支或 tag **最近一次成功**的建置比較:commit 相同,而且「實際設定」相同 →
+  跳過(`unchanged`,附上那次建置)。「實際設定」= 這次建置會帶的完整設定(專案儲存的設定,加上排程的分支或 tag,
+  再加上 `packwright.toml` 的值),整份以 JSON 正規化後取 SHA-256 比較;任何一項設定改了(包括版本字串)就會再建置。
+  `packwright.toml` 設定的欄位以檔案為準,所以在專案設定裡改這些欄位不算改變;改了 repo 裡的檔案就是新的 commit,一定會建置。
+  失敗的建置不算。
+- **錯過的不補跑**:Packwright 停機(或檢查晚了 2 分鐘以上)錯過的時間,只記一筆 `missed`,下一次從「現在」往後算,
+  不會一次補一堆。下一次的時間存在資料庫,重新啟動也記得。
+- 同一個時間只會執行一次:取得執行權是對 `next_run_at` 做條件式更新,就算有兩個排程迴圈同時檢查也一樣(SQLite 與 PostgreSQL 皆然)。
+- 日光節約時間:春天跳過的那一小時裡的時間(例如 02:30,而時鐘從 02:00 直接跳到 03:00)在 03:00 執行一次;秋天重複的那一小時,
+  固定時間只執行一次,`*/30` 這類間隔在兩段都會執行。
+- 每個排程的 **Runs** 列出最近 50 次執行:預定時間、commit、結果(Built 連到建置 / Skipped 與原因 / Failed 與原因)。
+- 關閉開關會暫停(沒有下一次);改了 cron 或時區、重新打開,下一次都從現在算。
+- 誰能改:專案建立者或有 `project:manage` 的人;有建置權限的人都看得到排程與執行紀錄。API token 不能管理排程。
+- `SCHEDULES_ENABLED=false` 會停掉排程器(排程保留,停的期間錯過的不補)。
+
+### packwright.toml(設定放在 repo 裡)
+
+在原始碼根目錄放一個 `packwright.toml`,建置設定就跟著程式碼走:Git 建置讀**要建置的那個 commit** 裡的檔案,本機路徑讀
+資料夾裡的檔案。名稱與管理台的設定相同,只是分組:
+
+```toml
+#:schema https://raw.githubusercontent.com/xianhong1208/packwright/main/docs/packwright.schema.json
+schema = 1
+
+[project]
+type = "backend_only"          # backend_only / frontend_only / fullstack
+version = "1.4.0"              # 選用;沒寫就照原本的偵測
+
+[python]
+version = "auto"               # 或 "3.13"
+entry = "src/app.py"
+pack_mode = "external"         # external / full
+onefile = true
+data_dirs = ["static", "templates"]
+dependency_groups = ["server"]
+
+[python.nuitka]
+jobs = 0                       # 0 = 自動
+
+[frontend]
+dir = "web"
+tool = "pnpm"
+build_command = "build"
+env = { VITE_API_BASE = "/api" }
+
+[docker]
+enabled = true
+port = 8080
+env = { LOG_LEVEL = "info" }
+volumes = ["data"]
+
+[smoke]
+enabled = true
+```
+
+全部的 key 與說明在 [docs/packwright.schema.json](packwright.schema.json)(VS Code 裝 Even Better TOML,檔案第一行寫
+`#:schema …` 就有自動完成與檢查)。
+
+- **誰優先**:逐欄位比較,**檔案 > 這次建置自己的修改 > 專案設定 > 偵測**。檔案的值只用在那次建置,**不會寫回專案設定**。
+- **Config 階段**:建置的第一個階段(Git 建置在 clone 之後、建立 `.venv` 之前,所以 `[python] version` 與
+  `dependency_groups` 會用在 `uv sync`)。下列情況建置會在這裡失敗,錯誤會指出 **key 與行號**(例如
+  `packwright.toml:4: python.entyr: unknown key`):
+  - 不是合法的 TOML;
+  - 未知的 key(打錯字不會被默默忽略);
+  - 型別不對(不會自動轉換:`port = "8080"`、`onefile = "yes"` 都不行);
+  - `schema` 不是 1(新版格式要更新 Packwright);
+  - 管理台也會拒絕的值(例如 `build_command` 含 shell 語法、版本字串不合法);
+  - 路徑跑出專案:`..`、絕對路徑,或透過連結指到專案外;
+  - **不該放在 repo 的東西**:名稱看起來是密鑰的 key(`password`、`token`、`secret`、`api_key`、`*_KEY`……,任何層都算,
+    包括 env 變數名);看起來像憑證的值(含密碼的網址、私鑰、JWT、GitHub / GitLab / Slack / AWS / Google / OpenAI /
+    Stripe / Hugging Face / npm / Packwright token 的開頭、32 個以上的十六進位字元、隨機產生的長金鑰);
+    來源(`git`、`git_url`……)、專案名稱、通知、webhook、排程、Git 憑證,以及建置使用者、隔離方式與
+    `BUILD_ENV_PASSTHROUGH`。這些都只能在 Packwright 裡設定。
+  - 一般的 env 變數可以放(`LOG_LEVEL = "info"`、不含密碼的網址);密鑰請放在專案設定的 env 欄位。
+- **建置頁**:「Settings and where they came from」列出每項設定與來源:`packwright.toml · line N`(滑過去看那一行;
+  若取代了這次建置自己改的值,會寫「instead of this build's …」)、`this build`、`project`、`detected`。
+- **專案設定頁**:最近一次讀過原始碼的建置從檔案拿到的欄位會顯示檔案的值、**唯讀**,標「from packwright.toml」並提示
+  「edit it in the repo」;頁面上方列出這些 key 與行號。按 Save as defaults 時,這些欄位保留專案自己的值。最近一次建置
+  沒有這個檔案時,所有欄位都可以編輯。
+- **快速建置**:讀到檔案時,檔案設定的欄位直接用檔案的值,偵測只補檔案沒寫的;檔案有錯時會先列出錯誤。
+- Webhook 與排程觸發的建置一樣會讀檔案。
+- 目前只讀根目錄的 `packwright.toml`(monorepo 子目錄的路徑設定還沒有)。
 
 ## New build
 
@@ -330,9 +482,9 @@ Docker 環境變數除外),回來時還原;**Clear draft** 可以清掉。
 | Binary name | 執行檔名稱;留空時取進入點的檔名(`main.py` → `main`) |
 | Nuitka pack mode | **External**(建議):第三方套件放在執行檔旁的 `libs/`,編譯快;**Full**:全部編進執行檔,非常慢 |
 | Single-file binary | 輸出單一執行檔或資料夾 |
-| Dependency group | `[dependency-groups]` 中的一組(例如不同平台的 PyTorch) |
+| Dependency group | `[dependency-groups]` 中的一組(例如不同平台的 PyTorch)。Git 模式不會裝其他群組,連 uv 預設會裝的 `dev` 也不裝,所以 pytest、ruff 這類開發工具不會跟著出貨 |
 | CPU jobs | 平行編譯的程序數。0 = 自動:單獨建置時用全部核心,同時有多個建置時平分核心(每個至少 4)。記憶體用量幾乎跟它成正比 |
-| Include packages | Nuitka 偵測不到的動態 import(例:`litellm, openai`) |
+| Include packages | Nuitka 偵測不到的動態 import(例:`litellm, openai`)。專案沒有 `.venv` 時加這裡沒用:依賴根本沒被打包,失敗診斷會直接說要先建 `.venv`(`uv sync`)再重建 |
 | Include package data | 套件內建的非 `.py` 資料檔(例:`certifi`) |
 | Output directory | 輸出目錄,相對於專案(預設 `dist`) |
 | Extra / data directories | 一起打包的原始碼目錄或資料目錄(輸入路徑後系統會建議) |
@@ -355,6 +507,21 @@ Docker 環境變數除外),回來時還原;**Clear draft** 可以清掉。
 ### Docker
 
 不需要就保持關閉。開啟後可以設定 image 名稱、基底映像、對外 port、額外的 `RUN` 指令與環境變數。
+image 名稱留空時,Git 來源用 repo 名稱、本機來源用資料夾名稱(轉小寫),tag 是版本。
+後端與全端的 image 只裝 `libpq5 zlib1g libxml2 libxslt1.1`,圖形相關的系統函式庫(OpenGL、GLib、X11 等)只有在
+打包進去的 `.so` 需要時才裝(OpenCV、Qt 這類),建置日誌會寫出原因;程式用 `ctypes` 自己載入的函式庫請用
+`apt-get` 自訂指令補上。單一執行檔用 zstandard 壓縮。建置結果會顯示 image 名稱與大小。
+
+後端與全端 image 預設以非 root 使用者 `app`(uid 10001)執行程式;Advanced 的 **Run as root** 可以改回 root。
+**Volumes** 填程式存放狀態的資料夾(例:`data, secrets`,相對於 `/app`),會變成 `VOLUME` 並交給 `app`。
+留空時,用煙霧測試期間程式自己建立的資料夾,並寫回設定,下次建置就會帶入。建置日誌與建置結果的 **Run it**
+會給一行掛上 named volume 的 `docker run`,容器刪掉重建資料也還在。
+
+開啟 Docker 時,煙霧測試直接啟動建好的 image(容器名稱不重複,測完刪除),用的就是 image 裡的 Docker ENV,所以
+`MCP_GATE_CONFIG_DIR=/app/config` 這類容器內路徑可以照填;建置主機沒有 Docker 時才改測執行檔,日誌會說明。
+
+**Exposed port** 要和程式實際監聽的 port 一致。煙霧測試會偵測程式監聽哪些 port,不一致時在建置結果顯示警告與
+建議值(不會自動改設定),例如 MCP Gate 監聽 `SERVER_PORT`,而不是預設的 8000。
 純前端 + Docker 會包成 nginx image,可以再設定 API 反向代理與 nginx 參數,說明見
 [快速上手的 nginx 一節](./quickstart.zh-TW.md#純前端--docker-的-nginx-設定-)。
 
@@ -369,16 +536,17 @@ Docker 環境變數除外),回來時還原;**Clear draft** 可以清掉。
 詳情頁上方顯示目前狀態,後端建置另有階段進度條:
 
 ```
-Queued → Preflight → Compile → Bundle → Verify
+Queued → Config → Preflight → Compile → Bundle → Verify
 ```
 
 | 階段 | 做什麼 |
 |---|---|
 | **Queued** | 等待建置名額(`MAX_CONCURRENT_BUILDS`) |
+| **Config** | 讀原始碼根目錄的 `packwright.toml`(見 [packwright.toml](#packwrighttoml設定放在-repo-裡)),檔案有錯就在這裡失敗並指出 key 與行號 |
 | **Preflight** | 檢查專案路徑、進入點、`.venv`、Nuitka 與 Python 版本;有問題立刻失敗,不用等編譯 |
 | **Compile** | Nuitka 編譯 |
 | **Bundle** | 複製依賴(`libs/`)與資料目錄 |
-| **Verify** | 試跑執行檔。缺模組會判定失敗;因為建置機沒有 GPU、連不到資料庫、缺命令列參數或授權檔而結束的,判定為警告,並說明這屬於執行環境而非打包問題 |
+| **Verify** | 試跑執行檔。缺模組會判定失敗;因為建置機沒有 GPU、連不到資料庫、缺命令列參數或授權檔而結束的,判定為警告,並說明這屬於執行環境而非打包問題。試跑在輸出目錄裡執行,程式在那裡新建的檔案(資料庫、金鑰、log)試跑完會刪掉,不會進到下載檔或 image;改到既有檔案時會在 log 警告 |
 
 - **日誌** 經 WebSocket 即時串流,可搜尋、複製、下載。每個建置保留最後 `MAX_LOG_LINES` 行。
 - **Cancel run** 會停止建置行程。
@@ -489,6 +657,48 @@ docker run --rm --env-file .env my-service:latest
 
 ---
 
+## API token(腳本與 CI)
+
+左下角頭像選單 → **API tokens**(`/settings/api-tokens`)。腳本與 CI 用 token 代替密碼,開始建置、追蹤建置、下載產物。
+
+- **建立**:填名稱(用在哪裡,之後才知道要撤銷哪一個)、勾選範圍、選期限(7 / 30 / 90 天或 1 年,最長 365 天,一定要有期限)。
+  token 只在建立當下顯示一次,馬上存到 CI 的 secrets;伺服器只存它的 SHA-256,之後誰都看不到,遺失就撤銷再建一個。
+- **格式**:`pwt_` + 43 個英數字(32 bytes 亂數)+ 6 個字的 CRC32 檢查碼。檢查碼讓 secret scanner 與伺服器不查資料庫就能認出
+  打錯或亂湊的字串;列表上顯示的是前 12 個字(`pwt_` 加 8 個字)。
+- **範圍**:
+
+  | 範圍 | 可以用的端點 |
+  |---|---|
+  | `builds:read` | `GET /api/tasks`、`/api/tasks/{id}`、`/api/tasks/{id}/logs`、`/api/history`、`/api/history/{id}`、`/api/history/versions`、`/api/history/export`、`/api/history/{id}/download`,WebSocket `/ws/tasks`、`/ws/tasks/{id}` |
+  | `builds:write` | `POST /api/tasks`、`DELETE /api/tasks/{id}`(取消)、`POST /api/projects/{id}/builds` |
+  | `projects:read` | `GET /api/projects`、`/api/projects/{id}` |
+
+  不在表上的端點(使用者、角色、Git 憑證、通知、token 管理、`/auth/*`、精靈輔助、監控等)一律回 **403**,不管 token 有哪些
+  範圍、擁有者是不是管理員 —— 1.4 沒有管理用的範圍。
+- **權限 = 範圍 ∩ 擁有者目前的角色**,每個請求都重算:角色拿掉 `task:create`,`builds:write` 的 token 也立刻不能建置;
+  只有 `*_own` 權限的人,token 也只看得到自己的建置。帳號被停用,他所有的 token 立刻 401。
+- **用 token 開始的建置**記為 `api`(Builds 列表、建置頁、CSV、通知都看得到),由伺服器決定,request body 寫什麼都沒用。
+- **撤銷**:自己的 token 在列表按 **Revoke**;有 `user:manage` 的人可以切到 **Everyone** 看所有人的 token(看不到 token 本身)
+  並撤銷。撤銷、過期、不存在、檢查碼錯的 token 都回同一個 401 `Invalid or expired token`,原因只寫在稽核日誌
+  (`api_token_rejected`);缺範圍或碰到不開放的端點是 403(`api_token_denied`)。建立與撤銷也記在稽核日誌。
+- **最後使用時間**最多一分鐘寫一次,輪詢建置的 CI 不會每次都寫資料庫。
+
+```bash
+export PACKWRIGHT_TOKEN=pwt_...        # 從 CI 的 secrets 讀
+H="Authorization: Bearer $PACKWRIGHT_TOKEN"
+# 用專案的設定建置新版本
+curl -s -X POST -H "$H" -H 'Content-Type: application/json' \
+  -d '{"version": "1.2.0"}' https://packwright.example.com/api/projects/3/builds
+# 查狀態、下載產物
+curl -s -H "$H" https://packwright.example.com/api/history/<task_id>
+curl -s -H "$H" -o out.tar.gz https://packwright.example.com/api/history/<task_id>/download
+```
+
+即時日誌的 WebSocket 一樣用 `Authorization: Bearer` header(瀏覽器以外的用戶端都能送 header)。token **不能**放在
+`?token=` 網址參數裡:token 活好幾個月,網址會留在代理與 access log。
+
+---
+
 ## 安全性與信任模型
 
 ### 核心假設:建立建置 ≈ 這台機器的 shell
@@ -560,7 +770,8 @@ access token 以子協定傳遞,不放在網址(網址會進 access log 與代�
 new WebSocket(url, ['bearer', accessToken])
 ```
 
-舊版用戶端的 `?token=` 查詢參數目前仍被接受,但不建議使用。
+舊版用戶端的 `?token=` 查詢參數目前仍被接受,但不建議使用(API token 不接受這種寫法)。腳本可以改送
+`Authorization: Bearer <token>` header,session 與 API token 都可以。
 
 ---
 
@@ -627,7 +838,7 @@ gunzip -c packwright-<時間>.sql.gz | psql -h HOST -U USER -d DBNAME    # Postg
 
 ## 附錄:API 端點
 
-「權限」欄:*公開* 不需登入;*登入* 只需有效的 access token;其餘為需要的權限碼(`A / B` 表示
+「權限」欄:*公開* 不需登入;*登入* 只需有效的 access token(API token 能用哪些端點見 [API token](#api-token腳本與-ci));其餘為需要的權限碼(`A / B` 表示
 有其一即可,只有 `*_own` 的人只看得到自己的資料)。互動式文件在 `/docs`。
 
 ### 認證 `/auth`
@@ -701,6 +912,44 @@ gunzip -c packwright-<時間>.sql.gz | psql -h HOST -U USER -d DBNAME    # Postg
 | GET | `/api/users/roles/{id}` | `role:view` | 單一角色 |
 | POST · PUT · DELETE | `/api/users/roles[/{id}]` | `role:manage` | 管理角色 |
 | GET · POST · PUT · DELETE | `/api/settings/git-credentials[/{id}]` | `user:manage` | Git 憑證 |
+
+### API token `/api/tokens`
+
+這些端點只接受管理台的登入,用 API token 呼叫一律 403。
+
+| 方法 | 路徑 | 權限 | 說明 |
+|---|---|---|---|
+| GET | `/api/tokens` | 登入 | 自己的 token(不含 token 本身);`?everyone=true` 列出所有人的,需要 `user:manage` |
+| POST | `/api/tokens` | 登入 | 建立:`{"name", "scopes", "expires_in_days"}`,回應裡的 `token` 只出現這一次 |
+| DELETE | `/api/tokens/{id}` | 擁有者或 `user:manage` | 撤銷(重複撤銷沒有影響;別人的 token 回 404) |
+
+### Webhook
+
+管理端點只接受管理台的登入(API token 一律 403);接收端點不需要登入,靠 webhook 的密鑰驗證。
+
+| 方法 | 路徑 | 權限 | 說明 |
+|---|---|---|---|
+| GET | `/api/projects/{id}/hooks` | `task:create` | 專案的 webhook(不含密鑰) |
+| POST | `/api/projects/{id}/hooks` | 建立者或 `project:manage` | 新增:`{"provider", "branches", "tags"}`,回應裡的 `secret` 只出現這一次 |
+| PATCH | `/api/projects/{id}/hooks/{hid}` | 建立者或 `project:manage` | 改樣式或開關:`{"branches", "tags", "enabled", "take_over"}` |
+| POST | `/api/projects/{id}/hooks/{hid}/rotate` | 建立者或 `project:manage` | 換新密鑰(只出現這一次) |
+| PUT | `/api/projects/{id}/hooks/{hid}/signing-key` | 建立者或 `project:manage` | GitLab 的 signing token(`null` 移除) |
+| DELETE | `/api/projects/{id}/hooks/{hid}` | 建立者或 `project:manage` | 刪除 |
+| GET | `/api/projects/{id}/hooks/{hid}/deliveries` | `task:create` | 最近 50 次送達 |
+| POST | `/api/hooks/{github,gitlab,gitea,generic}/{webhook id}` | webhook 的密鑰 | 接收送達:202 建置 / 200 ignored / 401 / 413 / 429 |
+
+### 排程
+
+只接受管理台的登入(API token 一律 403)。
+
+| 方法 | 路徑 | 權限 | 說明 |
+|---|---|---|---|
+| GET | `/api/projects/{id}/schedules` | `task:create` | 專案的排程,含下一次與最近一次執行 |
+| POST | `/api/projects/{id}/schedules/preview` | `task:create` | `{"cron", "timezone"}` → 文字說明與接下來 5 次時間(錯誤回 422) |
+| POST | `/api/projects/{id}/schedules` | 建立者或 `project:manage` | 新增:`{"cron", "timezone", "ref", "ref_type", "skip_unchanged"}` |
+| PATCH | `/api/projects/{id}/schedules/{sid}` | 建立者或 `project:manage` | 修改或開關:同上欄位,加 `enabled`、`take_over` |
+| DELETE | `/api/projects/{id}/schedules/{sid}` | 建立者或 `project:manage` | 刪除(執行紀錄一起刪,建置保留) |
+| GET | `/api/projects/{id}/schedules/{sid}/runs` | `task:create` | 最近 50 次執行 |
 
 ### 監控與其他
 

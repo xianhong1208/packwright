@@ -231,7 +231,9 @@ async def _build_docker_standard(task_id: str, config: BuildConfig, db: AsyncSes
         await task_manager.update_task(task_id, "status_msg", "Docker image built")
     else:
         await task_manager.update_task(task_id, "status", TaskStatus.FAILED, db)
-        await task_manager.update_task(task_id, "status_msg", "Docker build failed")
+        await task_manager.update_task(
+            task_id, "status_msg", await _backend_failure_message(task_id, "Docker build failed")
+        )
 
 
 async def _build_docker_nuitka(task_id: str, config: BuildConfig, db: AsyncSession) -> None:
@@ -292,7 +294,9 @@ async def _build_docker_nuitka(task_id: str, config: BuildConfig, db: AsyncSessi
 
     if not nuitka_success:
         await task_manager.update_task(task_id, "status", TaskStatus.FAILED, db)
-        await task_manager.update_task(task_id, "status_msg", "Nuitka compilation failed")
+        await task_manager.update_task(
+            task_id, "status_msg", await _backend_failure_message(task_id, "Nuitka compilation failed")
+        )
         return
 
     # Docker image build with precompiled binary
@@ -310,7 +314,9 @@ async def _build_docker_nuitka(task_id: str, config: BuildConfig, db: AsyncSessi
         await task_manager.update_task(task_id, "status_msg", "Docker image built")
     else:
         await task_manager.update_task(task_id, "status", TaskStatus.FAILED, db)
-        await task_manager.update_task(task_id, "status_msg", "Docker build failed")
+        await task_manager.update_task(
+            task_id, "status_msg", await _backend_failure_message(task_id, "Docker build failed")
+        )
 
 
 async def _build_backend_only(task_id: str, config: BuildConfig, db: AsyncSession) -> None:
@@ -328,7 +334,18 @@ async def _build_backend_only(task_id: str, config: BuildConfig, db: AsyncSessio
         await task_manager.update_task(task_id, "status_msg", "Build complete")
     else:
         await task_manager.update_task(task_id, "status", TaskStatus.FAILED, db)
-        await task_manager.update_task(task_id, "status_msg", "Backend compile failed — see the log below")
+        await task_manager.update_task(
+            task_id, "status_msg", await _backend_failure_message(task_id, "Backend compile failed — see the log below")
+        )
+
+
+async def _backend_failure_message(task_id: str, otherwise: str) -> str:
+    """What the task says when run_nuitka_build returned False: the smoke test
+    when that is what failed (the compile itself succeeded), else ``otherwise``."""
+    task = await task_manager.get_task(task_id)
+    if task is not None and task.stage == "verify":
+        return "Smoke test failed — the program was built but did not start; see the log below"
+    return otherwise
 
 
 async def _build_frontend_only(task_id: str, config: BuildConfig, db: AsyncSession) -> None:
@@ -438,7 +455,9 @@ async def _build_fullstack(task_id: str, config: BuildConfig, db: AsyncSession) 
         await task_manager.update_task(task_id, "status_msg", "Fullstack build complete")
     else:
         await task_manager.update_task(task_id, "status", TaskStatus.FAILED, db)
-        await task_manager.update_task(task_id, "status_msg", "Backend build failed")
+        await task_manager.update_task(
+            task_id, "status_msg", await _backend_failure_message(task_id, "Backend build failed")
+        )
 
 
 async def _prepare_venv(
@@ -565,7 +584,13 @@ async def _prepare_venv(
             )
         group_flags.extend(["--group", group_name])
 
-    group_label = (
+    # --no-default-groups: uv sync otherwise installs the `dev` group (and any
+    # [tool.uv] default-groups), so pytest, ruff, coverage and the like were
+    # installed into the build's .venv and, in External mode, copied into libs/
+    # and shipped with the program and its Docker image. A build is what goes
+    # out to users; a group it needs is picked explicitly with --group.
+    group_flags = ["--no-default-groups", *group_flags]
+    group_label = " --no-default-groups" + (
         f" --group {' --group '.join(config.dependency_groups)}"
         if config.dependency_groups
         else ""
@@ -613,7 +638,7 @@ async def _prepare_venv(
         )
 
 
-async def _prepare_git_workspace(task_id: str, config: BuildConfig) -> BuildConfig:
+async def _prepare_git_workspace(task_id: str, config: BuildConfig, commit: str | None = None) -> BuildConfig:
     """Clone the git repo into a fresh per-task workspace and return a
     derived BuildConfig whose ``project_path`` points at that workspace.
 
@@ -621,6 +646,10 @@ async def _prepare_git_workspace(task_id: str, config: BuildConfig) -> BuildConf
     ``git_url`` / ``git_ref`` fields as the source of truth so Rebuild
     works deterministically and the workspace dir can be re-derived from
     ``task_id`` on demand.
+
+    The build is of one exact commit: ``commit`` when the build was created for
+    it (a pushed commit), otherwise where the ref points right now. It is
+    recorded on the build (history.commit_sha) before the checkout.
     """
     from app.config import get_settings
     from app.database import async_session
@@ -645,23 +674,32 @@ async def _prepare_git_workspace(task_id: str, config: BuildConfig) -> BuildConf
 
     # Masked log line — token, if any, is never visible here.
     masked_url = git_service.mask_token_in_log(config.git_url, token)
-    await task_manager.append_log(
-        task_id,
-        f"Cloning {masked_url} @ {config.git_ref_type}:{config.git_ref}",
-    )
+    kind = "branch" if config.git_ref_type == "branch" else "tag"
 
     try:
-        anonymous = await git_service.clone_repo(
+        if commit is None:
+            commit = await git_service.resolve_ref(
+                config.git_url, config.git_ref, config.git_ref_type, token, provider=provider,
+                timeout=float(settings.git_clone_timeout),
+            )
+            await task_manager.append_log(task_id, f"Resolved {kind} {config.git_ref} to commit {commit}")
+        else:
+            git_service.validate_commit_sha(commit)
+            await task_manager.append_log(task_id, f"Building commit {commit} ({kind} {config.git_ref})")
+        await task_manager.set_commit(task_id, commit)
+        await task_manager.append_log(task_id, f"Cloning {masked_url} @ {commit}")
+        anonymous = await git_service.clone_at_commit(
             url=config.git_url,
             ref=config.git_ref,
             ref_type=config.git_ref_type,
+            commit=commit,
             target_dir=target,
             token=token,
             provider=provider,
             timeout=float(settings.git_clone_timeout),
         )
     except git_service.GitUrlError as e:
-        # clone_repo already cleans up partial state on failure; surface
+        # clone_at_commit already cleans up partial state on failure; surface
         # the (already-masked) error to the task log and re-raise so the
         # outer dispatcher marks the task failed.
         await task_manager.append_log(task_id, f"Clone failed: {e}")
@@ -675,6 +713,14 @@ async def _prepare_git_workspace(task_id: str, config: BuildConfig) -> BuildConf
         )
     await task_manager.append_log(task_id, f"Clone completed: {target}")
 
+    # packwright.toml, read from the commit just checked out. Before the venv
+    # bootstrap: the file may name the Python version and dependency groups.
+    try:
+        config = await _config_stage(task_id, config, target)
+    except Exception:
+        await _drop_workspace(task_id, "a packwright.toml that cannot be used")
+        raise
+
     # Auto venv bootstrap — installs Python dependencies so nuitka_worker
     # finds a usable .venv. Failures here abort the task AND delete the
     # partial clone. Rationale: the full uv stderr is already in the task
@@ -685,20 +731,7 @@ async def _prepare_git_workspace(task_id: str, config: BuildConfig) -> BuildConf
         await _prepare_venv(task_id, target, config)
     except Exception as e:
         await task_manager.append_log(task_id, f"Venv bootstrap failed: {e!s}")
-        try:
-            from app.services import workspace_cleanup
-            await asyncio.to_thread(workspace_cleanup.delete_one_workspace, task_id)
-            await task_manager.append_log(
-                task_id,
-                "Partial workspace removed (bootstrap failures leave nothing "
-                "useful to inspect — full error is above in this log).",
-            )
-        except Exception as cleanup_err:
-            # Don't let cleanup errors mask the original failure.
-            await task_manager.append_log(
-                task_id,
-                f"Cleanup after bootstrap failure also failed (ignored): {cleanup_err!s}",
-            )
+        await _drop_workspace(task_id, "bootstrap failures")
         raise
 
     # Return a derived config — workers from here on see project_path
@@ -706,13 +739,92 @@ async def _prepare_git_workspace(task_id: str, config: BuildConfig) -> BuildConf
     return config.model_copy(update={"project_path": str(target)})
 
 
-async def start_build_task(task_id: str, config: BuildConfig) -> None:
+async def _drop_workspace(task_id: str, why: str) -> None:
+    """Delete a Git build's clone after it failed before building."""
+    try:
+        from app.services import workspace_cleanup
+        await asyncio.to_thread(workspace_cleanup.delete_one_workspace, task_id)
+        await task_manager.append_log(
+            task_id,
+            f"Partial workspace removed ({why} leave nothing useful to inspect — the full error is in this log).",
+        )
+    except Exception as cleanup_err:
+        # Don't let cleanup errors mask the original failure.
+        await task_manager.append_log(task_id, f"Cleanup after the failure also failed (ignored): {cleanup_err!s}")
+
+
+async def _config_stage(task_id: str, config: BuildConfig, root: Path) -> BuildConfig:
+    """The Config stage: read packwright.toml at the root of the source, put its
+    values over the build's settings, and record what the build is made with and
+    where each value came from (app/services/packwright_toml).
+
+    Raises packwright_toml.ConfigFileError when the file cannot be used: the
+    build then fails here, before anything heavy runs.
+    """
+    from app.services import packwright_toml as pt
+
+    await task_manager.set_stage(task_id, "config")
+    await task_manager.update_task(task_id, "status_msg", f"Reading {pt.FILE_NAME}...")
+    settings = await asyncio.to_thread(pt.read, root)
+    if settings is None:
+        effective = config
+        await task_manager.append_log(task_id, f"No {pt.FILE_NAME} in the source: the project's settings are used")
+    else:
+        effective = await asyncio.to_thread(pt.apply, config, settings, root)
+        submitted = config.model_dump(mode="json")
+        built = effective.model_dump(mode="json")
+        await task_manager.append_log(
+            task_id, f"{pt.FILE_NAME}: {len(settings.keys)} setting(s) from the file, which win over the project's"
+        )
+        origins = task_manager.origins_of(task_id) or {}
+        for name, where in settings.keys.items():
+            line = f"  {where['key']} = {built.get(name)!r} (line {where['line']})"
+            if submitted.get(name) != built.get(name):
+                before = "this build's" if origins.get(name) == "override" else "the project's"
+                line += f", instead of {before} {submitted.get(name)!r}"
+            await task_manager.append_log(task_id, line)
+    await task_manager.set_effective(task_id, pt.record(task_manager.origins_of(task_id), config, effective, settings))
+    return effective
+
+
+async def _fail_config(task_id: str, error) -> None:
+    """Fail a build whose packwright.toml cannot be used, saying where and why."""
+    from app.database import async_session
+    from app.services import packwright_toml as pt
+
+    lines = [str(i) for i in error.issues]
+    for line in lines:
+        await task_manager.append_log(task_id, f"✗ {line}")
+    first = error.issues[0]
+    where = f" (line {first.line})" if first.line else ""
+    report = {
+        "failed_stage": "config",
+        "diagnosis": [{
+            "problem": f"The repository's {pt.FILE_NAME} cannot be used{where}",
+            "suggestion": (
+                f"Fix {'these lines' if len(lines) > 1 else 'this'} in {pt.FILE_NAME} in the repository and build "
+                "again. Its keys mirror the project settings; secrets, Git credentials, notifications, webhooks and "
+                "schedules stay in Packwright."
+            ),
+            "evidence": "\n".join(lines),
+        }],
+        "error_lines": lines,
+    }
+    async with async_session() as db:
+        await task_manager.update_task(task_id, "status", TaskStatus.FAILED, db)
+        await task_manager.update_task(task_id, "status_msg", f"{pt.FILE_NAME}: {first}")
+        await task_manager.merge_result(task_id, report, db)
+    notifications.notify_build_soon(task_id)
+
+
+async def start_build_task(task_id: str, config: BuildConfig, commit: str | None = None) -> None:
     """Start a build task in the background.
 
     A local build first waits its turn for the project folder, then for a build
     slot from the semaphore; if all slots are occupied, the task waits in
     "Queued" state. For git-source tasks, the repo is cloned into a fresh
-    per-task workspace AFTER the slot is acquired but BEFORE dispatch.
+    per-task workspace AFTER the slot is acquired but BEFORE dispatch, at
+    ``commit`` when one is given (see _prepare_git_workspace).
     """
     sem = _get_semaphore()
 
@@ -730,10 +842,12 @@ async def start_build_task(task_id: str, config: BuildConfig) -> None:
             if await _is_cancelled():
                 await task_manager.append_log(task_id, "Task was cancelled while queued — build skipped")
                 return
-        await _run_in_slot(task_id, config, sem, _is_cancelled)
+        await _run_in_slot(task_id, config, sem, _is_cancelled, commit)
 
 
-async def _run_in_slot(task_id: str, config: BuildConfig, sem: asyncio.Semaphore, _is_cancelled) -> None:
+async def _run_in_slot(
+    task_id: str, config: BuildConfig, sem: asyncio.Semaphore, _is_cancelled, commit: str | None = None
+) -> None:
     """Wait for a build slot, then prepare, build and report. See start_build_task."""
     from app.database import async_session
 
@@ -753,10 +867,15 @@ async def _run_in_slot(task_id: str, config: BuildConfig, sem: asyncio.Semaphore
 
         await task_manager.append_log(task_id, "Build slot acquired!")
 
+        from app.services.packwright_toml import ConfigFileError
+
         effective_config = config
         if config.source_type == SourceType.GIT:
             try:
-                effective_config = await _prepare_git_workspace(task_id, config)
+                effective_config = await _prepare_git_workspace(task_id, config, commit)
+            except ConfigFileError as e:
+                await _fail_config(task_id, e)
+                return
             except Exception as e:
                 async with async_session() as db:
                     await task_manager.update_task(task_id, "status", TaskStatus.FAILED, db)
@@ -772,6 +891,13 @@ async def _run_in_slot(task_id: str, config: BuildConfig, sem: asyncio.Semaphore
                 await task_manager.append_log(
                     task_id, "Task was cancelled during clone/bootstrap — build skipped"
                 )
+                return
+
+        else:
+            try:
+                effective_config = await _config_stage(task_id, config, Path(config.project_path))
+            except ConfigFileError as e:
+                await _fail_config(task_id, e)
                 return
 
         started = time.monotonic()
@@ -793,8 +919,12 @@ async def _run_in_slot(task_id: str, config: BuildConfig, sem: asyncio.Semaphore
                 # to act on, people simply retried. The report falls
                 # back to naming the failed stage and the log's error lines,
                 # which is at least something to act on or forward.
+                # The preflight checks are passed as well: a missing project
+                # .venv is recorded there even when the log ring has dropped the
+                # line that said so (#21).
+                preflight = [c.model_dump() for c in current.result.preflight] if current.result else None
                 report = build_failure_report(
-                    "\n".join(logs), stage=getattr(current, "stage", None)
+                    "\n".join(logs), stage=getattr(current, "stage", None), preflight=preflight
                 )
                 async with async_session() as db:
                     await task_manager.merge_result(task_id, report, db)

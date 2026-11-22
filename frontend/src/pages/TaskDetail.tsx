@@ -6,6 +6,9 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import LogViewer from '../components/LogViewer'
 import BuildResultPanel from '../components/build/BuildResultPanel'
 import FailureReport from '../components/build/FailureReport'
+import CommitChip from '../components/build/CommitChip'
+import SettingOrigins from '../components/build/SettingOrigins'
+import { triggerLabel } from '../utils/buildOrigin'
 import { useWebSocket } from '../hooks/useWebSocket'
 import { taskApi } from '../api/client'
 import type { TaskResponse } from '../api/types'
@@ -86,6 +89,10 @@ export default function TaskDetail() {
             return { ...old, stage: String(msg.data) }
           case 'result':
             return { ...old, result: msg.data as TaskResponse['result'] }
+          case 'commit_sha':
+            return { ...old, commit_sha: String(msg.data) }
+          case 'effective':
+            return { ...old, effective: msg.data as TaskResponse['effective'] }
           default:
             return old
         }
@@ -134,15 +141,17 @@ export default function TaskDetail() {
   const config = STATUS_META[task.status]
   const isActive = task.status === 'pending' || task.status === 'running'
   const result = task.result
-  const hasBackend =
-    task.config.project_type === 'backend_only' || task.config.project_type === 'fullstack'
-  const hasFrontend =
-    task.config.project_type === 'frontend_only' || task.config.project_type === 'fullstack'
+  // What is being built: packwright.toml's values over the submitted settings once
+  // the Config stage has read the source. A rebuild still starts from task.config.
+  const built = task.effective?.config ?? task.config
+  const hasBackend = built.project_type === 'backend_only' || built.project_type === 'fullstack'
+  const hasFrontend = built.project_type === 'frontend_only' || built.project_type === 'fullstack'
 
   return (
     <div>
       {/* Run header — status glyph + run title + a muted meta line, GitHub-Actions style. */}
-      <div className="flex items-start gap-3 mb-6">
+      {/* On a phone the actions take their own row: beside the title they squeezed the meta line to one word per line. */}
+      <div className="flex flex-wrap sm:flex-nowrap items-start gap-3 mb-6">
         <button
           onClick={() => navigate('/')}
           aria-label="Back to dashboard"
@@ -188,7 +197,13 @@ export default function TaskDetail() {
               </>
             )}
             <span aria-hidden>·</span>
-            <span>Triggered by {task.user_name}</span>
+            <span>Triggered by {task.user_name} ({triggerLabel(task.trigger)})</span>
+            {task.commit_sha && (
+              <>
+                <span aria-hidden>·</span>
+                <CommitChip sha={task.commit_sha} />
+              </>
+            )}
             <span aria-hidden>·</span>
             <span>Started {timeAgo(task.created_at)}</span>
             {typeof result?.duration_seconds === 'number' && (
@@ -204,7 +219,7 @@ export default function TaskDetail() {
         </div>
 
         {/* Primary actions */}
-        <div className="flex items-center gap-2 flex-shrink-0">
+        <div className="flex flex-wrap items-center gap-2 flex-shrink-0 w-full sm:w-auto">
           {isActive ? (
             <Button
               danger
@@ -282,6 +297,9 @@ export default function TaskDetail() {
 
       <BuildResultPanel result={result} />
 
+      {/* Every setting and where it came from: packwright.toml, this build, the project, detection. */}
+      <SettingOrigins effective={task.effective} config={task.config} />
+
       {/* Body — config sidebar + the live log stream as the focus. */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         {/* Config / details sidebar */}
@@ -305,32 +323,32 @@ export default function TaskDetail() {
 
             <div className="space-y-2.5 text-sm">
               <DetailRow label="Project type">
-                {PROJECT_TYPE_META[task.config.project_type].label}
+                {PROJECT_TYPE_META[built.project_type].label}
               </DetailRow>
-              {task.config.docker_enabled && <DetailRow label="Docker">Enabled</DetailRow>}
+              {built.docker_enabled && <DetailRow label="Docker">Enabled</DetailRow>}
 
               {/* Backend settings */}
               {hasBackend && (
                 <>
                   <DetailRow label="Pack mode">
-                    {{ full: 'Full', external: 'External' }[task.config.pack_mode]}
+                    {{ full: 'Full', external: 'External' }[built.pack_mode]}
                   </DetailRow>
                   <DetailRow label="Python">{task.python_version}</DetailRow>
                   <DetailRow label="Entry point" mono>
-                    {task.config.entry_point}
+                    {built.entry_point}
                   </DetailRow>
                   <DetailRow label="Binary name" mono>
-                    {binaryName(task.config)}
+                    {binaryName(built)}
                   </DetailRow>
                   <DetailRow label="One-file binary">
-                    {task.config.onefile ? 'Yes' : 'No'}
+                    {built.onefile ? 'Yes' : 'No'}
                   </DetailRow>
                   <DetailRow label="CPU jobs">
-                    {task.config.nuitka_jobs > 0 ? `${task.config.nuitka_jobs} cores` : 'Auto'}
+                    {built.nuitka_jobs > 0 ? `${built.nuitka_jobs} cores` : 'Auto'}
                   </DetailRow>
-                  {task.config.include_packages && (
+                  {built.include_packages && (
                     <DetailRow label="Included packages" mono>
-                      {task.config.include_packages}
+                      {built.include_packages}
                     </DetailRow>
                   )}
                 </>
@@ -340,30 +358,30 @@ export default function TaskDetail() {
               {hasFrontend && (
                 <>
                   <DetailRow label="Frontend dir" mono>
-                    {task.config.frontend_dir}
+                    {built.frontend_dir}
                   </DetailRow>
-                  <DetailRow label="Build tool">{task.config.frontend_build_tool}</DetailRow>
+                  <DetailRow label="Build tool">{built.frontend_build_tool}</DetailRow>
                   <DetailRow label="Build command" mono>
-                    {task.config.frontend_build_command}
+                    {built.frontend_build_command}
                   </DetailRow>
-                  {task.config.frontend_env_content && (
+                  {built.frontend_env_content && (
                     <DetailRow label="Env file" mono>
-                      {task.config.frontend_env_filename}
+                      {built.frontend_env_filename}
                     </DetailRow>
                   )}
                 </>
               )}
 
               {/* Docker settings */}
-              {task.config.docker_enabled && (
+              {built.docker_enabled && (
                 <>
-                  {task.config.docker_image_name && (
+                  {built.docker_image_name && (
                     <DetailRow label="Docker image" mono>
-                      {task.config.docker_image_name}
+                      {built.docker_image_name}
                     </DetailRow>
                   )}
                   <DetailRow label="Base image" mono>
-                    {task.config.docker_base_image}
+                    {built.docker_base_image}
                   </DetailRow>
                 </>
               )}

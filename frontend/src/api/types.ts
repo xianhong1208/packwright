@@ -63,9 +63,24 @@ export interface DetectedVersion {
   source: string
 }
 
+/** Where a packwright.toml set a setting: its key, line and the line's text. */
+export interface FileKeyRef {
+  key: string
+  line: number | null
+  text: string
+}
+
+/** A source's packwright.toml as New build sees it: the settings it sets, or what is wrong with it. */
+export interface PackwrightTomlPreview {
+  values: Partial<Record<keyof BuildConfig, unknown>>
+  keys: Partial<Record<keyof BuildConfig, FileKeyRef>>
+  errors: string[]
+}
+
 export interface RepoDiagnosis {
   checks: RepoDiagnosisCheck[]
   version?: DetectedVersion | null
+  packwright_toml?: PackwrightTomlPreview | null
 }
 
 /** What scanning a Git repository at a ref returns. */
@@ -76,6 +91,7 @@ export interface GitScanTree {
   /** The same fingerprints a local path gets from diagnoseRepo. */
   checks?: RepoDiagnosisCheck[]
   version?: DetectedVersion | null
+  packwright_toml?: PackwrightTomlPreview | null
 }
 
 // ===== Projects =====
@@ -105,9 +121,29 @@ export interface ProjectSummary {
   can_edit: boolean
 }
 
+/** A setting a build took from packwright.toml. */
+export interface FileKey extends FileKeyRef {
+  value: unknown
+  /** The value the file replaced, and where it came from, when they differed. */
+  replaced?: { origin: SettingOrigin; value: unknown } | null
+}
+
+export type SettingOrigin = 'file' | 'override' | 'project' | 'detected'
+
+/** What a build was made with and where each value came from. */
+export interface EffectiveSettings {
+  /** null until the build's Config stage has read its source. */
+  config: BuildConfig | null
+  origins: Partial<Record<keyof BuildConfig, SettingOrigin>>
+  /** null when the source had no packwright.toml. */
+  file: { path: string; fields: Partial<Record<keyof BuildConfig, FileKey>> } | null
+}
+
 export interface ProjectDetail extends ProjectSummary {
   config: BuildConfig
   history: BuildBrief[]
+  /** What the latest build that read its source took from packwright.toml: read-only here. */
+  from_file?: { task_id: string; commit_sha: string | null; fields: Partial<Record<keyof BuildConfig, FileKey>> } | null
 }
 
 /** An earlier build of the version about to be built. */
@@ -167,6 +203,11 @@ export interface BuildConfig {
   docker_custom_commands: string
   docker_install_node: boolean
   docker_api_proxy: string
+  /** State folders declared as volumes (relative to /app or absolute), comma-separated.
+   *  null = not set yet: the folders the smoke run created are used and saved here. */
+  docker_volumes?: string | null
+  /** Run the program as root inside a backend image (default: non-root uid 10001). */
+  docker_run_as_root?: boolean
   // nginx settings (frontend-only Docker image)
   nginx_client_max_body_size: string
   /** Idle timeout for the proxied backend — how long it may send nothing
@@ -207,6 +248,13 @@ export interface VerifyResult {
   status: VerifyStatus
   detail: string
   exit_code: number | null
+  /** Folders the program created where it ran. */
+  created_dirs?: string[]
+  listeners?: { port: number; address: string }[]
+  /** What the smoke test started: the binary on the build host, or the Docker image. */
+  target?: 'binary' | 'image' | null
+  /** The smoke container's name, for an image test (removed afterwards). */
+  container?: string | null
 }
 
 export interface DiagnosisAction {
@@ -240,6 +288,27 @@ export interface BuildResult {
   failed_stage?: string | null
   /** C files Nuitka took from ccache vs. compiled; absent without ccache. */
   compile_cache?: { hits: number; compiled: number } | null
+  /** The Docker image a Docker build produced. */
+  image?: ImageInfo | null
+  /** Docker builds: the ports the program listened on against the exposed one. */
+  port_check?: PortCheck | null
+}
+
+export interface PortCheck {
+  listening: number[]
+  expected: number
+  /** The port to set instead, when the program did not listen on the exposed one. */
+  suggested: number | null
+  message: string
+}
+
+export interface ImageInfo {
+  name: string
+  size_bytes: number | null
+  /** The suggested `docker run`: port published, a named volume per state folder. */
+  run_command?: string
+  volumes?: string[]
+  user?: string
 }
 
 /** GET /monitoring/compile-cache: the ccache store Nuitka builds use. */
@@ -255,9 +324,14 @@ export interface CompileCacheStatus {
   reason: string | null
 }
 
+/** What started a build (set by the server). */
+export type BuildTrigger = 'console' | 'api' | 'push' | 'tag' | 'schedule'
+
 export interface TaskCreate {
   project_name: string
   config: BuildConfig
+  /** Settings filled in by detection and left as found (recorded as their origin). */
+  detected_fields?: string[]
 }
 
 export interface TaskResponse {
@@ -275,6 +349,10 @@ export interface TaskResponse {
   logs: string[]
   result: BuildResult | null
   project_id?: number | null
+  /** The exact commit a Git build checked out (null until cloned, and for Local sources). */
+  commit_sha?: string | null
+  trigger?: BuildTrigger
+  effective?: EffectiveSettings | null
 }
 
 export interface HistoryItem {
@@ -289,6 +367,9 @@ export interface HistoryItem {
   config?: BuildConfig
   result?: BuildResult | null
   project_id?: number | null
+  commit_sha?: string | null
+  trigger?: BuildTrigger
+  effective?: EffectiveSettings | null
 }
 
 export interface DetectedFrontendConfig {
@@ -330,7 +411,7 @@ export interface ProjectAnalysis {
 }
 
 export interface WebSocketMessage {
-  type: 'log' | 'status' | 'progress' | 'status_msg' | 'stage' | 'result' | 'error' | 'pong'
+  type: 'log' | 'status' | 'progress' | 'status_msg' | 'stage' | 'result' | 'commit_sha' | 'effective' | 'error' | 'pong'
   task_id: string
   // Shape depends on `type`; consumers narrow + cast per case.
   data: unknown
@@ -598,4 +679,97 @@ export interface ProjectNotification {
   last_sent_at: string | null
   last_ok: boolean | null
   last_error: string | null
+}
+
+/** Where an incoming webhook comes from. */
+export type HookProvider = 'github' | 'gitlab' | 'gitea' | 'generic'
+
+/** An incoming webhook of a project (its secret is never listed). */
+export interface ProjectHook {
+  id: number
+  provider: HookProvider
+  /** Path of the payload URL; `url` is the full URL as the server knows it. */
+  path: string
+  url: string
+  branches: string[]
+  tags: string[]
+  enabled: boolean
+  /** Why Packwright turned it off (its creator may no longer build). */
+  disabled_reason: string | null
+  has_signing_key: boolean
+  /** Builds it starts run as this person. */
+  created_by: string
+  created_at: string
+  secret_rotated_at: string | null
+  last_delivery_at: string | null
+  can_edit: boolean
+}
+
+/** The answer to creating a hook or rotating its secret: the only time the secret is shown. */
+export interface CreatedProjectHook extends ProjectHook {
+  secret: string
+}
+
+export interface HookDelivery {
+  id: number
+  received_at: string
+  delivery_id: string | null
+  event: string | null
+  ref: string | null
+  commit_sha: string | null
+  result: 'built' | 'ignored' | 'rejected'
+  reason: string | null
+  task_id: string | null
+}
+
+/** What one run of a schedule came to. */
+export interface ScheduleRun {
+  id: number
+  /** The slot it was for, and when it was handled. */
+  due_at: string
+  ran_at: string
+  result: 'built' | 'skipped' | 'failed'
+  reason: string | null
+  commit_sha: string | null
+  /** The build it started; for a skip, the build it matched or waited on. */
+  task_id: string | null
+}
+
+/** A project's scheduled build. */
+export interface ProjectSchedule {
+  id: number
+  cron: string
+  /** The expression in words, when it can be said. */
+  description: string | null
+  timezone: string
+  ref: string
+  ref_type: 'branch' | 'tag'
+  skip_unchanged: boolean
+  enabled: boolean
+  /** Why Packwright turned it off (its creator may no longer build). */
+  disabled_reason: string | null
+  next_run_at: string | null
+  last_run_at: string | null
+  last_run: ScheduleRun | null
+  /** Builds it starts run as this person. */
+  created_by: string
+  created_at: string
+  can_edit: boolean
+}
+
+export interface ScheduleInput {
+  cron?: string
+  timezone?: string
+  ref?: string
+  ref_type?: 'branch' | 'tag'
+  skip_unchanged?: boolean
+  enabled?: boolean
+  take_over?: boolean
+}
+
+export interface SchedulePreview {
+  cron: string
+  timezone: string
+  description: string | null
+  next_runs: string[]
 }

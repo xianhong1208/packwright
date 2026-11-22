@@ -132,6 +132,21 @@ class Settings(BaseSettings):
     # Everyone behind one NAT or proxy address shares it.
     rate_limit_per_minute: int = 300
     rate_limit_per_hour: int = 6000
+    # Webhook deliveries (/api/hooks/...) a client address may send per minute.
+    # They are unauthenticated until the signature is checked, so they get their
+    # own budget, apart from the console's and the build-submit one.
+    webhook_per_minute: int = 60
+    # Largest webhook body read, in bytes. A push payload carries at most 20
+    # commits (GitHub) and is usually a few kilobytes; anything bigger is refused
+    # with 413 before it is read into memory.
+    webhook_max_body_bytes: int = 1_048_576
+    # Scheduled builds (app/services/schedules). Off stops the scheduler loop;
+    # schedules keep their settings and the console still shows them.
+    schedules_enabled: bool = True
+    # Time zone a new schedule is read in unless the person picks another (an IANA
+    # name such as Asia/Taipei). Empty: the server's own zone (TZ, /etc/timezone or
+    # /etc/localtime), or UTC when it cannot be told.
+    schedule_timezone: str = ""
 
     # === Git source mode ===
     # Legacy single-token fallback. Git credentials are now managed in the console

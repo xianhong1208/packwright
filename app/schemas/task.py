@@ -10,6 +10,15 @@ from pydantic import BaseModel, Field, field_validator, model_validator
 
 _VERSION_RE = re.compile(r"[A-Za-z0-9][A-Za-z0-9._+-]{0,63}")
 
+# A full commit id: 40 hex (SHA-1) or 64 hex (SHA-256 repositories), lower case.
+# Never an abbreviation or a ref name: it is passed to git as a positional argument.
+COMMIT_SHA_RE = re.compile(r"[0-9a-f]{40}(?:[0-9a-f]{24})?")
+
+# What started a build. Set by the server on the path that creates the build,
+# never read from a request body.
+BuildTrigger = Literal["console", "api", "push", "tag", "schedule"]
+BUILD_TRIGGERS: tuple[str, ...] = ("console", "api", "push", "tag", "schedule")
+
 
 class TaskStatus(str, Enum):
     """Task status enumeration."""
@@ -279,6 +288,16 @@ class BuildConfig(BaseModel):
             )
         return self
 
+    @field_validator("docker_volumes")
+    @classmethod
+    def validate_docker_volumes(cls, v: str | None) -> str | None:
+        if v is None:
+            return None
+        from app.services.docker_worker import parse_volumes
+
+        parse_volumes(v)  # raises ValueError naming the bad entry
+        return v
+
     @field_validator("frontend_env_filename")
     @classmethod
     def validate_env_filename(cls, v: str) -> str:
@@ -321,6 +340,19 @@ class BuildConfig(BaseModel):
     docker_api_proxy: str = Field(
         default="",
         description="Backend API URL for nginx reverse proxy (e.g., http://backend:8000)",
+    )
+    docker_volumes: str | None = Field(
+        default=None,
+        description=(
+            "Folders the program keeps its state in, comma- or newline-separated, relative to the "
+            "image's /app or absolute. Each becomes a VOLUME, owned by the program's user. None = "
+            "not set yet: the folders the program created during the smoke run are used, and saved "
+            "here for the next build"
+        ),
+    )
+    docker_run_as_root: bool = Field(
+        default=False,
+        description="Run the program as root inside a backend image (default: a non-root user, uid 10001)",
     )
 
     # === Nginx Settings (frontend-only Docker image) ===
@@ -393,6 +425,35 @@ class TaskCreate(BaseModel):
     # project with its name and source (created if there is none).
     project_id: int | None = None
     user_name: str | None = Field(default=None, exclude=True)
+    # Build exactly this commit of a Git source instead of where its ref points
+    # when the build starts (a webhook passes the pushed commit). A full id only.
+    git_commit: str | None = Field(default=None, description="Full commit id to build (Git sources only)")
+    # Settings the console filled in by looking at the source (Quick build), left
+    # as found. Only recorded as where those values came from; names that are not
+    # settings are dropped.
+    detected_fields: list[str] = Field(
+        default_factory=list, max_length=100, description="Settings filled in by detection (recorded as their origin)"
+    )
+
+    @field_validator("detected_fields")
+    @classmethod
+    def _known_fields(cls, v: list[str]) -> list[str]:
+        return [name for name in dict.fromkeys(v) if name in BuildConfig.model_fields]
+
+    @field_validator("git_commit")
+    @classmethod
+    def _full_commit_id(cls, v: str | None) -> str | None:
+        if v is None or v == "":
+            return None
+        if not COMMIT_SHA_RE.fullmatch(v):
+            raise ValueError("git_commit must be a full commit id: 40 or 64 lower-case hex characters")
+        return v
+
+    @model_validator(mode="after")
+    def _commit_needs_git(self) -> "TaskCreate":
+        if self.git_commit and self.config.source_type != SourceType.GIT:
+            raise ValueError("git_commit applies only to Git sources")
+        return self
 
 
 class TaskUpdate(BaseModel):
@@ -429,12 +490,48 @@ class ArtifactInfo(BaseModel):
     sha256: str | None = None
 
 
+class ImageInfo(BaseModel):
+    """The Docker image a build produced."""
+
+    name: str
+    size_bytes: int | None = None
+    # The suggested `docker run`, with the port published and a named volume
+    # per state folder.
+    run_command: str = ""
+    volumes: list[str] = Field(default_factory=list)
+    user: str = ""
+
+
+class ListenerInfo(BaseModel):
+    port: int
+    address: str
+
+
+class PortCheck(BaseModel):
+    """The ports the program listened on against the image's EXPOSE/PORT.
+    A suggestion only: the setting is never changed for the user."""
+
+    listening: list[int] = Field(default_factory=list)
+    expected: int
+    suggested: int | None = None
+    message: str = ""
+
+
 class VerifyResult(BaseModel):
     """Outcome of the post-build smoke test."""
 
     status: Literal["pass", "warn", "fail", "skipped"]
     detail: str = ""
     exit_code: int | None = None
+    # Folders the program created where it ran (relative names): what a Docker
+    # build declares as volumes when none are set.
+    created_dirs: list[str] = Field(default_factory=list)
+    # What was started: the binary on the build host, or the Docker image.
+    target: Literal["binary", "image"] | None = None
+    # The smoke container's name, for an image test (it is removed afterwards).
+    container: str | None = None
+    # TCP ports the program listened on during the run.
+    listeners: list[ListenerInfo] = Field(default_factory=list)
 
 
 class DiagnosisAction(BaseModel):
@@ -489,6 +586,37 @@ class BuildResult(BaseModel):
     # C files Nuitka took from ccache vs. compiled (app/services/compile_cache).
     # None when the build compiled without ccache.
     compile_cache: CompileCacheSummary | None = None
+    # The image, for Docker builds.
+    image: ImageInfo | None = None
+    # Docker builds: did the program listen on the exposed port?
+    port_check: PortCheck | None = None
+
+
+class FileKey(BaseModel):
+    """A setting packwright.toml set: its key, line and value."""
+
+    key: str
+    line: int | None = None
+    text: str = ""
+    value: Any = None
+    # The value the file replaced, and where that came from, when they differed.
+    replaced: dict | None = None
+
+
+class FileRecord(BaseModel):
+    path: str = "packwright.toml"
+    fields: dict[str, FileKey] = Field(default_factory=dict)
+
+
+class EffectiveSettings(BaseModel):
+    """What a build was made with and where each value came from
+    (app/services/packwright_toml.record). ``config`` is None until the build's
+    Config stage has read the source; ``file`` is None when it had no packwright.toml."""
+
+    config: dict | None = None
+    # BuildConfig field -> file, override, project or detected
+    origins: dict[str, str] = Field(default_factory=dict)
+    file: FileRecord | None = None
 
 
 class TaskResponse(BaseModel):
@@ -508,6 +636,9 @@ class TaskResponse(BaseModel):
     logs: list[str] = Field(default_factory=list)
     result: BuildResult | None = None
     project_id: int | None = None
+    commit_sha: str | None = None
+    trigger: BuildTrigger = "console"
+    effective: EffectiveSettings | None = None
 
 
 class HistoryItem(BaseModel):
@@ -524,6 +655,10 @@ class HistoryItem(BaseModel):
     config: BuildConfig | None = None
     result: BuildResult | None = None
     project_id: int | None = None
+    commit_sha: str | None = None
+    trigger: BuildTrigger = "console"
+    # The single record only; the history list leaves it out.
+    effective: EffectiveSettings | None = None
 
 
 class WebSocketMessage(BaseModel):

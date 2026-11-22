@@ -432,60 +432,153 @@ async def list_refs(
     }
 
 
-# ---------- clone_repo ----------
+# ---------- exact commit ----------
 
-async def clone_repo(
+_COMMIT_RE = re.compile(r"[0-9a-f]{40}(?:[0-9a-f]{24})?")
+
+
+def validate_commit_sha(sha: str) -> None:
+    """Raise GitUrlError unless ``sha`` is a full commit id (40 or 64 lower-case hex).
+
+    It reaches git as a positional argument, so anything else (an abbreviation, a
+    ref name, an option) is refused before git sees it.
+    """
+    if not isinstance(sha, str) or not _COMMIT_RE.fullmatch(sha):
+        raise GitUrlError("Commit must be a full commit id (40 or 64 lower-case hex characters)")
+
+
+def _full_ref(ref: str, ref_type: str) -> str:
+    if ref_type not in ("branch", "tag"):
+        raise GitUrlError(f"Invalid ref_type '{ref_type}'")
+    return f"refs/heads/{ref}" if ref_type == "branch" else f"refs/tags/{ref}"
+
+
+async def resolve_ref(
     url: str,
     ref: str,
     ref_type: Literal["branch", "tag"],
+    token: str | None,
+    *,
+    provider: str = "gitlab",
+    timeout: float = 30.0,
+) -> str:
+    """The commit ``ref`` points at now, from `git ls-remote` (no clone).
+
+    An annotated tag is peeled to its commit (the ``^{}`` line). The answer is
+    matched against the full ref name exactly: ls-remote patterns match any
+    ref that merely ends with them.
+    """
+    validate_git_url(url, _current_allowed_hosts())
+    validate_git_ref(ref)
+    full = _full_ref(ref, ref_type)
+    # The peeled line must be asked for by name: a pattern matches the tail of a
+    # ref, and "refs/tags/v1^{}" does not end with "refs/tags/v1".
+    cmd = ["git", "ls-remote", url, full, full + "^{}"]
+    returncode, stdout_bytes, stderr_bytes, _ = await _fetch_with_fallback(
+        cmd, url, token, provider, timeout, "git ls-remote")
+    if returncode != 0:
+        stderr = mask_token_in_log(stderr_bytes.decode("utf-8", "replace"), token)
+        raise GitUrlError(f"git ls-remote failed: {stderr.strip() or 'unknown error'}")
+
+    direct = peeled = None
+    for line in stdout_bytes.decode("utf-8", "replace").splitlines():
+        sha, _, name = line.partition("\t")
+        if name == full:
+            direct = sha.strip()
+        elif name == full + "^{}":
+            peeled = sha.strip()
+    sha = peeled or direct
+    if not sha:
+        kind = "Branch" if ref_type == "branch" else "Tag"
+        raise GitUrlError(f"{kind} '{ref}' was not found in the repository")
+    validate_commit_sha(sha)
+    return sha
+
+
+async def _local_git(cmd: list[str], timeout: float, what: str) -> tuple[int, bytes, bytes]:
+    """A git command that does not talk to the remote (init, checkout, rev-parse)."""
+    return await _run_git(cmd, _git_env(), timeout, what)
+
+
+async def clone_at_commit(
+    url: str,
+    ref: str,
+    ref_type: Literal["branch", "tag"],
+    commit: str,
     target_dir: Path,
     token: str | None,
     *,
     provider: str = "gitlab",
     timeout: float = 600.0,
 ) -> bool:
-    """Clone `url` @ `ref` into `target_dir` (which must not yet exist).
+    """Check out exactly ``commit`` of ``url`` into ``target_dir`` (which must not exist).
 
-    Uses `--depth 1 --single-branch --branch <ref>` for speed.
-    On any error, partial state at target_dir is removed and a masked
-    exception is raised. Returns True when the stored credential was refused
-    and the clone succeeded without it (see _fetch_with_fallback).
+    ``git init`` + ``git fetch --depth 1 <url> <commit>`` + ``checkout --detach``:
+    one commit, no history, no remote. The commit a branch or tag points at
+    is always served. An older commit (a push that has since been overtaken)
+    needs the server to serve commits by id: GitHub, GitLab and Gitea do
+    over git protocol v2, the default since git 2.26; a server that only
+    speaks v0 refuses, and the build fails naming where the ref points now,
+    rather than building a different commit. ``HEAD`` is compared with ``commit`` before returning.
+
+    On any error the partial checkout is removed and a masked GitUrlError is
+    raised. Returns True when the stored credential was refused and the fetch
+    succeeded without it (see _fetch_with_fallback).
     """
     validate_git_url(url, _current_allowed_hosts())
     validate_git_ref(ref)
-    if ref_type not in ("branch", "tag"):
-        raise GitUrlError(f"Invalid ref_type '{ref_type}'")
+    validate_commit_sha(commit)
+    _full_ref(ref, ref_type)
 
     target_dir = Path(target_dir)
     if target_dir.exists():
         raise GitUrlError(f"Clone target already exists: {target_dir}")
-
     target_dir.parent.mkdir(parents=True, exist_ok=True)
 
-    injected = url  # credentials travel in the environment, see _git_env
-    cmd = [
-        "git",
-        "clone",
-        "--depth",
-        "1",
-        "--single-branch",
-        "--branch",
-        ref,
-        injected,
-        str(target_dir),
-    ]
+    def fail(what: str, stderr_bytes: bytes) -> GitUrlError:
+        _safe_rmtree(target_dir)
+        stderr = mask_token_in_log(stderr_bytes.decode("utf-8", "replace"), token)
+        return GitUrlError(f"{what} failed: {stderr.strip() or 'unknown error'}")
 
     try:
-        returncode, _, stderr_bytes, used = await _fetch_with_fallback(
-            cmd, url, token, provider, timeout, "git clone", before_retry=lambda: _safe_rmtree(target_dir))
+        init = ["git", "init", "-q"]
+        if len(commit) == 64:
+            init.append("--object-format=sha256")
+        rc, _, err = await _local_git([*init, str(target_dir)], 60.0, "git init")
+        if rc != 0:
+            raise fail("git init", err)
+
+        git_dir = ["git", "-C", str(target_dir)]
+        rc, _, err, used = await _fetch_with_fallback(
+            [*git_dir, "fetch", "-q", "--depth", "1", "--no-tags", url, commit],
+            url, token, provider, timeout, "git fetch")
+        if rc != 0:
+            # A server speaking protocol v0 serves only commits a ref points at.
+            # Say so plainly when the ref has moved on, rather than git's
+            # "not our ref".
+            try:
+                tip = await resolve_ref(url, ref, ref_type, token, provider=provider, timeout=timeout)
+            except GitUrlError:
+                tip = None
+            if tip is not None and tip != commit:
+                _safe_rmtree(target_dir)
+                raise GitUrlError(
+                    f"{'Branch' if ref_type == 'branch' else 'Tag'} '{ref}' now points at {tip[:12]}, "
+                    f"not {commit[:12]}, and this server does not serve older commits by id"
+                )
+            raise fail("git fetch", err)
+
+        rc, _, err = await _local_git([*git_dir, "checkout", "-q", "--detach", commit], timeout, "git checkout")
+        if rc != 0:
+            raise fail("git checkout", err)
+        rc, out, err = await _local_git([*git_dir, "rev-parse", "HEAD"], 60.0, "git rev-parse")
+        head = out.decode("utf-8", "replace").strip()
+        if rc != 0 or head != commit:
+            _safe_rmtree(target_dir)
+            raise GitUrlError(f"Checked out {head[:12] or '?'} instead of {commit[:12]}")
     except GitUrlError:
         _safe_rmtree(target_dir)
         raise
-
-    if returncode != 0:
-        stderr = mask_token_in_log(stderr_bytes.decode("utf-8", "replace"), token)
-        _safe_rmtree(target_dir)
-        raise GitUrlError(f"git clone failed: {stderr.strip() or 'unknown error'}")
     return bool(token) and used is None
 
 
@@ -699,8 +792,27 @@ async def scan_tree(
             except (asyncio.TimeoutError, FileNotFoundError, OSError):
                 pass
 
+        # packwright.toml at that commit: New build fills in only what it leaves out.
+        from app.services import packwright_toml
+
+        toml_text: str | None = None
+        try:
+            proc6 = await _spawn(
+                "git", "show", f"HEAD:{packwright_toml.FILE_NAME}",
+                stdout=asyncio.subprocess.PIPE,
+                stderr=asyncio.subprocess.PIPE,
+                env=_git_env(url, token, provider),
+                cwd=str(target),
+            )
+            toml_bytes, _ = await asyncio.wait_for(proc6.communicate(), timeout=timeout)
+            if proc6.returncode == 0:
+                toml_text = toml_bytes[: packwright_toml.MAX_BYTES + 1].decode("utf-8", "replace")
+        except (asyncio.TimeoutError, FileNotFoundError, OSError):
+            pass
+
         return {
             "directories": sorted(names),
+            "packwright_toml": packwright_toml.preview(toml_text),
             "analysis": analysis,
             "dependency_groups": dependency_groups,
             "version": version,
@@ -1022,7 +1134,9 @@ def diagnose_repo(path: Path) -> dict:
     if not path.exists() or not path.is_dir():
         return {"checks": []}
     checks = check_repo_paths(lambda rel: (path / rel).exists())
-    return {"checks": checks, "version": _local_version(path, checks)}
+    from app.services.packwright_toml import preview_dir
+
+    return {"checks": checks, "version": _local_version(path, checks), "packwright_toml": preview_dir(path)}
 
 
 def _local_version(path: Path, checks: list[dict]) -> dict | None:

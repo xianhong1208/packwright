@@ -566,6 +566,89 @@ h1, h2, h3, h4, h5 { font-family: var(--font-display); letter-spacing: -0.015em;
 .cred-use code { font-family: var(--font-mono); font-size: 12px; color: var(--ink-muted); }
 .cred-use[data-unusable] { color: var(--color-alert-400); }
 
+/* API tokens (pages/ApiTokensPage): the list reuses the credential cards. */
+.cred-card[data-status='expired'], .cred-card[data-status='revoked'] { opacity: 0.66; }
+.token-code { font-family: var(--font-mono); font-size: 12px; color: var(--ink-muted); }
+.token-ended { color: var(--color-alert-400); }
+.token-section-title { margin: 8px 0 10px; font-size: 14px; font-weight: 600; color: var(--ink-muted); }
+.token-scope-list { list-style: none; margin: 8px 0 0; padding: 0; display: flex; flex-wrap: wrap; gap: 6px; }
+.token-scope-list li {
+  font-size: 12.5px; padding: 2px 9px; border-radius: 7px; color: var(--ink-muted);
+  background: var(--color-void-800); border: 1px solid var(--seam);
+}
+.token-scope-list code { font-family: var(--font-mono); font-size: 12px; color: var(--ink); }
+.token-scope-list li { white-space: nowrap; }
+.token-revoke { flex: none; }
+/* Phone: the icon gives its width to the token's details. */
+@media (max-width: 639px) {
+  .token-card .cred-mark { display: none; }
+}
+.token-scopes { display: grid; gap: 10px; }
+.token-scopes .ant-checkbox-label { display: grid; grid-template-columns: auto 1fr; column-gap: 10px; row-gap: 2px; align-items: baseline; }
+.token-scope-name { font-weight: 600; color: var(--ink); }
+.token-scope-desc { grid-column: 1 / -1; font-size: 13px; color: var(--ink-faint); }
+.token-once { display: flex; gap: 8px; align-items: flex-start; margin: 0 0 12px; font-size: 14px; color: var(--color-signal-400); }
+.token-once .anticon { margin-top: 3px; }
+.token-reveal {
+  display: flex; gap: 8px; align-items: center;
+  padding: 10px 10px 10px 14px; border-radius: 10px;
+  background: var(--color-void-900); border: 1px solid var(--seam);
+}
+.token-reveal code { flex: 1; min-width: 0; font-family: var(--font-mono); font-size: 13px; color: var(--ink); overflow-wrap: anywhere; }
+.token-example {
+  margin: 0; padding: 10px 14px; border-radius: 10px; overflow-x: auto;
+  font-family: var(--font-mono); font-size: 12px; color: var(--ink-muted);
+  background: var(--color-void-900); border: 1px solid var(--seam);
+}
+
+/* Incoming webhooks (pages/projects/Webhooks): cards like the notifications tab. */
+/* Phone: the four sources scroll inside the card rather than past its edge. */
+.hook-providers { max-width: 100%; overflow-x: auto; }
+.hook-field-label { display: block; margin: 12px 0 4px; font-size: 13px; font-weight: 600; color: var(--ink-muted); }
+.hook-steps { margin: 14px 0 12px; padding-left: 20px; font-size: 13.5px; color: var(--ink-muted); display: grid; gap: 4px; }
+.hook-url { display: flex; align-items: center; gap: 8px; margin-top: 4px; min-width: 0; }
+.hook-url code { min-width: 0; font-family: var(--font-mono); font-size: 12px; color: var(--ink-muted); overflow-wrap: anywhere; }
+.hook-state {
+  font-size: 12px; font-weight: 600; padding: 0 8px; border-radius: 7px;
+  color: var(--color-alert-400); border: 1px solid var(--seam); background: var(--color-void-800);
+}
+.hook-disabled { display: flex; gap: 8px; align-items: flex-start; margin-top: 10px; font-size: 13.5px; color: var(--color-alert-400); }
+.hook-disabled .anticon { margin-top: 3px; }
+.hook-facts { display: flex; flex-wrap: wrap; gap: 6px 22px; margin: 10px 0 0; font-size: 13.5px; }
+.hook-facts dt { color: var(--ink-faint); font-size: 12px; }
+.hook-facts dd { margin: 0; color: var(--ink); display: flex; flex-wrap: wrap; gap: 4px; }
+.hook-facts code { font-family: var(--font-mono); font-size: 12px; padding: 0 6px; border-radius: 6px; background: var(--color-void-800); border: 1px solid var(--seam); }
+.hook-pattern-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 4px 14px; }
+.hook-pattern-grid .hook-field-label { margin-top: 0; }
+.hook-deliveries { list-style: none; margin: 12px 0 0; padding: 0; display: grid; gap: 6px; }
+.hook-deliveries li {
+  display: grid; grid-template-columns: 80px 1fr; gap: 10px; align-items: start;
+  padding: 8px 10px; border-radius: 9px; background: var(--color-void-900); border: 1px solid var(--seam);
+}
+.hook-result { font-size: 12.5px; font-weight: 700; color: var(--ink-muted); }
+.hook-deliveries li[data-result='built'] .hook-result { color: var(--color-matrix-400); }
+.hook-deliveries li[data-result='rejected'] .hook-result { color: var(--color-alert-400); }
+.hook-delivery-what { display: flex; flex-wrap: wrap; gap: 2px 12px; font-size: 13px; color: var(--ink-muted); }
+.hook-delivery-what code { font-family: var(--font-mono); font-size: 12px; color: var(--ink); overflow-wrap: anywhere; }
+.hook-delivery-why { font-size: 13px; color: var(--ink-faint); overflow-wrap: anywhere; }
+
+/* Scheduled builds (pages/projects/Schedules): the webhook cards' layout, plus the dialog. */
+.hook-deliveries li[data-result='failed'] .hook-result { color: var(--color-alert-400); }
+.schedule-cron { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 10px; margin-top: 4px; font-size: 13px; color: var(--ink-faint); }
+.schedule-cron code { font-family: var(--font-mono); font-size: 12px; color: var(--ink-muted); }
+.schedule-last[data-result='built'] { color: var(--color-matrix-400); }
+.schedule-last[data-result='failed'] { color: var(--color-alert-400); }
+.schedule-form { margin-top: 4px; }
+.schedule-presets { display: flex; flex-wrap: wrap; gap: 6px; }
+.schedule-ref { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+.schedule-ref .ant-input { flex: 1 1 160px; min-width: 0; }
+.schedule-skip { display: flex; gap: 10px; align-items: flex-start; margin-top: 14px; font-size: 13.5px; color: var(--ink-muted); }
+.schedule-skip .ant-switch { margin-top: 2px; flex: none; }
+.schedule-preview { margin-top: 14px; padding: 10px 12px; border-radius: 10px; border: 1px solid var(--seam); background: var(--color-void-800); }
+.schedule-preview .hook-field-label { margin-top: 0; }
+.schedule-preview ol { margin: 0; padding-left: 20px; display: grid; gap: 2px; font-family: var(--font-mono); font-size: 12.5px; color: var(--ink-muted); }
+.schedule-error { margin: 0; font-size: 13.5px; color: var(--color-alert-400); }
+
 /* -------------------------------------------------------------------------
    Quick build findings (pages/createTask/sections/QuickBuild). A row that
    turns from looking to found pops its check and glows once, so the form is
@@ -808,6 +891,40 @@ h1, h2, h3, h4, h5 { font-family: var(--font-display); letter-spacing: -0.015em;
   margin-top: 8px; padding: 14px 0;
   border-top: 1px solid var(--seam); background: var(--color-void-950);
 }
+/* packwright.toml: settings from the repository (pages/createTask/fileFields, components/build/SettingOrigins). */
+.from-file-banner {
+  margin: 0 0 16px; padding: 12px 14px; border-radius: 10px;
+  border: 1px solid color-mix(in srgb, var(--color-cyber-500) 35%, transparent);
+  background: color-mix(in srgb, var(--color-cyber-500) 8%, transparent);
+}
+.from-file-banner code, .origin-list code { font-family: var(--font-mono); font-size: 12px; overflow-wrap: anywhere; }
+.from-file-banner a { color: var(--color-cyber-400); }
+.from-file-tag.ant-tag {
+  margin: 0; display: inline-flex; align-items: center; gap: 4px; font-size: 12px;
+  color: var(--color-cyber-400); border-color: color-mix(in srgb, var(--color-cyber-500) 45%, transparent);
+  background: color-mix(in srgb, var(--color-cyber-500) 10%, transparent);
+}
+.origin-groups { display: grid; gap: 16px; }
+.origin-group h4 { margin: 0 0 6px; font-size: 13px; font-weight: 600; color: var(--ink-muted); }
+.origin-list { list-style: none; margin: 0; padding: 0; display: grid; }
+.origin-list li {
+  display: grid; grid-template-columns: minmax(120px, 200px) minmax(0, 1fr) auto; gap: 4px 12px; align-items: baseline;
+  padding: 6px 0; border-bottom: 1px solid var(--seam); font-size: 13px;
+}
+.origin-list .origin-label { color: var(--ink-faint); }
+.origin-list .origin-value { color: var(--ink); min-width: 0; overflow-wrap: anywhere; }
+.origin-list .origin-replaced { display: block; font-size: 12px; color: var(--ink-faint); }
+.origin-badge {
+  justify-self: end; white-space: nowrap; font-size: 12px; padding: 1px 8px; border-radius: 999px;
+  border: 1px solid var(--seam); color: var(--ink-muted);
+}
+.origin-badge[data-origin="file"] { color: var(--color-cyber-400); border-color: color-mix(in srgb, var(--color-cyber-500) 45%, transparent); }
+.origin-badge[data-origin="override"] { color: var(--color-matrix-400); border-color: color-mix(in srgb, var(--color-matrix-400) 40%, transparent); }
+.origin-badge[data-origin="detected"] { color: var(--color-signal-400); border-color: color-mix(in srgb, var(--color-signal-400) 40%, transparent); }
+@media (max-width: 640px) {
+  .origin-list li { grid-template-columns: minmax(0, 1fr) auto; }
+  .origin-list .origin-value { grid-column: 1 / -1; grid-row: 2; }
+}
 .command-steps { list-style: none; margin: 0; padding: 0; display: grid; gap: 14px; }
 .command-stage { font-size: 13px; color: var(--ink-muted); margin-bottom: 4px; }
 .command-line {
@@ -974,6 +1091,13 @@ a.bench-card:focus-visible { outline: 2px solid var(--color-cyber-400); outline-
 .build-name:focus-visible { outline: 2px solid var(--color-cyber-400); outline-offset: 2px; border-radius: 4px; }
 .build-meta { display: flex; flex-wrap: wrap; gap: 4px 14px; margin-top: 2px; font-size: 13.5px; color: var(--ink-faint); }
 .build-verdict { font-weight: 600; text-align: right; flex: none; }
+/* The commit a Git build checked out (components/build/CommitChip): copies the full id. */
+.commit-chip {
+  display: inline-flex; align-items: center; gap: 4px;
+  font-family: var(--font-mono); font-size: 12.5px; color: inherit;
+  background: none; border: 0; padding: 0; cursor: pointer;
+}
+.commit-chip:hover, .commit-chip:focus-visible { color: var(--ink); text-decoration: underline; text-underline-offset: 3px; }
 @media (max-width: 640px) {
   .build-row { flex-wrap: wrap; gap: 8px 12px; }
   .build-verdict { text-align: left; order: 3; flex-basis: 100%; padding-left: 30px; }

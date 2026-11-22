@@ -47,6 +47,30 @@ class AuditAction(str, Enum):
     # Session management
     SESSION_REVOKE = "session_revoke"
 
+    # API tokens
+    API_TOKEN_CREATE = "api_token_create"
+    API_TOKEN_REVOKE = "api_token_revoke"
+    # A presented token was not accepted (malformed, unknown, revoked, expired,
+    # owner inactive): 401.
+    API_TOKEN_REJECTED = "api_token_rejected"
+    # A valid token asked for an endpoint or scope it does not have: 403.
+    API_TOKEN_DENIED = "api_token_denied"
+
+    # Incoming webhooks
+    HOOK_CREATE = "hook_create"
+    HOOK_UPDATE = "hook_update"
+    HOOK_ROTATE = "hook_rotate"
+    HOOK_DELETE = "hook_delete"
+    # Packwright turned a hook off because its creator may no longer build.
+    HOOK_DISABLED = "hook_disabled"
+
+    # Scheduled builds
+    SCHEDULE_CREATE = "schedule_create"
+    SCHEDULE_UPDATE = "schedule_update"
+    SCHEDULE_DELETE = "schedule_delete"
+    # Packwright turned a schedule off because its creator may no longer build.
+    SCHEDULE_DISABLED = "schedule_disabled"
+
 
 class AuditStatus(str, Enum):
     """Audit log status values."""
@@ -65,6 +89,9 @@ class ResourceType(str, Enum):
     SESSION = "session"
     AUTH = "auth"
     TASK = "task"
+    API_TOKEN = "api_token"
+    HOOK = "hook"
+    SCHEDULE = "schedule"
 
 
 async def log_action(

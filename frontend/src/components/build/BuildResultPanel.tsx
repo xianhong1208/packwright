@@ -1,8 +1,9 @@
 import { Tooltip, message } from 'antd'
-import { CheckCircleIcon, FileZipIcon, WarningIcon, XCircleIcon } from '../ui/icons'
+import { CheckCircleIcon, FileZipIcon, HardDrivesIcon, WarningIcon, XCircleIcon } from '../ui/icons'
 import type { BuildResult } from '../../api/types'
 import { VERIFY_META } from '../../utils/statusMeta'
 import { hasBuildResult } from './stages'
+import { formatImageSize } from '../../utils/bytes'
 
 /**
  * Verification, artifact and preflight checks of one build. Shared by the live
@@ -29,12 +30,38 @@ export default function BuildResultPanel({ result }: { result: BuildResult | nul
         )}
       </div>
 
+      {result.verify?.target && result.verify.status !== 'skipped' && (
+        <p className="text-xs mb-2" style={{ color: 'var(--ink-faint)' }}>
+          {result.verify.target === 'image'
+            ? `Smoke test: started the Docker image${result.verify.container ? ` as ${result.verify.container} (removed afterwards)` : ''}.`
+            : 'Smoke test: ran the binary on the build host.'}
+        </p>
+      )}
+
       {verify && result.verify?.detail && (
         <div
           className="text-sm mb-4 px-3 py-2 rounded-lg"
           style={{ background: verify.bg, color: verify.color, lineHeight: 1.6 }}
         >
           {result.verify.detail}
+        </div>
+      )}
+
+      {result.port_check?.message && (
+        <div
+          className="text-sm mb-4 px-3 py-2 rounded-lg flex items-start gap-2"
+          style={{ background: 'color-mix(in srgb, var(--color-signal-500) 14%, transparent)', color: 'var(--color-signal-400)', lineHeight: 1.6 }}
+          role="alert"
+        >
+          <WarningIcon style={{ marginTop: 3 }} />
+          <span>
+            {result.port_check.message}
+            {result.port_check.suggested != null && (
+              <>
+                {' '}Suggested port: <b>{result.port_check.suggested}</b>.
+              </>
+            )}
+          </span>
         </div>
       )}
 
@@ -72,6 +99,53 @@ export default function BuildResultPanel({ result }: { result: BuildResult | nul
                   {result.artifact.sha256.slice(0, 32)}…
                 </code>
               </Tooltip>
+            </div>
+          )}
+        </div>
+      )}
+
+      {result.image && (
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-4">
+          <div className="rounded-lg p-3 col-span-2 md:col-span-3 bg-void-950 min-w-0">
+            <div className="text-xs mb-1" style={{ color: 'var(--ink-faint)' }}>
+              <HardDrivesIcon className="mr-1" />
+              Docker image
+            </div>
+            <code className="text-sm font-mono break-all" style={{ color: 'var(--ink)' }}>
+              {result.image.name}
+            </code>
+          </div>
+          {result.image.size_bytes != null && (
+            <div className="rounded-lg p-3 col-span-2 md:col-span-1 bg-void-950">
+              <div className="text-xs mb-1" style={{ color: 'var(--ink-faint)' }}>
+                Image size
+              </div>
+              <div className="text-lg font-semibold" style={{ color: 'var(--ink)' }}>
+                {formatImageSize(result.image.size_bytes)}
+              </div>
+            </div>
+          )}
+          {result.image.run_command && (
+            <div className="rounded-lg p-3 col-span-2 md:col-span-4 bg-void-950 min-w-0">
+              <div className="flex items-center justify-between gap-2 mb-1">
+                <span className="text-xs" style={{ color: 'var(--ink-faint)' }}>
+                  Run it{result.image.user ? ` — runs as ${result.image.user}` : ''}
+                </span>
+                <button
+                  type="button"
+                  className="text-xs hover:text-cyber-300"
+                  style={{ color: 'var(--ink-muted)' }}
+                  onClick={() => {
+                    navigator.clipboard?.writeText(result.image?.run_command || '')
+                    message.success('Command copied.')
+                  }}
+                >
+                  Copy
+                </button>
+              </div>
+              <code className="text-xs font-mono break-all" style={{ color: 'var(--ink-muted)' }}>
+                {result.image.run_command}
+              </code>
             </div>
           )}
         </div>

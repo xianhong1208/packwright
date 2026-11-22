@@ -2,7 +2,7 @@
 
 [English](ROADMAP.md)
 
-Packwright 在 1.3 之後的方向。每一項寫的是使用者會得到什麼，而不是怎麼做出來。除非某項變更會造成不相容，否則每個版本都是
+Packwright 在 1.4 之後的方向。每一項寫的是使用者會得到什麼，而不是怎麼做出來。除非某項變更會造成不相容，否則每個版本都是
 minor 版本。每一項在對應的 [milestone](https://github.com/xianhong1208/packwright/milestones) 下都有一個 issue。
 
 ## 已發布
@@ -29,13 +29,14 @@ GitLab token 後備的安全問題。
 
 **1.3.2（2026-11-13），更新相依套件，修正角色設定。** 目前開著的相依套件更新一次套用，並用實際建置驗證（Nuitka 4.3.5、新版 FastAPI、SQLAlchemy 與 React 函式庫；lint 工具的 `minimatch` 漏洞已修正）。**Roles** 對話框可以清除角色的上層角色。
 
+**1.4.0（2026-11-22），自動化。** push 或打 tag 就建置（GitHub、GitLab 與 Gitea 的 webhook，各自檢查簽章；其他來源用附 token 的通用網址），每個專案可以排程建置，腳本與 CI 可以用 API token 啟動建置。每次 Git 建置都取出一個確切的 commit，並記下它與觸發來源。repo 裡的 `packwright.toml` 把建置設定放在程式碼旁邊：檔案裡有的欄位以檔案為準，新的 Config 階段遇到錯誤會指出 key 與行號並停下，管理台會標出哪些值來自檔案。
+
 完整變更見 [CHANGELOG.md](CHANGELOG.md)。
 
 ## 接下來
 
 | 版本 | 你會得到什麼 |
 |---|---|
-| **1.4：自動化** | **push 或打 tag 就建置：** 接收 GitHub、GitLab 與 Gitea 的 webhook，各自檢查簽章；其他來源可以用附 token 的通用網址。專案可以**排程建置**。**API token**：腳本與 CI 不用密碼就能啟動建置、下載產出。**repo 裡的 `packwright.toml`：** 專案可以把建置設定放在程式碼旁邊；檔案裡有的欄位以檔案為準，管理台會標出哪些值來自檔案。 |
 | **1.5：產出與發布** | 每次建置都附上 **`SHA256SUMS`、manifest 與 CycloneDX SBOM**。每個專案**只保留最近 N 份產出**，**建置快取（Nuitka、uv、npm）有上限**並定期清理，磁碟不會一直長大。**建置成功後自動發布：** 檔案上傳到 GitHub 或 Gitea Releases，image 推到**任何 registry**（Docker Hub、GHCR、Gitea 或自架的）。這些 token 跟 Git 憑證一樣加密保存。 |
 | **1.6：隔離** | 每個建置都**以獨立的使用者或在自己的容器裡**執行，讀不到服務的檔案，也讀不到其他建置。**每個專案自己的密鑰**，加密保存，只交給該專案的建置。 |
 | **1.7：更多平台** | **遠端建置 agent**，支援 Windows、macOS 與 arm64，同一個管理台就能替這些平台建置。**程式碼簽章：** Windows 的 Authenticode，macOS 的簽章與公證（notarization）。 |

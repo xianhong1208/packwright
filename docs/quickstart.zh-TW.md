@@ -47,6 +47,27 @@
 要調更多設定(Docker、打包模式、要一起打包的目錄……)就按 **All settings**,會進入下面的完整精靈,
 快速建置已經偵測到的值都會帶過去。重新建置(Rebuild)一律直接開完整精靈。
 
+### 設定放在 repo 裡(packwright.toml)
+
+不想每次在管理台設定?在專案根目錄放一個 `packwright.toml`,它的值會蓋過專案設定(只用在那次建置,不會寫回去):
+
+```toml
+#:schema https://raw.githubusercontent.com/xianhong1208/packwright/main/docs/packwright.schema.json
+schema = 1
+
+[python]
+entry = "src/app.py"
+data_dirs = ["static"]
+
+[docker]
+enabled = true
+port = 8080
+```
+
+寫錯 key、型別不對、路徑跑出專案、或放了密碼 / token 之類的東西,建置會在第一個 **Config** 階段失敗並告訴你是哪一行。
+建置頁會標出每個值是從檔案、這次建置、專案設定還是偵測來的。完整說明見手冊的
+[packwright.toml](manual.zh-TW.md#packwrighttoml設定放在-repo-裡)。
+
 ### 完整精靈(All settings)
 
 跟著精靈走,每一步上方都有提示。**不確定的欄位保持預設、直接下一步就好。** 步驟會隨專案類型變化:後端是 Basics → Backend → Docker → Review,前端是 Basics → Frontend → Docker → Review,全端五步都有。
@@ -61,7 +82,7 @@
 ### ② 後端設定(後端 / 全端才有)
 - **進入點**:主程式,例如 `main.py`。
 - **打包模式**:見下方「兩種模式怎麼選」。
-- **依賴群組**:自動讀 `pyproject.toml` 的 `[dependency-groups]`,單選。典型用途:選不同平台的 PyTorch(rocm/cuda/cpu)。
+- **依賴群組**:自動讀 `pyproject.toml` 的 `[dependency-groups]`,單選。典型用途:選不同平台的 PyTorch(rocm/cuda/cpu)。沒選的群組都不安裝,包括 uv 預設會裝的 `dev`。
 - **進階設定**(可不動):CPU 並行數、強制納入套件、要一起打包的 source code 目錄、資料目錄、以及下方「進階選項速查」那幾個。
 
 ### ③ 前端設定(前端 / 全端才有)
@@ -159,7 +180,8 @@
 
 - **下載**:任務詳情頁或歷史頁的 **Download output** → 拿到 `.tar.gz`。編譯報告(若有開)也一起包在裡面。
 - **重新打包**:任一任務按 **Rebuild** 會帶著原設定回到精靈,改一改再送。
-- **歷史**:**Builds** 頁可搜尋使用者、匯出 CSV;點進去看當時的設定與成果卡。
+- **歷史**:**Builds** 頁可搜尋使用者、匯出 CSV;每筆建置標示是怎麼開始的(目前都是 Console),Git 建置另顯示
+  建置的 commit(點一下複製完整 ID)。點進去看當時的設定與成果卡。
 
 ---
 

@@ -328,3 +328,97 @@ class TestDiagnosisActions:
                 for key in action["overrides"]:
                     assert key in fields, f"{key} is not a BuildConfig field"
         assert seen >= 2
+
+
+# A fullstack build of MCP Gate whose frontend built fine and whose smoke test then
+# failed, cut down to the lines that matter.
+_SMOKE_FAILED_AFTER_VITE = (
+    "=== Building frontend ===\n"
+    "npm notice run vite build\n"
+    "vite v6.4.5 building for production...\n"
+    "✓ built in 6.65s\n"
+    "=== Step 2: Nuitka Compilation (Host) ===\n"
+    "Nuitka: Successfully created 'dist/main'.\n"
+    "Verify: ✗ Binary exited with code 1: Error loading config: Missing config file(s) in /app/config\n"
+    "Smoke test failed — marking build as failed\n"
+)
+
+
+class TestSmokeFailureIsNotTheFrontend:
+    """A fullstack build's log always says "vite build"; the frontend rule fired
+    whenever the word "error" appeared anywhere else, so MCP Gate's failed smoke
+    test was reported as "Frontend build failed"."""
+
+    @pytest.mark.unit
+    def test_tc_fail_030_a_smoke_failure_after_vite_is_not_a_frontend_failure(self):
+        """TC-FAIL-030: diagnose — a later error does not make a successful vite build a failed one."""
+        problems = [d["problem"] for d in diagnose_build_failure(_SMOKE_FAILED_AFTER_VITE)]
+        assert "Frontend build failed" not in problems
+
+    @pytest.mark.unit
+    def test_tc_fail_031_the_report_names_verification(self):
+        """TC-FAIL-031: build_failure_report — with the stage at verify, the report says the test run failed."""
+        report = build_failure_report(_SMOKE_FAILED_AFTER_VITE, stage="verify")
+        assert report["failed_stage"] == "verify"
+        assert report["diagnosis"][0]["problem"].startswith("Failed verification")
+
+    @pytest.mark.unit
+    def test_tc_fail_032_a_failed_vite_build_is_still_a_frontend_failure(self):
+        """TC-FAIL-032: diagnose — vite's own failure line still points at the frontend."""
+        log = "npm notice run vite build\nvite v6.4.5 building for production...\nerror during build:\n[vite]: Rollup failed to resolve import \"x\""
+        diagnoses = diagnose_build_failure(log)
+        assert diagnoses[0]["problem"] == "Frontend build failed"
+        assert diagnoses[0]["evidence"] == "error during build:"
+
+
+_NO_VENV_RUN = (
+    "Smoke test: running dist/app\n"
+    "Traceback (most recent call last):\n"
+    "  File \"app/main.py\", line 3, in <module>\n"
+    "ModuleNotFoundError: No module named 'httpx'\n"
+)
+_VENV_MISSING_CHECK = {"label": "Project .venv present", "passed": False, "detail": "No .venv found", "critical": False}
+_VENV_PRESENT_CHECK = {"label": "Project .venv present", "passed": True, "detail": "/srv/app/.venv/bin/python", "critical": False}
+
+
+class TestMissingProjectVenv:
+    """#21: a project built without its .venv was told to "Include packages"."""
+
+    @pytest.mark.unit
+    def test_tc_fail_033_missing_venv_in_preflight_names_the_venv(self):
+        """TC-FAIL-033: build_failure_report — preflight says no .venv: the module error is
+        explained as the missing .venv, with how to create it, and the Include-packages
+        advice is not given."""
+        report = build_failure_report(_NO_VENV_RUN, stage="verify", preflight=[_VENV_MISSING_CHECK])
+        first = report["diagnosis"][0]
+        assert first["problem"] == "The project has no .venv, so its packages were not bundled"
+        assert "uv sync" in first["suggestion"] and "httpx" in first["suggestion"]
+        assert not any("Include packages" in d["suggestion"] for d in report["diagnosis"])
+
+    @pytest.mark.unit
+    def test_tc_fail_034_a_present_venv_keeps_the_dynamic_import_advice(self):
+        """TC-FAIL-034: build_failure_report — with a .venv the same error still reads as a
+        dynamic import (the preflight record wins over the log)."""
+        log = _NO_VENV_RUN + "Note: No .venv found in target project\n"
+        report = build_failure_report(log, stage="verify", preflight=[_VENV_PRESENT_CHECK])
+        assert report["diagnosis"][0]["problem"] == "Module httpx not found at run time"
+        assert "Include packages" in report["diagnosis"][0]["suggestion"]
+
+    @pytest.mark.unit
+    @pytest.mark.parametrize("line", [
+        "Note: No .venv found in target project",
+        "No .venv/site-packages found, skipping package copy",
+    ])
+    def test_tc_fail_035_the_log_lines_count_without_a_preflight_record(self, line):
+        """TC-FAIL-035: build_failure_report — no stored preflight (older builds): either
+        worker line about the missing .venv gives the same diagnosis."""
+        report = build_failure_report(line + "\n" + _NO_VENV_RUN, stage="verify")
+        assert report["diagnosis"][0]["problem"] == "The project has no .venv, so its packages were not bundled"
+
+    @pytest.mark.unit
+    def test_tc_fail_036_a_missing_venv_alone_is_not_a_diagnosis(self):
+        """TC-FAIL-036: build_failure_report — a project without dependencies can build
+        without a .venv: no module error, no .venv diagnosis."""
+        report = build_failure_report("Nuitka: error: something else\n", stage="compile",
+                                      preflight=[_VENV_MISSING_CHECK])
+        assert all(".venv" not in d["problem"] for d in report["diagnosis"])

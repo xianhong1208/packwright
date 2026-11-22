@@ -64,6 +64,8 @@ def queue(mocker, monkeypatch):
     mocker.patch.object(build_dispatcher, "dispatch_build", side_effect=fake_dispatch)
     mocker.patch.object(build_dispatcher, "_record_duration", mocker.AsyncMock())
     mocker.patch.object(build_dispatcher.notifications, "notify_build_soon")
+    # The Config stage (packwright.toml) has its own tests; here no folder has one.
+    mocker.patch.object(build_dispatcher, "_config_stage", mocker.AsyncMock(side_effect=lambda tid, cfg, root: cfg))
     return state
 
 

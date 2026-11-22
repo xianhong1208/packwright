@@ -28,6 +28,7 @@ from app.services.source_guard import SourceGuard
 from app.services.task_manager import task_manager
 from app.services.process_runner import run_step
 from app.services import compile_cache
+from app.services.ports import Listener, group_listeners, port_check
 from app.services.build_env import build_environment
 
 settings = get_settings()
@@ -611,6 +612,53 @@ def _copytree_fast(src: Path, dst: Path) -> None:
         shutil.copytree(src, dst, ignore=_LIBS_IGNORE)
 
 
+_LIBS_SKIP_PREFIXES = ("pip", "setuptools", "wheel", "nuitka")
+
+
+def ships_in_libs(name: str) -> bool:
+    """Whether a site-packages entry is copied into libs/.
+
+    Left out: bytecode caches and hidden files, the packaging tools, .pth hooks,
+    and the finder of an editable install. uv installs a Git project itself in
+    editable mode, as __editable___<name>_finder.py pointing at the build
+    workspace; the program's own code is compiled into the binary, so the finder
+    only shipped a dead path to a folder that is deleted after the build.
+    """
+    if name == "__pycache__" or name.startswith("."):
+        return False
+    # Underscore-prefixed entries are legitimate packages / extensions (e.g.
+    # _cffi_backend, _rocm_sdk_core, _rocm_sdk_libraries_gfx1151 — dynamically
+    # imported at runtime by rocm_sdk). The old blanket "skip _*" rule silently
+    # dropped these, breaking runtime imports. Only setuptools' internal shims
+    # and editable-install finders are skipped explicitly.
+    if name in ("pkg_resources", "easy_install.py", "_distutils_hack"):
+        return False
+    if name.startswith("__editable__"):
+        return False
+    if any(name.startswith(p) for p in _LIBS_SKIP_PREFIXES):
+        return False
+    # .pth files are setuptools hooks that cause issues at runtime
+    return not name.endswith(".pth")
+
+
+async def has_zstandard(python: str) -> bool:
+    """Whether the compiling interpreter can compress a onefile binary.
+
+    Without the zstandard package Nuitka stores the payload uncompressed and
+    says so only in a warning in the middle of the compile log (MCP Gate: a
+    49.7 MB binary that compresses to about a third).
+    """
+    try:
+        proc = await asyncio.create_subprocess_exec(
+            python, "-c", "import zstandard",
+            stdout=asyncio.subprocess.DEVNULL, stderr=asyncio.subprocess.DEVNULL,
+            env=build_environment(),
+        )
+        return await proc.wait() == 0
+    except OSError:
+        return False
+
+
 def _human_size(n: int) -> str:
     size = float(n)
     for unit in ("B", "KB", "MB", "GB", "TB"):
@@ -788,11 +836,284 @@ def _signal_group(pid: int, sig: int) -> None:
         os.killpg(pid, sig)
 
 
+def _tree_state(root: Path) -> dict[str, tuple[int, int] | None]:
+    """Every path under root (relative), with (size, mtime_ns) for files and None
+    for directories. Symlinks are listed, never followed."""
+    state: dict[str, tuple[int, int] | None] = {}
+    for current, dirnames, filenames in os.walk(root):
+        base = Path(current)
+        for name in dirnames:
+            path = base / name
+            state[str(path.relative_to(root))] = None if not path.is_symlink() else (0, 0)
+        for name in filenames:
+            path = base / name
+            try:
+                st = path.lstat()
+            except OSError:
+                continue
+            state[str(path.relative_to(root))] = (st.st_size, st.st_mtime_ns)
+    return state
+
+
+def _undo_smoke_writes(root: Path, before: dict[str, tuple[int, int] | None]) -> tuple[list[str], list[str]]:
+    """Remove what the smoke-tested program created under root.
+
+    The binary runs in the output directory, and that directory is what the
+    build hands out. A service writes its state where it runs: packaging MCP
+    Gate left data/mcp_gate.db (its signing keys), secrets/secrets.json (its
+    encryption key and setup token) and logs/ in the downloadable archive, so
+    every deployment of that build would have started with the same keys.
+
+    Returns (removed, changed): the top-most paths removed, and existing files
+    the program modified, which cannot be put back and are only reported.
+    """
+    after = _tree_state(root)
+    created = sorted(p for p in after if p not in before)
+    removed: list[str] = []
+    for rel in created:
+        if any(rel.startswith(done + os.sep) for done in removed):
+            continue
+        path = root / rel
+        with contextlib.suppress(OSError):
+            if path.is_dir() and not path.is_symlink():
+                shutil.rmtree(path)
+            else:
+                path.unlink()
+            removed.append(rel)
+    changed = sorted(p for p, st in before.items() if st is not None and p in after and after[p] != st)
+    return removed, changed
+
+
+def _created_dirs(cwd: Path, binary_dir: Path, before: dict[str, tuple[int, int] | None]) -> list[str]:
+    """The folders the program created beside itself or where it ran, by name.
+
+    Both places are /app in a Docker image (a standalone build's binary sits in
+    <entry>.dist/ here, but its contents are copied to /app). These are where a
+    service keeps its state (MCP Gate: data/, secrets/, logs/), so they are what
+    a Docker build offers as volumes. Bytecode caches are not state.
+    """
+    after = _tree_state(cwd)
+    try:
+        prefix = binary_dir.resolve().relative_to(cwd.resolve())
+    except ValueError:
+        prefix = Path(".")
+    names: list[str] = []
+    for rel, state in after.items():
+        if state is not None or rel in before:
+            continue
+        path = Path(rel)
+        if path.parent in (Path("."), prefix) and path.name != "__pycache__" and path.name not in names:
+            names.append(path.name)
+    return sorted(names)
+
+
+def _describe_removed(removed: list[str]) -> str:
+    """The removed paths for the log, with Python's bytecode caches counted rather
+    than listed: MCP Gate's run left one in nearly every package in libs/."""
+    caches = [p for p in removed if Path(p).name == "__pycache__"]
+    named = [p for p in removed if Path(p).name != "__pycache__"]
+    parts = named[:20]
+    if len(named) > 20:
+        parts.append(f"{len(named) - 20} more")
+    if caches:
+        parts.append(f"{len(caches)} __pycache__ folder{'s' if len(caches) != 1 else ''}")
+    return ", ".join(parts)
+
+
+def smoke_target(config: BuildConfig) -> str:
+    """What a build's smoke test starts: the Docker image when the build makes one
+    and Docker is here, else the binary on this host."""
+    return "image" if config.docker_enabled and shutil.which("docker") else "binary"
+
+
+def docker_port_check(config: BuildConfig, verify: dict[str, Any], *, container: bool = False) -> dict | None:
+    """For a Docker build, what the smoke run's ports say about the exposed port (see ports.port_check)."""
+    if not config.docker_enabled:
+        return None
+    listeners = {Listener(x["port"], x["address"]) for x in verify.get("listeners") or []}
+    return port_check(listeners, config.docker_expose_port, container=container)
+
+
+def classify_exit(ret: int, full: str) -> dict[str, Any]:
+    """The verdict on a program that exited within the smoke window, from its exit
+    code and output. Shared by the binary and the image smoke tests."""
+    tail = full.strip()[-500:]
+    if ret == 0:
+        return {"status": "pass", "detail": "Binary exited cleanly", "exit_code": 0}
+    # Environment-only failures: the binary started fine (imports, config,
+    # logging all executed) but couldn't finish because of something
+    # external — most commonly the service port already being in use by
+    # another running instance. That proves the binary itself is healthy,
+    # so treat it as a warning, NOT a build failure.
+    low = full.lower()
+    if (
+        "address already in use" in low
+        or "errno 98" in low
+        or "eaddrinuse" in low
+    ):
+        return {
+            "status": "warn",
+            "detail": (
+                "Binary started successfully but the port is already in use "
+                "(likely another instance is still running) — environment "
+                f"issue, not a build problem (exit {ret})"
+            ),
+            "exit_code": ret,
+        }
+    # GPU / accelerator init failures: the build host usually has no GPU, so
+    # a torch/ROCm/CUDA program can't initialize here even when the binary is
+    # fine — same idea as the port case. Treat as a warning and tell the user
+    # to verify on the target GPU machine, rather than failing the build.
+    if _looks_like_gpu_failure(low):
+        return {
+            "status": "warn",
+            "detail": (
+                "The binary stopped while initialising a GPU/accelerator (torch/ROCm/CUDA), "
+                "and build hosts usually have no GPU — most likely the environment, not the "
+                f"build. Verify it on a target machine with a GPU (exit {ret}): {tail[-200:]}"
+            ),
+            "exit_code": ret,
+        }
+    # External-service connection failures: the binary imported cleanly and
+    # ran far enough to open a DB/cache/broker connection, then failed because
+    # that backing service isn't reachable/authenticated ON THE BUILD HOST —
+    # its Postgres/Redis credentials and network differ from the deploy host.
+    # Reaching the connect() call proves the app itself is healthy, so this is
+    # an environment issue (same class as the port/GPU cases), not a build bug.
+    service_hints = (
+        "operationalerror", "password authentication failed",
+        "connection refused", "could not connect to server",
+        "connection to server at", "could not translate host name",
+        "no route to host", "econnrefused", "redis.exceptions",
+        "connectionerror", "psycopg2", "could not connect",
+        "access denied for user", "authentication failed",
+        "timeout expired", "server closed the connection",
+    )
+    if any(h in low for h in service_hints):
+        return {
+            "status": "warn",
+            "detail": (
+                "The binary started and only failed when connecting to an external service "
+                "(database/cache/queue) — the build host's addresses and credentials differ from "
+                "the deployment's, so this is the environment, not the build. Verify it on the "
+                f"target machine, where the services are reachable (exit {ret}): {tail[-200:]}"
+            ),
+            "exit_code": ret,
+        }
+    # Missing required CLI arguments: the smoke test runs the binary with no
+    # args, but the program legitimately requires some (e.g. --config). argparse
+    # prints a usage message and exits 2. That PROVES the binary launched and its
+    # arg parser ran — it's a smoke-test invocation gap, not a build defect. The
+    # real service is started with the proper flags. Treat as a warning.
+    argparse_hints = (
+        "the following arguments are required",
+        "are required:",
+        "is required:",
+        "unrecognized arguments",
+        "invalid choice",
+        "expected one argument",
+        "error: argument",
+    )
+    looks_like_usage = "usage:" in low and "error:" in low
+    if looks_like_usage or any(h in low for h in argparse_hints):
+        return {
+            "status": "warn",
+            "detail": (
+                "The binary started and exited because required command-line arguments were "
+                "missing (the smoke test runs it with none) — so the program and its argument "
+                "parsing work; this is how it was called, not the build. Run the real service "
+                f"with its arguments (e.g. --config) (exit {ret}): {tail[-200:]}"
+            ),
+            "exit_code": ret,
+        }
+    # Missing license / required runtime resource file: the binary launched
+    # and ran its startup (logging configured, etc.) but exited because a
+    # license/credential/config FILE that lives on the DEPLOY host isn't
+    # present on the build host. Same class as the DB/CLI-arg cases — the app
+    # is healthy, the build machine just lacks a deploy-time resource.
+    license_hints = (
+        "license file not found", "license error", "license not found",
+        "invalid license", "license expired", "license_file",
+        # "授權檔" ("license file") matches Chinese-language programs' own output.
+        "no license", "license.lic", "授權檔", "license required",
+    )
+    if any(h in low for h in license_hints):
+        return {
+            "status": "warn",
+            "detail": (
+                "The binary started and exited because a license or required resource file "
+                "(e.g. license.lic) was not found — that file is provided on the deployment "
+                "machine (or via LICENSE_FILE), so its absence on the build host is expected, "
+                f"not a build error. Verify it there once the file is in place (exit {ret}): {tail[-200:]}"
+            ),
+            "exit_code": ret,
+        }
+    return {
+        "status": "fail",
+        "detail": f"Binary exited with code {ret}" + (f": {tail}" if tail else ""),
+        "exit_code": ret,
+    }
+
+
+async def _wait_watching_ports(proc: asyncio.subprocess.Process, window: float, seen: set[Listener]) -> int:
+    """proc.wait() with a timeout of `window`, noting every port the process
+    group listens on meanwhile (a service may bind seconds after it starts).
+    Raises asyncio.TimeoutError when the window passes, like wait_for."""
+    deadline = time.monotonic() + window
+    while True:
+        seen.update(await asyncio.to_thread(group_listeners, proc.pid))
+        left = deadline - time.monotonic()
+        if left <= 0:
+            raise asyncio.TimeoutError
+        try:
+            return await asyncio.wait_for(proc.wait(), timeout=min(0.5, left))
+        except asyncio.TimeoutError:
+            continue
+
+
 async def _smoke_test(
     task_id: str,
     binary: Path,
     cwd: Path,
     extra_env: dict[str, str] | None = None,
+) -> dict[str, Any]:
+    """Run the binary once (see _run_smoke_test), then take away what it wrote in cwd."""
+    before = await asyncio.to_thread(_tree_state, cwd)
+    try:
+        listeners: set[Listener] = set()
+        verify = await _run_smoke_test(task_id, binary, cwd, extra_env, listeners)
+        verify["listeners"] = [{"port": lst.port, "address": lst.address} for lst in sorted(listeners)]
+        if listeners:
+            await task_manager.append_log(
+                task_id, "Smoke test: the program listened on " + ", ".join(
+                    f"{lst.address}:{lst.port}" for lst in sorted(listeners))
+            )
+        verify["created_dirs"] = await asyncio.to_thread(_created_dirs, cwd, binary.parent, before)
+        if verify["created_dirs"]:
+            await task_manager.append_log(
+                task_id, "Smoke test: the program created " + ", ".join(f"{d}/" for d in verify["created_dirs"])
+            )
+        return verify
+    finally:
+        removed, changed = await asyncio.to_thread(_undo_smoke_writes, cwd, before)
+        if removed:
+            await task_manager.append_log(
+                task_id, "Smoke test: removed what the program wrote in the output directory: " + _describe_removed(removed)
+            )
+        if changed:
+            await task_manager.append_log(
+                task_id,
+                "⚠ Smoke test: the program changed these files in the output, and they ship as changed: "
+                + ", ".join(changed),
+            )
+
+
+async def _run_smoke_test(
+    task_id: str,
+    binary: Path,
+    cwd: Path,
+    extra_env: dict[str, str] | None = None,
+    listeners: set[Listener] | None = None,
 ) -> dict[str, Any]:
     """Launch the produced binary briefly to catch import/startup crashes.
 
@@ -826,7 +1147,7 @@ async def _smoke_test(
         return {"status": "fail", "detail": f"Failed to launch binary: {e}", "exit_code": None}
 
     try:
-        ret = await asyncio.wait_for(proc.wait(), timeout=_SMOKE_WINDOW)
+        ret = await _wait_watching_ports(proc, _SMOKE_WINDOW, listeners if listeners is not None else set())
         output = b""
         if proc.stdout:
             try:
@@ -836,122 +1157,7 @@ async def _smoke_test(
             except asyncio.TimeoutError:
                 pass
         full = output.decode("utf-8", errors="replace")
-        tail = full.strip()[-500:]
-        if ret == 0:
-            return {"status": "pass", "detail": "Binary exited cleanly", "exit_code": 0}
-        # Environment-only failures: the binary started fine (imports, config,
-        # logging all executed) but couldn't finish because of something
-        # external — most commonly the service port already being in use by
-        # another running instance. That proves the binary itself is healthy,
-        # so treat it as a warning, NOT a build failure.
-        low = full.lower()
-        if (
-            "address already in use" in low
-            or "errno 98" in low
-            or "eaddrinuse" in low
-        ):
-            return {
-                "status": "warn",
-                "detail": (
-                    "Binary started successfully but the port is already in use "
-                    "(likely another instance is still running) — environment "
-                    f"issue, not a build problem (exit {ret})"
-                ),
-                "exit_code": ret,
-            }
-        # GPU / accelerator init failures: the build host usually has no GPU, so
-        # a torch/ROCm/CUDA program can't initialize here even when the binary is
-        # fine — same idea as the port case. Treat as a warning and tell the user
-        # to verify on the target GPU machine, rather than failing the build.
-        if _looks_like_gpu_failure(low):
-            return {
-                "status": "warn",
-                "detail": (
-                    "The binary stopped while initialising a GPU/accelerator (torch/ROCm/CUDA), "
-                    "and build hosts usually have no GPU — most likely the environment, not the "
-                    f"build. Verify it on a target machine with a GPU (exit {ret}): {tail[-200:]}"
-                ),
-                "exit_code": ret,
-            }
-        # External-service connection failures: the binary imported cleanly and
-        # ran far enough to open a DB/cache/broker connection, then failed because
-        # that backing service isn't reachable/authenticated ON THE BUILD HOST —
-        # its Postgres/Redis credentials and network differ from the deploy host.
-        # Reaching the connect() call proves the app itself is healthy, so this is
-        # an environment issue (same class as the port/GPU cases), not a build bug.
-        service_hints = (
-            "operationalerror", "password authentication failed",
-            "connection refused", "could not connect to server",
-            "connection to server at", "could not translate host name",
-            "no route to host", "econnrefused", "redis.exceptions",
-            "connectionerror", "psycopg2", "could not connect",
-            "access denied for user", "authentication failed",
-            "timeout expired", "server closed the connection",
-        )
-        if any(h in low for h in service_hints):
-            return {
-                "status": "warn",
-                "detail": (
-                    "The binary started and only failed when connecting to an external service "
-                    "(database/cache/queue) — the build host's addresses and credentials differ from "
-                    "the deployment's, so this is the environment, not the build. Verify it on the "
-                    f"target machine, where the services are reachable (exit {ret}): {tail[-200:]}"
-                ),
-                "exit_code": ret,
-            }
-        # Missing required CLI arguments: the smoke test runs the binary with no
-        # args, but the program legitimately requires some (e.g. --config). argparse
-        # prints a usage message and exits 2. That PROVES the binary launched and its
-        # arg parser ran — it's a smoke-test invocation gap, not a build defect. The
-        # real service is started with the proper flags. Treat as a warning.
-        argparse_hints = (
-            "the following arguments are required",
-            "are required:",
-            "is required:",
-            "unrecognized arguments",
-            "invalid choice",
-            "expected one argument",
-            "error: argument",
-        )
-        looks_like_usage = "usage:" in low and "error:" in low
-        if looks_like_usage or any(h in low for h in argparse_hints):
-            return {
-                "status": "warn",
-                "detail": (
-                    "The binary started and exited because required command-line arguments were "
-                    "missing (the smoke test runs it with none) — so the program and its argument "
-                    "parsing work; this is how it was called, not the build. Run the real service "
-                    f"with its arguments (e.g. --config) (exit {ret}): {tail[-200:]}"
-                ),
-                "exit_code": ret,
-            }
-        # Missing license / required runtime resource file: the binary launched
-        # and ran its startup (logging configured, etc.) but exited because a
-        # license/credential/config FILE that lives on the DEPLOY host isn't
-        # present on the build host. Same class as the DB/CLI-arg cases — the app
-        # is healthy, the build machine just lacks a deploy-time resource.
-        license_hints = (
-            "license file not found", "license error", "license not found",
-            "invalid license", "license expired", "license_file",
-            # "授權檔" ("license file") matches Chinese-language programs' own output.
-            "no license", "license.lic", "授權檔", "license required",
-        )
-        if any(h in low for h in license_hints):
-            return {
-                "status": "warn",
-                "detail": (
-                    "The binary started and exited because a license or required resource file "
-                    "(e.g. license.lic) was not found — that file is provided on the deployment "
-                    "machine (or via LICENSE_FILE), so its absence on the build host is expected, "
-                    f"not a build error. Verify it there once the file is in place (exit {ret}): {tail[-200:]}"
-                ),
-                "exit_code": ret,
-            }
-        return {
-            "status": "fail",
-            "detail": f"Binary exited with code {ret}" + (f": {tail}" if tail else ""),
-            "exit_code": ret,
-        }
+        return classify_exit(ret, full)
     except asyncio.TimeoutError:
         _signal_group(proc.pid, signal.SIGTERM)
         try:
@@ -1390,6 +1596,17 @@ async def run_nuitka_build(task_id: str, config: BuildConfig, db: AsyncSession) 
         })
         if not entry_ok:
             raise FileNotFoundError(f"Entry point not found: {entry_point}")
+        if config.onefile:
+            compressed = await has_zstandard(nuitka_python)
+            preflight.append({
+                "label": "Onefile compression",
+                "passed": compressed,
+                "detail": "zstandard installed" if compressed else (
+                    "zstandard is not installed in the selected toolchain, so the binary is stored "
+                    "uncompressed. Install nuitka[onefile] (scripts/setup_nuitka_venvs.sh does)."
+                ),
+                "critical": False,
+            })
 
         # Inject libs loading code into entry point (only for non-FULL modes)
         if config.pack_mode != PackMode.FULL:
@@ -1577,25 +1794,8 @@ async def run_nuitka_build(task_id: str, config: BuildConfig, db: AsyncSession) 
                     # Copy each package (including .dist-info for importlib.metadata)
                     copied_count = 0
                     skipped = []
-                    skip_prefixes = ("pip", "setuptools", "wheel", "nuitka")
                     for item in site_packages.iterdir():
-                        # Skip __pycache__ and hidden files (but NOT _ prefixed .so files)
-                        if item.name == "__pycache__":
-                            continue
-                        if item.name.startswith("."):
-                            continue
-                        # Underscore-prefixed entries are legitimate packages /
-                        # extensions (e.g. _cffi_backend, _rocm_sdk_core,
-                        # _rocm_sdk_libraries_gfx1151 — dynamically imported at
-                        # runtime by rocm_sdk). The old blanket "skip _*" rule
-                        # silently dropped these, breaking runtime imports. Only
-                        # skip setuptools' internal shims explicitly.
-                        if item.name in ("pkg_resources", "easy_install.py", "_distutils_hack"):
-                            continue
-                        if any(item.name.startswith(p) for p in skip_prefixes):
-                            continue
-                        # Skip .pth files (setuptools hooks that cause issues at runtime)
-                        if item.suffix == ".pth":
+                        if not ships_in_libs(item.name):
                             continue
 
                         target = target_folder / item.name
@@ -1672,7 +1872,24 @@ async def run_nuitka_build(task_id: str, config: BuildConfig, db: AsyncSession) 
                 build_result["report_file"] = str(report_file)
 
             # Post-build smoke test
-            if config.verify_after_build:
+            target = smoke_target(config)
+            if config.verify_after_build and target == "image":
+                # The image is what ships, and the Docker ENV describes it: it is
+                # started after docker build (image_smoke), not this binary here.
+                build_result["verify"] = {
+                    "status": "skipped",
+                    "detail": "The Docker image is smoke-tested once it is built",
+                    "exit_code": None,
+                    "target": "image",
+                }
+                await task_manager.append_log(task_id, "Smoke test: the Docker image will be started once it is built")
+            elif config.verify_after_build:
+                if config.docker_enabled:
+                    await task_manager.append_log(
+                        task_id,
+                        "Smoke test: Docker is not available here, so the binary is tested on this host instead "
+                        "of the image (with the Docker ENV, whose container paths may not exist here)",
+                    )
                 await task_manager.set_stage(task_id, "verify")
                 await task_manager.update_task(task_id, "status_msg", "Verifying binary...")
                 # Runtime env for the test: Docker ENV first, else project .env
@@ -1683,11 +1900,17 @@ async def run_nuitka_build(task_id: str, config: BuildConfig, db: AsyncSession) 
                 verify = await _smoke_test(
                     task_id, binary_path, cwd=output_dir, extra_env=smoke_env
                 )
+                verify["target"] = "binary"
                 build_result["verify"] = verify
                 marker = {"pass": "✓", "warn": "⚠", "fail": "✗"}.get(verify["status"], "•")
                 await task_manager.append_log(
                     task_id, f"Verify: {marker} {verify['detail']}"
                 )
+                checked = docker_port_check(config, verify)
+                if checked:
+                    build_result["port_check"] = checked
+                    if checked["message"]:
+                        await task_manager.append_log(task_id, f"⚠ Port: {checked['message']}")
             else:
                 build_result["verify"] = {
                     "status": "skipped",
@@ -1697,7 +1920,10 @@ async def run_nuitka_build(task_id: str, config: BuildConfig, db: AsyncSession) 
 
             build_result["duration_seconds"] = round(time.monotonic() - start_ts, 1)
             await task_manager.set_result(task_id, dict(build_result), db)
-            await task_manager.set_stage(task_id, "done")
+            # A failed smoke test leaves the build at "verify", so the failure
+            # report names that stage instead of "finishing up".
+            failed_verify = build_result["verify"]["status"] == "fail"
+            await task_manager.set_stage(task_id, "verify" if failed_verify else "done")
 
             await task_manager.append_log(task_id, "")
             await task_manager.append_log(task_id, "=" * 50)
@@ -1706,7 +1932,7 @@ async def run_nuitka_build(task_id: str, config: BuildConfig, db: AsyncSession) 
             await task_manager.append_log(task_id, "=" * 50)
 
             # A failed smoke test means the artifact is broken — fail the build
-            if build_result["verify"]["status"] == "fail":
+            if failed_verify:
                 await task_manager.append_log(
                     task_id, "Smoke test failed — marking build as failed"
                 )

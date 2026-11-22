@@ -1,5 +1,13 @@
 import axios, { type AxiosError, type InternalAxiosRequestConfig } from 'axios'
 import type {
+  CreatedProjectHook,
+  HookDelivery,
+  HookProvider,
+  ProjectHook,
+  ProjectSchedule,
+  ScheduleInput,
+  SchedulePreview,
+  ScheduleRun,
   NotificationKind,
   ProjectNotification,
   BuildStats,
@@ -405,6 +413,34 @@ export const projectApi = {
   },
   testNotification: async (id: number, notificationId: number): Promise<{ ok: boolean; error: string | null }> =>
     (await api.post<{ ok: boolean; error: string | null }>(`/projects/${id}/notifications/${notificationId}/test`)).data,
+  hooks: async (id: number): Promise<ProjectHook[]> => (await api.get<ProjectHook[]>(`/projects/${id}/hooks`)).data,
+  addHook: async (id: number, body: { provider: HookProvider; branches: string; tags: string }): Promise<CreatedProjectHook> =>
+    (await api.post<CreatedProjectHook>(`/projects/${id}/hooks`, body)).data,
+  updateHook: async (
+    id: number, hookId: number, body: { branches?: string; tags?: string; enabled?: boolean; take_over?: boolean },
+  ): Promise<ProjectHook> => (await api.patch<ProjectHook>(`/projects/${id}/hooks/${hookId}`, body)).data,
+  rotateHook: async (id: number, hookId: number): Promise<CreatedProjectHook> =>
+    (await api.post<CreatedProjectHook>(`/projects/${id}/hooks/${hookId}/rotate`)).data,
+  setHookSigningKey: async (id: number, hookId: number, signingKey: string | null): Promise<ProjectHook> =>
+    (await api.put<ProjectHook>(`/projects/${id}/hooks/${hookId}/signing-key`, { signing_key: signingKey })).data,
+  removeHook: async (id: number, hookId: number): Promise<void> => {
+    await api.delete(`/projects/${id}/hooks/${hookId}`)
+  },
+  hookDeliveries: async (id: number, hookId: number): Promise<HookDelivery[]> =>
+    (await api.get<HookDelivery[]>(`/projects/${id}/hooks/${hookId}/deliveries`)).data,
+  schedules: async (id: number): Promise<ProjectSchedule[]> =>
+    (await api.get<ProjectSchedule[]>(`/projects/${id}/schedules`)).data,
+  previewSchedule: async (id: number, body: { cron: string; timezone?: string }): Promise<SchedulePreview> =>
+    (await api.post<SchedulePreview>(`/projects/${id}/schedules/preview`, body)).data,
+  addSchedule: async (id: number, body: ScheduleInput & { cron: string }): Promise<ProjectSchedule> =>
+    (await api.post<ProjectSchedule>(`/projects/${id}/schedules`, body)).data,
+  updateSchedule: async (id: number, scheduleId: number, body: ScheduleInput): Promise<ProjectSchedule> =>
+    (await api.patch<ProjectSchedule>(`/projects/${id}/schedules/${scheduleId}`, body)).data,
+  removeSchedule: async (id: number, scheduleId: number): Promise<void> => {
+    await api.delete(`/projects/${id}/schedules/${scheduleId}`)
+  },
+  scheduleRuns: async (id: number, scheduleId: number): Promise<ScheduleRun[]> =>
+    (await api.get<ScheduleRun[]>(`/projects/${id}/schedules/${scheduleId}/runs`)).data,
   /** Earlier builds of a version, to ask before building it again. */
   sameVersion: async (projectName: string, version: string): Promise<SameVersionBuild[]> =>
     (await api.get<SameVersionBuild[]>('/history/versions', { params: { project_name: projectName, version } })).data,

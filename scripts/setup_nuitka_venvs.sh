@@ -31,10 +31,11 @@ SUPPORTED_VERSIONS=("3.12" "3.13" "3.14")
 # "cannot reuse already awaited __anext__()/asend()" at runtime. Nuitka 4.0's
 # "uncompiled generator integration" fix resolves this class of issue (upstream
 # issue #3608).
-NUITKA_VERSION="nuitka==4.1.2"
+# [onefile] adds zstandard: without it a onefile binary is stored uncompressed.
+NUITKA_VERSION="nuitka[onefile]==4.1.2"
 # Target version string (the part after ==), used to compare against the
 # version installed in an existing venv
-NUITKA_TARGET_VER="${NUITKA_VERSION##*==}"   # "nuitka==4.1.2" -> "4.1.2"
+NUITKA_TARGET_VER="${NUITKA_VERSION##*==}"   # "nuitka[onefile]==4.1.2" -> "4.1.2"
 
 if ! command -v uv >/dev/null 2>&1; then
     echo "❌ uv not found. Install: curl -LsSf https://astral.sh/uv/install.sh | sh"
@@ -82,12 +83,12 @@ for version in "${SUPPORTED_VERSIONS[@]}"; do
         # skipped.
         if "$venv_dir/bin/python" -c "import nuitka" 2>/dev/null; then
             cur_ver=$("$venv_dir/bin/python" -m nuitka --version 2>/dev/null | head -1)
-            if [ "$cur_ver" = "$NUITKA_TARGET_VER" ]; then
+            if [ "$cur_ver" = "$NUITKA_TARGET_VER" ] && "$venv_dir/bin/python" -c "import zstandard" 2>/dev/null; then
                 echo "✅ $venv_dir already has Nuitka $cur_ver — skipping"
                 echo
                 continue
             else
-                echo "⬆️  $venv_dir has Nuitka ${cur_ver:-?} → upgrading to $NUITKA_TARGET_VER"
+                echo "⬆️  $venv_dir has Nuitka ${cur_ver:-?} (or no zstandard) → installing $NUITKA_VERSION"
             fi
         else
             echo "⚠️  $venv_dir exists but Nuitka missing — installing"

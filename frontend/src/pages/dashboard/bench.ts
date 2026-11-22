@@ -106,11 +106,15 @@ export function outcomeLine(item: HistoryItem): { verdict: string; detail: strin
 
 /** The stages a running build goes through, given its type, and where it is. */
 export function stageTrack(task: TaskResponse): { key: string; label: string; state: 'done' | 'on' | 'todo' }[] {
-  const type = task.config.project_type
+  // Once the Config stage has read packwright.toml, the file may have changed the
+  // type or turned the image on: the track follows what is being built.
+  const built = task.effective?.config ?? task.config
+  const type = built.project_type
   const keys = [
+    'config',
     ...(type !== 'backend_only' ? ['frontend'] : []),
     ...(type !== 'frontend_only' ? ['preflight', 'compile', 'bundle', 'verify'] : []),
-    ...(task.config.docker_enabled ? ['docker'] : []),
+    ...(built.docker_enabled ? ['docker'] : []),
   ]
   const at = keys.indexOf(task.stage)
   return keys.map((key, i) => ({

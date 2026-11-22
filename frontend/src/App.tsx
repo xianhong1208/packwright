@@ -17,6 +17,7 @@ const HistoryDetail = lazy(() => import('./pages/HistoryDetail'))
 const LoginPage = lazy(() => import('./pages/LoginPage'))
 const ForgotPasswordPage = lazy(() => import('./pages/ForgotPasswordPage'))
 const SecuritySettingsPage = lazy(() => import('./pages/SecuritySettingsPage'))
+const ApiTokensPage = lazy(() => import('./pages/ApiTokensPage'))
 const UserManagementPage = lazy(() => import('./pages/admin/UserManagementPage'))
 const UserDetailPage = lazy(() => import('./pages/admin/UserDetailPage'))
 const RoleManagementPage = lazy(() => import('./pages/admin/RoleManagementPage'))
@@ -178,6 +179,7 @@ function App() {
                   <Route path="history/:taskId" element={<HistoryDetail />} />
                   <Route path="task/:taskId" element={<TaskDetail />} />
                   <Route path="settings/security" element={<SecuritySettingsPage />} />
+                  <Route path="settings/api-tokens" element={<ApiTokensPage />} />
                   <Route path="monitor" element={<MonitoringPage />} />
 
                   {/* Admin routes */}

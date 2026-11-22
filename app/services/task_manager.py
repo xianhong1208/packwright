@@ -13,6 +13,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.config import get_settings
 from app.models.task import Task
 from app.schemas.task import (
+    BUILD_TRIGGERS,
+    BuildTrigger,
     TaskCreate,
     TaskResponse,
     TaskStatus,
@@ -62,8 +64,21 @@ class TaskManager:
         self,
         request: TaskCreate,
         db: AsyncSession,
+        *,
+        trigger: BuildTrigger = "console",
+        origins: dict[str, str] | None = None,
     ) -> TaskResponse:
-        """Create a new task."""
+        """Create a new task.
+
+        ``trigger`` says what started it. It is the caller's to state (the
+        console route, a webhook, a schedule), never a field of the request
+        body, so nobody can label their own build as something else.
+
+        ``origins`` says where each setting came from before packwright.toml is
+        read (packwright_toml.base_origins); the Config stage completes it.
+        """
+        if trigger not in BUILD_TRIGGERS:
+            raise ValueError(f"Unknown build trigger: {trigger!r}")
         task_id = str(uuid4())
         now = datetime.now(timezone.utc)
 
@@ -83,6 +98,9 @@ class TaskManager:
             "logs": [],
             "process": None,
             "project_id": request.project_id,
+            "commit_sha": request.git_commit,
+            "trigger": trigger,
+            "effective": {"origins": origins} if origins else None,
         }
 
         async with self._lock:
@@ -102,6 +120,9 @@ class TaskManager:
             config=request.config.model_dump(),
             version=request.config.version or None,
             project_id=request.project_id,
+            commit_sha=request.git_commit,
+            trigger=trigger,
+            effective_config={"origins": origins} if origins else None,
         )
         db.add(db_task)
         await db.commit()
@@ -389,7 +410,57 @@ class TaskManager:
             logs=task_data["logs"],
             result=task_data.get("result"),
             project_id=task_data.get("project_id"),
+            commit_sha=task_data.get("commit_sha"),
+            trigger=task_data.get("trigger", "console"),
+            effective=task_data.get("effective"),
         )
+
+    async def set_commit(self, task_id: str, sha: str) -> None:
+        """Record the exact commit a Git build checks out (memory + DB + broadcast).
+
+        Uses its own session: it runs during workspace preparation, before the
+        dispatcher opens one.
+        """
+        from app.database import async_session
+
+        async with self._lock:
+            if task_id in self._tasks:
+                self._tasks[task_id]["commit_sha"] = sha
+        async with async_session() as db:
+            db_task = (await db.execute(select(Task).where(Task.task_id == task_id))).scalar_one_or_none()
+            if db_task is not None:
+                db_task.commit_sha = sha
+                await db.commit()
+        await self._broadcast_update(task_id, "commit_sha", sha)
+
+    def origins_of(self, task_id: str) -> dict[str, str] | None:
+        """Where each setting of a running build came from before its Config stage."""
+        task = self._tasks.get(task_id)
+        return ((task or {}).get("effective") or {}).get("origins")
+
+    async def set_effective(self, task_id: str, record: dict) -> None:
+        """Record what a build is made with after its Config stage (memory + DB +
+        broadcast): packwright_toml.record. The version and output directory
+        columns follow the effective settings, which the file may have changed.
+
+        Uses its own session, like set_commit: it runs before the dispatcher opens one.
+        """
+        from app.database import async_session
+
+        config = record.get("config") or {}
+        async with self._lock:
+            if task_id in self._tasks:
+                self._tasks[task_id]["effective"] = record
+        async with async_session() as db:
+            db_task = (await db.execute(select(Task).where(Task.task_id == task_id))).scalar_one_or_none()
+            if db_task is not None:
+                db_task.effective_config = record
+                if "version" in config:
+                    db_task.version = config["version"] or None
+                if config.get("output_dir"):
+                    db_task.output_dir = config["output_dir"]
+                await db.commit()
+        await self._broadcast_update(task_id, "effective", record)
 
     async def set_stage(self, task_id: str, stage: str) -> None:
         """Set the coarse build stage (preflight/compile/bundle/verify/done)."""
@@ -440,6 +511,41 @@ class TaskManager:
             current = dict(self._tasks[task_id].get("result") or {})
         current.update(patch)
         await self.set_result(task_id, current, db)
+
+    async def record_config_value(
+        self,
+        task_id: str,
+        key: str,
+        value: Any,
+        db: AsyncSession | None = None,
+    ) -> None:
+        """Save a setting the build decided (e.g. Docker volumes found by the smoke
+        run) into the build's stored config, and into its project's while the
+        project has no value for it, so the next build starts from it.
+
+        A value the project already has is never replaced: the project's
+        settings are the user's.
+        """
+        async with self._lock:
+            task = self._tasks.get(task_id)
+            if task is not None:
+                task["config"] = task["config"].model_copy(update={key: value})
+                project_id = task.get("project_id")
+            else:
+                project_id = None
+        if db is None:
+            return
+        db_task = (await db.execute(select(Task).where(Task.task_id == task_id))).scalar_one_or_none()
+        if db_task is not None:
+            db_task.config = {**(db_task.config or {}), key: value}
+            project_id = project_id or db_task.project_id
+        if project_id is not None:
+            from app.models.project import Project
+
+            project = await db.get(Project, project_id)
+            if project is not None and project.config.get(key) is None:
+                project.config = {**project.config, key: value}
+        await db.commit()
 
     async def get_history(
         self,

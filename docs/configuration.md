@@ -152,6 +152,10 @@ identified and how much they may do.
 | `BUILD_SUBMIT_PER_MINUTE` | `20` | Per-client cap on build submissions per minute: `POST /api/tasks` and a project's *Build a new version* (`POST /api/projects/{id}/builds`) together. `MAX_CONCURRENT_BUILDS` limits how many builds run at once; this limits how fast the queue can grow. |
 | `RATE_LIMIT_PER_MINUTE` | `300` | API requests a client address may make per minute outside the endpoints above. A page of the console makes one to five (Roles one per role), and everyone behind one NAT or proxy address shares the allowance, so keep it well above a person's browsing. When the console's session check is refused, it waits and asks again instead of signing the person out. |
 | `RATE_LIMIT_PER_HOUR` | `6000` | The same, per hour. |
+| `WEBHOOK_PER_MINUTE` | `60` | Webhook deliveries (`/api/hooks/…`) a client address may send per minute. They have their own budget, apart from the two above: they are unauthenticated until their signature is checked. A forge sends one delivery per push. |
+| `SCHEDULES_ENABLED` | `true` | Runs scheduled builds. `false` stops the scheduler: schedules keep their settings and runs missed meanwhile are not made up. |
+| `SCHEDULE_TIMEZONE` | *(empty)* | The time zone a new schedule starts in (an IANA name such as `Asia/Taipei`). Empty: the server's own (`TZ`, `/etc/timezone` or `/etc/localtime`), or UTC. Each schedule keeps the zone it was saved with. |
+| `WEBHOOK_MAX_BODY_BYTES` | `1048576` | The largest webhook body read; a bigger one is refused with 413 before it is read. A push payload is usually a few kilobytes (GitHub lists at most 20 commits). |
 
 ## Git source mode
 
@@ -168,9 +172,11 @@ identified and how much they may do.
 ## Auto venv bootstrap (Git mode)
 
 After cloning a Python project, Packwright creates its virtual environment with uv: `uv sync
---frozen` when a `uv.lock` exists, otherwise `uv sync`, or `uv venv` plus
-`uv pip install -r requirements.txt`. Projects with neither `pyproject.toml` nor
-`requirements.txt` skip this step.
+--frozen --no-default-groups` when a `uv.lock` exists, otherwise `uv sync --no-default-groups`, or
+`uv venv` plus `uv pip install -r requirements.txt`. Projects with neither `pyproject.toml` nor
+`requirements.txt` skip this step. `--no-default-groups` keeps development groups such as `dev`
+(pytest, ruff, …) out of the build: in External mode everything in the `.venv` is copied to `libs/` and
+shipped. A group the program needs is chosen per build (*Dependency group*) and added with `--group`.
 
 | Variable | Default | Description |
 |---|---|---|

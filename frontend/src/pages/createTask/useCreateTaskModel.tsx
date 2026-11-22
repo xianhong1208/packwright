@@ -12,6 +12,7 @@ import type {
   RepoDiagnosisCheck,
   DetectedVersion,
   DetectedFrontendConfig,
+  PackwrightTomlPreview,
   TaskCreate,
 } from '../../api/types'
 import { useFormDraft } from '../../hooks/useFormDraft'
@@ -20,7 +21,7 @@ import { ALL_STEPS, activeSteps, clampStepIndex, type StepDef, type StepKey } fr
 import { assembleTaskCreate } from './buildConfig'
 import { findPythonMismatch, pickDefaultRef } from './pythonVersion'
 import type { DepGroupsRead } from './depGroups'
-import { guessProject, nameFromSource, type ProjectGuess } from './quickPlan'
+import { detectedFields, guessProject, nameFromSource, type ProjectGuess } from './quickPlan'
 import type { Preset } from './initialValues'
 
 export interface RebuildState {
@@ -68,7 +69,7 @@ export function useCreateTaskModel(options: ModelOptions = {}) {
     if (!isRebuild || !rebuildState?.config) return
     const c = rebuildState.config
     if (c.nuitka_jobs || c.include_packages || c.extra_dirs || c.data_dirs) setBackendAdvKeys(['backend-advanced'])
-    if (c.docker_env_vars || c.docker_custom_commands || c.docker_install_node) setDockerAdvKeys(['docker-advanced'])
+    if (c.docker_env_vars || c.docker_custom_commands || c.docker_install_node || c.docker_run_as_root) setDockerAdvKeys(['docker-advanced'])
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isRebuild])
 
@@ -194,26 +195,66 @@ export function useCreateTaskModel(options: ModelOptions = {}) {
   // Where the version in the form came from, when the project said it.
   const [versionSource, setVersionSource] = useState<string | null>(null)
   const autoNameRef = useRef<string | null>(null)
-  const applyGuess = useCallback((checks: RepoDiagnosisCheck[], source: string, version?: DetectedVersion | null): ProjectGuess => {
+  // The source's packwright.toml, as the scan read it. Its values win at build time,
+  // so detection fills only what it leaves out (fileValuesRef), and the settings
+  // detection did fill are sent as such (detectedRef) to be recorded as their origin.
+  const [sourceToml, setSourceToml] = useState<PackwrightTomlPreview | null>(null)
+  const fileValuesRef = useRef<Record<string, unknown>>({})
+  const detectedRef = useRef<Set<string>>(new Set())
+  const applyGuess = useCallback((
+    checks: RepoDiagnosisCheck[],
+    source: string,
+    version?: DetectedVersion | null,
+    toml?: PackwrightTomlPreview | null,
+  ): ProjectGuess => {
     setRepoChecks(checks)
+    setSourceToml(toml ?? null)
+    const fileValues = (toml?.values ?? {}) as Record<string, unknown>
+    fileValuesRef.current = fileValues
     // A fresh build takes the version the code states. A stored config keeps its own:
     // a project's settings have no version at all, and a rebuild's is the one it was.
-    if (version && !isRebuild && !form.isFieldTouched('version')) {
+    if (typeof fileValues.version === 'string') {
+      if (!isRebuild && !form.isFieldTouched('version')) {
+        form.setFieldValue('version', fileValues.version)
+        setVersionSource('packwright.toml')
+      }
+    } else if (version && !isRebuild && !form.isFieldTouched('version')) {
       form.setFieldValue('version', version.value)
       setVersionSource(version.source)
+      detectedRef.current.add('version')
     }
     setRepoError(null)
-    const guess = guessProject(checks)
+    const found = guessProject(checks)
+    const guess = typeof fileValues.project_type === 'string'
+      ? { ...found, projectType: fileValues.project_type as ProjectType }
+      : found
     if (mode !== 'quick') return guess
-    // Never over something the person set themselves.
+    // The file's own values first: they are what the build will use.
+    for (const [name, value] of Object.entries(fileValues)) {
+      if (name === 'extra_dirs' || name === 'data_dirs') {
+        const dirs = String(value).split(',').map((d) => d.trim()).filter(Boolean)
+        if (name === 'extra_dirs') setSelectedDirs(dirs)
+        else setSelectedDataDirs(dirs)
+      } else if (name === 'dependency_groups') {
+        if (!form.isFieldTouched('dependency_group')) form.setFieldValue('dependency_group', (value as string[])[0])
+      } else if (name !== 'version' && !form.isFieldTouched(name)) {
+        form.setFieldValue(name, value)
+      }
+    }
+    // Then detection, never over something the person set themselves or the file sets.
     const fill = (name: string, value: unknown) => {
-      if (value !== null && value !== undefined && !form.isFieldTouched(name)) form.setFieldValue(name, value)
+      if (name in fileValues) return
+      if (value !== null && value !== undefined && !form.isFieldTouched(name)) {
+        form.setFieldValue(name, value)
+        detectedRef.current.add(name)
+      }
     }
     fill('project_type', guess.projectType)
     fill('entry_point', guess.entryPoint)
     // A Python project without a usual entry point: leave the field empty for the
     // person to fill, rather than showing the form's main.py under "no main.py".
-    if (guess.projectType !== 'frontend_only' && guess.entryPoint === null && !form.isFieldTouched('entry_point')) {
+    if (guess.projectType !== 'frontend_only' && guess.entryPoint === null && !('entry_point' in fileValues)
+        && !form.isFieldTouched('entry_point')) {
       form.setFieldValue('entry_point', '')
     }
     fill('frontend_dir', guess.frontendDir)
@@ -378,13 +419,14 @@ export function useCreateTaskModel(options: ModelOptions = {}) {
       // is offered next to the field instead.
       if (silent && isRebuild) return
       const fill = (name: string, value: string | null | undefined) =>
-        value && (!silent || !form.isFieldTouched(name)) ? { [name]: value } : {}
+        value && !(name in fileValuesRef.current) && (!silent || !form.isFieldTouched(name)) ? { [name]: value } : {}
       const updates: Record<string, string> = {
         ...fill('frontend_build_tool', config.build_tool),
         ...fill('frontend_build_command', config.build_command),
         ...fill('frontend_output_dir', config.output_dir),
       }
       if (Object.keys(updates).length > 0) form.setFieldsValue(updates)
+      if (silent) Object.keys(updates).forEach((name) => detectedRef.current.add(name))
       if (!silent) {
         const parts: string[] = []
         if (config.has_vite_config) parts.push('Vite config')
@@ -493,8 +535,8 @@ export function useCreateTaskModel(options: ModelOptions = {}) {
     }
     const timer = setTimeout(async () => {
       try {
-        const { checks, version } = await taskApi.diagnoseRepo(path)
-        const guess = applyGuess(checks, path, version)
+        const { checks, version, packwright_toml } = await taskApi.diagnoseRepo(path)
+        const guess = applyGuess(checks, path, version, packwright_toml)
         if (guess.projectType === 'backend_only' || guess.projectType === 'fullstack') void fetchPyprojectGroups(path)
         if (guess.projectType === 'frontend_only' || guess.projectType === 'fullstack') void detectFrontendConfig(true)
       } catch (err: unknown) {
@@ -580,7 +622,7 @@ export function useCreateTaskModel(options: ModelOptions = {}) {
       // pyproject dependency-groups parsed from the remote repo (git-mode parity)
       setDepGroups(result.dependency_groups)
       setDepGroupsRead('read')
-      if (result.checks) applyGuess(result.checks, url, result.version)
+      if (result.checks) applyGuess(result.checks, url, result.version, result.packwright_toml)
       const currentGroup = form.getFieldValue('dependency_group') as string | undefined
       if (currentGroup && !result.dependency_groups.includes(currentGroup)) {
         form.setFieldValue('dependency_group', undefined)
@@ -643,7 +685,10 @@ export function useCreateTaskModel(options: ModelOptions = {}) {
         if (cfg.build_tool) updates.frontend_build_tool = cfg.build_tool
         if (cfg.build_command) updates.frontend_build_command = cfg.build_command
         if (cfg.output_dir) updates.frontend_output_dir = cfg.output_dir
+        // What packwright.toml sets is what the build uses: not detection's guess.
+        for (const name of Object.keys(updates)) if (name in fileValuesRef.current) delete updates[name]
         if (Object.keys(updates).length > 0) form.setFieldsValue(updates)
+        Object.keys(updates).forEach((name) => detectedRef.current.add(name))
       }
       // Env files list + content cache
       const fileNames = Object.keys(result.env_files).sort()
@@ -799,6 +844,8 @@ export function useCreateTaskModel(options: ModelOptions = {}) {
       selectedDirs,
       selectedDataDirs,
     })
+    // What detection filled and nobody changed since, recorded as "detected".
+    request.detected_fields = detectedFields(detectedRef.current, (name) => form.isFieldTouched(name), fileValuesRef.current)
     if (options.onSubmit) {
       options.onSubmit(request)
       return
@@ -992,6 +1039,7 @@ export function useCreateTaskModel(options: ModelOptions = {}) {
     frontendDetected,
     purpose,
     versionSource,
+    sourceToml,
     workspaceDir,
     setWorkspaceDir,
     draftSavedAt,
