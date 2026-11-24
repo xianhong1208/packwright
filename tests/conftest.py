@@ -2,7 +2,7 @@
 
 app.config caches Settings and app.database builds its engine at import time,
 so these must be in os.environ first. Unit tests touch no database, but without
-this they would still point at ./data/build_center.db, and app.services.auth
+this they would still point at ./data/packwright.db, and app.services.auth
 would append a freshly generated JWT_SECRET_KEY to the repository's .env when
 none is set. Everything here lives in a throwaway directory.
 """

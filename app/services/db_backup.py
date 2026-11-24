@@ -26,7 +26,7 @@ from pathlib import Path
 
 from sqlalchemy.engine import make_url
 
-from app.config import get_settings
+from app.config import LEGACY_SQLITE_FILE_NAME, SQLITE_FILE_NAME, get_settings
 
 
 def _finish(partial: Path, final: Path) -> Path:
@@ -85,12 +85,19 @@ def backup(backup_dir: Path, retention_days: int) -> tuple[Path, int]:
     backup_dir.mkdir(parents=True, exist_ok=True)
     os.chmod(backup_dir, 0o700)
     stamp = datetime.now().strftime("%Y%m%d-%H%M%S")
+    # Older backups of this same database that carry another name (see below).
+    legacy_prefixes: list[str] = []
 
     if url.get_backend_name() == "sqlite":
         db_file = Path(url.database or "")
         if not db_file.is_file():
             raise FileNotFoundError(f"SQLite database not found: {db_file}")
         prefix, suffix = db_file.stem, ".sqlite.gz"
+        if db_file.name == SQLITE_FILE_NAME:
+            # Backups of the default database made before its file was renamed
+            # from build_center.db. They follow the same retention, so they age
+            # out instead of piling up forever; recent ones stay.
+            legacy_prefixes.append(Path(LEGACY_SQLITE_FILE_NAME).stem)
         out = backup_dir / f"{prefix}-{stamp}{suffix}"
         run = lambda: _backup_sqlite(db_file, out)  # noqa: E731
     elif url.get_backend_name() == "postgresql":
@@ -107,10 +114,11 @@ def backup(backup_dir: Path, retention_days: int) -> tuple[Path, int]:
 
     cutoff = time.time() - retention_days * 86400
     rotated = 0
-    for old in backup_dir.glob(f"{prefix}-*{suffix}"):
-        if old != result and old.stat().st_mtime < cutoff:
-            old.unlink()
-            rotated += 1
+    for name in (prefix, *legacy_prefixes):
+        for old in backup_dir.glob(f"{name}-*{suffix}"):
+            if old != result and old.stat().st_mtime < cutoff:
+                old.unlink()
+                rotated += 1
     return result, rotated
 
 

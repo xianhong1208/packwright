@@ -1,10 +1,34 @@
 # Changelog
 
-All notable changes to Packwright (formerly Build Center) are documented here. The format
+All notable changes to Packwright are documented here. The format
 follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this project adheres to
 [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
+
+### Changed
+- The last Build Center names are gone. The default SQLite file is `data/packwright.db`, the default PostgreSQL
+  database (`DB_*` form) is `packwright`, SQLite backups are named `packwright-<time>.sqlite.gz`, and a
+  smoke-tested binary receives only `PACKWRIGHT_SMOKE_TEST=1` (no more `BUILD_CENTER_SMOKE_TEST`).
+
+### Upgrade notes
+- **SQLite (the default):** on the first start, when `DATABASE_URL` and `DB_HOST` are unset, `data/packwright.db`
+  does not exist and `data/build_center.db` does, the old file is renamed to the new name together with its
+  `-wal` / `-shm` / `-journal` files, before anything opens it, and the log says so once. If both files exist the
+  service refuses to start and says which ones: keep the one that holds your data as `data/packwright.db`, or set
+  `DATABASE_URL=sqlite:///<path>/build_center.db` to keep using the old file. A `DATABASE_URL` that names a file
+  is never touched.
+- **PostgreSQL through `DB_*` without `DB_NAME`:** the default database is now `packwright`, so such an install
+  connects to another (empty) database after the upgrade. Set `DB_NAME=build_center` to keep the old one, or
+  rename the database. `DATABASE_URL` installs are not affected.
+- **Backups:** existing `build_center-<time>.sqlite.gz` files are backups of the same default database; the
+  retention sweep of `scripts/backup_db.sh` removes them once they are older than `RETENTION_DAYS`, like the
+  new ones (only after a successful backup, and only when the database is the default `packwright.db`).
+  PostgreSQL dumps keep the database's name. Restore with `gunzip -c <file> > data/packwright.db`.
+- **Binaries that checked `BUILD_CENTER_SMOKE_TEST`** to skip work during the smoke test must check
+  `PACKWRIGHT_SMOKE_TEST` instead.
+- `.gitignore` no longer lists `build_center_backups/`; the default backup directory `data/backups` is ignored
+  with the rest of `data/`.
 
 ## [1.4.0] — 2026-11-22
 

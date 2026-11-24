@@ -783,7 +783,7 @@ new WebSocket(url, ['bearer', accessToken])
 
 ```
 data/
-├── build_center.db     # SQLite 資料庫(使用者、角色、建置紀錄、Git 憑證)
+├── packwright.db       # SQLite 資料庫(使用者、角色、建置紀錄、Git 憑證)
 ├── workspace/          # Git 模式每個建置一個目錄
 └── docker_images/      # 匯出的 image,<task-id>.tar.gz
 ```
@@ -823,12 +823,13 @@ BACKUP_DIR=/mnt/nas/packwright RETENTION_DAYS=60 bash scripts/backup_db.sh
 
 - **SQLite**:用 SQLite 的線上備份,服務執行中也能取得一致的快照,輸出 `<name>-<時間>.sqlite.gz`。
 - **PostgreSQL**:用 `pg_dump`(需安裝),輸出 `<資料庫>-<時間>.sql.gz`;密碼經環境變數傳遞,不會出現在命令列。
-- 只有備份成功後才會刪除超過 `RETENTION_DAYS` 的舊備份,失敗時以非零狀態結束。
+- 只有備份成功後才會刪除超過 `RETENTION_DAYS` 的舊備份,失敗時以非零狀態結束。1.4 以前預設 SQLite 檔的備份叫
+  `build_center-<時間>.sqlite.gz`,它們是同一個資料庫的備份,也照同樣的保留天數到期刪除;其他檔案不會動。
 
 還原前先停止服務:
 
 ```bash
-gunzip -c build_center-<時間>.sqlite.gz > data/build_center.db        # SQLite
+gunzip -c packwright-<時間>.sqlite.gz > data/packwright.db            # SQLite
 gunzip -c packwright-<時間>.sql.gz | psql -h HOST -U USER -d DBNAME    # PostgreSQL
 ```
 

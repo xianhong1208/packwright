@@ -16,7 +16,7 @@
 #   30 3 * * * cd /opt/packwright && bash scripts/backup_db.sh >> /var/log/packwright_backup.log 2>&1
 #
 # Restore (stop the service first):
-#   SQLite:      gunzip -c <file>.sqlite.gz > data/build_center.db
+#   SQLite:      gunzip -c <file>.sqlite.gz > data/packwright.db
 #   PostgreSQL:  gunzip -c <file>.sql.gz | psql -h HOST -U USER -d DBNAME
 
 set -euo pipefail

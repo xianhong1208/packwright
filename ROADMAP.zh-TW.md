@@ -7,7 +7,7 @@ minor 版本。每一項在對應的 [milestone](https://github.com/xianhong1208
 
 ## 已發布
 
-**1.0.0（2026-09-10），第一版，當時叫 Build Center。** 用 Nuitka 編譯 Python，用 npm、yarn、pnpm 或 bun 建置前端，兩者可以打包
+**1.0.0（2026-09-10），第一版。** 用 Nuitka 編譯 Python，用 npm、yarn、pnpm 或 bun 建置前端，兩者可以打包
 在一起，也能匯出成 Docker image；全部在有即時日誌、帳號與角色權限的網頁管理台完成。每個主機各一組 Git 憑證，預設用 SQLite，也能
 透過 `DATABASE_URL` 改用 PostgreSQL，可選擇以 MCP Center（現在的 MCP Gate）登入。
 
