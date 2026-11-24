@@ -8,7 +8,7 @@ minor releases unless a change breaks something. Every item has an issue under i
 
 ## Shipped
 
-**1.0.0 (2026-09-10), the first release, as Build Center.** Python compiled with Nuitka, frontends
+**1.0.0 (2026-09-10), the first release.** Python compiled with Nuitka, frontends
 built with npm, yarn, pnpm or bun, both packaged together and optionally exported as a Docker image,
 from a web console with live logs, accounts and role-based permissions. Git credentials per host,
 SQLite by default and PostgreSQL through `DATABASE_URL`, optional sign-in through MCP Center (now MCP

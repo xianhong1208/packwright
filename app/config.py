@@ -39,6 +39,56 @@ def append_generated_setting(key: str, value: str, comment: str) -> bool:
         return False
 
 
+# The default SQLite file. Up to 1.4 it kept the name from before the rename
+# (data/build_center.db); move_legacy_sqlite_file() renames such a file once.
+SQLITE_FILE_NAME = "packwright.db"
+LEGACY_SQLITE_FILE_NAME = "build_center.db"
+# Moved before the database file itself: the WAL holds committed transactions
+# not yet copied into the main file, and SQLite finds it only by name
+# ("<db>-wal"). A run interrupted after this loop still finds the old main file
+# and finishes the move on the next start.
+_SQLITE_SIDECARS = ("-wal", "-shm", "-journal")
+
+
+class LegacyDatabaseConflict(RuntimeError):
+    """Both data/build_center.db and data/packwright.db exist: refuse to guess."""
+
+
+def move_legacy_sqlite_file(target: Path) -> bool:
+    """Rename the pre-rename default database to ``target`` (data/packwright.db).
+
+    Called only for the default SQLite file (DATABASE_URL and DB_HOST unset), and
+    before any engine opens it: the files are renamed as they are, so the WAL's
+    committed content moves with them byte for byte. Returns True when moved.
+
+    Raises LegacyDatabaseConflict when both files exist: which one holds the real
+    data cannot be told from here, and starting on the wrong one would look like
+    lost history.
+    """
+    legacy = target.with_name(LEGACY_SQLITE_FILE_NAME)
+    if not legacy.is_file():
+        return False
+    if target.exists():
+        raise LegacyDatabaseConflict(
+            f"Both {legacy} and {target} exist. Packwright's database file is now {target.name}; "
+            f"keep the one that holds your data under that name and move the other away, "
+            f"or set DATABASE_URL=sqlite:///{legacy} to keep using the old file."
+        )
+    pairs = [(Path(f"{legacy}{s}"), Path(f"{target}{s}")) for s in _SQLITE_SIDECARS]
+    clashes = [str(new) for old, new in pairs if old.exists() and new.exists()]
+    if clashes:
+        raise LegacyDatabaseConflict(
+            f"Cannot move {legacy} to {target}: {', '.join(clashes)} already exist. "
+            "Move or delete them, or set DATABASE_URL to the old file."
+        )
+    for old, new in pairs:
+        if old.exists():
+            os.rename(old, new)
+    os.rename(legacy, target)
+    logger.warning("Database file renamed: %s -> %s (Packwright's default name)", legacy, target)
+    return True
+
+
 class Settings(BaseSettings):
     """Application settings loaded from environment variables."""
 
@@ -57,7 +107,7 @@ class Settings(BaseSettings):
     database_url: str = ""
     db_host: str = ""
     db_port: int = 5432
-    db_name: str = "build_center"
+    db_name: str = "packwright"
     db_user: str = "postgres"
     db_password: str = "admin"
 
@@ -318,8 +368,9 @@ class Settings(BaseSettings):
             driver = "postgresql+asyncpg" if async_driver else "postgresql"
             return f"{driver}://{self.db_user}:{self.db_password}@{self.db_host}:{self.db_port}/{self.db_name}"
         # Default: a local SQLite file (created on first use).
-        db_path = Path("./data/build_center.db").resolve()
+        db_path = Path("./data", SQLITE_FILE_NAME).resolve()
         db_path.parent.mkdir(parents=True, exist_ok=True)
+        move_legacy_sqlite_file(db_path)
         driver = "sqlite+aiosqlite" if async_driver else "sqlite"
         return f"{driver}:///{db_path}"
 

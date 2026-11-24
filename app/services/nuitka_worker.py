@@ -795,9 +795,6 @@ def _build_smoke_env(extra_env: dict[str, str] | None) -> dict[str, str]:
     }
     env.update(extra_env or {})
     env["PACKWRIGHT_SMOKE_TEST"] = "1"
-    # The former name, kept so binaries built while this was Build Center still
-    # detect the smoke run.
-    env["BUILD_CENTER_SMOKE_TEST"] = "1"
     return env
 
 

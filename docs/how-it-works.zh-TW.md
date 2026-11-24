@@ -21,6 +21,7 @@
 - **來源。** 一個建置不是*本機路徑*(限制在 `LOCAL_SOURCE_ROOTS` 內)就是 *Git URL*。Git 模式會驗證 URL(拒絕 `file://`、`ssh://`、localhost、link-local、或帶帳密的 URL),把指定的 branch/tag 解析成一個 commit,只 checkout 那個 commit(記在建置上),Python 專案還會先建 `.venv` 再打包。git 只會送出 Packwright 裡存的憑證,絕不使用伺服器帳號自己的 git 設定或登入。
 - **Token 注入。** 私有 repo 會依主機查出對應 token、解密,只在那一次呼叫 `git` 時,以限定在該 repo 來源的 HTTP 認證 header 交給它(經由 `GIT_CONFIG_*` 環境變數,所以也不會出現在命令列)。不會出現在網址、保存的建置設定或日誌,API 也不會回傳。
 - **併發。** `MAX_CONCURRENT_BUILDS` 以 semaphore 限制同時進行的建置(各種類型都算),其餘排隊;同一個本機資料夾的建置一次一個,等待時不佔名額;行程刻意單一 worker,因為任務狀態、WebSocket 連線與 build semaphore 都在行程記憶體裡。
+- **試跑標記。** 試跑中的執行檔會收到 `PACKWRIGHT_SMOKE_TEST=1`,程式可以據此略過只該在正式執行時做的事(專案的 `.env` 無法把它關掉)。
 - **清理。** 背景迴圈依狀態與時間刪除各任務工作區與匯出的 image,並可將成功建置的工作區縮到只剩產出。
 
 ## 大多數安裝會用到的設定
@@ -53,7 +54,7 @@ Packwright 所有狀態都寫在單一的 `data/` 目錄下。預設這些路徑
 
 ```
 data/
-├── build_center.db     # SQLite 資料庫(使用者、角色、歷史、Git 憑證)
+├── packwright.db       # SQLite 資料庫(使用者、角色、歷史、Git 憑證)
 ├── workspace/          # 每個建置一個目錄:clone、.venv、以及編譯產物
 └── docker_images/      # 匯出的 Docker image,檔名為 <task-id>.tar.gz
 ```
@@ -68,7 +69,7 @@ data/
 GIT_WORKSPACE_DIR=/srv/packwright/workspace     # clone、建置、可下載的產物
 DOCKER_IMAGES_DIR=/srv/packwright/docker_images # 匯出的 image tarball
 # 資料庫也可一起搬(SQLite 檔,或改指向 PostgreSQL):
-DATABASE_URL=sqlite+aiosqlite:////srv/packwright/build_center.db
+DATABASE_URL=sqlite+aiosqlite:////srv/packwright/packwright.db
 ```
 
 把 `GIT_WORKSPACE_DIR` 和 `BOOTSTRAP_UV_CACHE_DIR` 放在同一個檔案系統,`uv` 安裝相依時才能用 hardlink 而非複製。
@@ -126,7 +127,3 @@ DATABASE_URL=sqlite+aiosqlite:////srv/packwright/build_center.db
 - 以 `SETTINGS_ENCRYPTION_KEY` 加密儲存,API 不回傳——介面只顯示末四碼。
 - 建置 clone URL 時,自動選用主機完全相符的 token。
 - `.env` 的 `GITLAB_TOKEN` 仍作為沒有相符憑證時的後備,但只會送給 `GITLAB_TOKEN_HOST` 指定的那一台主機(預設 `gitlab.com`;自架 GitLab 請設成該主機名稱)。
-
-## 沿用 Build Center 的名稱
-
-Packwright 在 v1.0.0 以前名為 *Build Center*。存在於既有資料中的名稱保留舊拼法,不需要任何遷移:SQLite 檔 `data/build_center.db`、預設的 PostgreSQL 資料庫 `build_center`,以及煙霧測試時執行檔仍會收到的 `BUILD_CENTER_SMOKE_TEST`(與新的 `PACKWRIGHT_SMOKE_TEST` 並存)。systemd unit 改為 `deploy/packwright.service`。

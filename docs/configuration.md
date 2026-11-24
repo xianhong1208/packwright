@@ -31,10 +31,10 @@ in How Packwright works.
 
 | Variable | Default | Description |
 |---|---|---|
-| `DATABASE_URL` | *(empty)* | Full SQLAlchemy URL of the database. Empty uses a local SQLite file, `./data/build_center.db` (relative to the launch directory), created on first use. Set a PostgreSQL DSN such as `postgresql+asyncpg://user:password@localhost:5432/build_center` to use PostgreSQL; `postgresql://` and `sqlite:///…` URLs also work, as the right async/sync driver is substituted automatically. Takes precedence over every `DB_*` setting. |
+| `DATABASE_URL` | *(empty)* | Full SQLAlchemy URL of the database. Empty uses a local SQLite file, `./data/packwright.db` (relative to the launch directory), created on first use. A file from 1.4 or earlier, `./data/build_center.db`, is renamed to it (with its `-wal` / `-shm`) on the first start; if both files exist the service refuses to start and says so. Set a PostgreSQL DSN such as `postgresql+asyncpg://user:password@localhost:5432/packwright` to use PostgreSQL; `postgresql://` and `sqlite:///…` URLs also work, as the right async/sync driver is substituted automatically. Takes precedence over every `DB_*` setting. |
 | `DB_HOST` | *(empty)* | PostgreSQL host, used only when `DATABASE_URL` is empty. Setting it switches from SQLite to PostgreSQL with a DSN built from the `DB_*` settings below. |
 | `DB_PORT` | `5432` | PostgreSQL port for the `DB_*` form. Ignored unless `DB_HOST` is set and `DATABASE_URL` is empty. |
-| `DB_NAME` | `build_center` | PostgreSQL database name for the `DB_*` form. |
+| `DB_NAME` | `packwright` | PostgreSQL database name for the `DB_*` form. Up to 1.4 the default was `build_center`: set `DB_NAME=build_center` to keep using that database. |
 | `DB_USER` | `postgres` | PostgreSQL user for the `DB_*` form. |
 | `DB_PASSWORD` | `admin` | PostgreSQL password for the `DB_*` form. The default is a placeholder: always set a real password when you use `DB_HOST`. |
 

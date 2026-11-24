@@ -25,7 +25,7 @@ def _settings(mocker, url):
 
 @pytest.fixture
 def sqlite_db(tmp_path):
-    path = tmp_path / "build_center.db"
+    path = tmp_path / "packwright.db"
     con = sqlite3.connect(path)
     con.execute("create table history (task_id text, project_name text)")
     con.executemany("insert into history values (?, ?)", [("t1", "web"), ("t2", "cli")])
@@ -44,7 +44,7 @@ class TestSqlite:
 
         path, rotated = db_backup.backup(out_dir, retention_days=30)
 
-        assert path.name.startswith("build_center-") and path.name.endswith(".sqlite.gz")
+        assert path.name.startswith("packwright-") and path.name.endswith(".sqlite.gz")
         restored = tmp_path / "restored.db"
         restored.write_bytes(gzip.decompress(path.read_bytes()))
         rows = sqlite3.connect(restored).execute("select task_id from history order by 1").fetchall()
@@ -59,8 +59,8 @@ class TestSqlite:
         _settings(mocker, f"sqlite:///{sqlite_db}")
         out_dir = tmp_path / "backups"
         out_dir.mkdir()
-        old, recent, other = (out_dir / "build_center-20200101-000000.sqlite.gz",
-                              out_dir / "build_center-20990101-000000.sqlite.gz", out_dir / "notes.txt")
+        old, recent, other = (out_dir / "packwright-20200101-000000.sqlite.gz",
+                              out_dir / "packwright-20990101-000000.sqlite.gz", out_dir / "notes.txt")
         for f in (old, recent, other):
             f.write_text("x")
         os.utime(old, (time.time() - 40 * 86400,) * 2)
@@ -133,7 +133,7 @@ class TestRetentionZero:
         _settings(mocker, f"sqlite:///{sqlite_db}")
         out_dir = tmp_path / "backups"
         out_dir.mkdir()
-        older = out_dir / "build_center-20200101-000000.sqlite.gz"
+        older = out_dir / "packwright-20200101-000000.sqlite.gz"
         older.write_text("x")
         os.utime(older, (0, 0))
         time.sleep(0.01)
@@ -141,3 +141,64 @@ class TestRetentionZero:
         path, rotated = db_backup.backup(out_dir, retention_days=0)
 
         assert path.exists() and not older.exists() and rotated == 1
+
+
+class TestBackupsFromBeforeTheRename:
+    """Up to 1.4 the default file was build_center.db, so its backups are named
+    build_center-<time>.sqlite.gz. They are backups of the same database and age
+    out under the same retention; nothing else carrying that name is touched."""
+
+    @staticmethod
+    def _aged(path, days):
+        path.write_text("x")
+        os.utime(path, (time.time() - days * 86400,) * 2)
+        return path
+
+    @pytest.mark.unit
+    def test_tc_bak_030_old_named_backups_follow_the_same_retention(self, tmp_path, sqlite_db, mocker):
+        """TC-BAK-030: build_center-*.sqlite.gz past the retention go with the new ones;
+        recent ones stay, and the rotation count includes them."""
+        _settings(mocker, f"sqlite:///{sqlite_db}")
+        out_dir = tmp_path / "backups"
+        out_dir.mkdir()
+        old = self._aged(out_dir / "build_center-20200101-000000.sqlite.gz", 40)
+        recent = self._aged(out_dir / "build_center-20261120-000000.sqlite.gz", 2)
+        other = self._aged(out_dir / "build_center-notes.txt", 400)
+
+        _, rotated = db_backup.backup(out_dir, retention_days=30)
+
+        assert rotated == 1 and not old.exists()
+        assert recent.exists() and other.exists()
+
+    @pytest.mark.unit
+    def test_tc_bak_031_other_database_files_leave_old_named_backups_alone(self, tmp_path, mocker):
+        """TC-BAK-031: only the default packwright.db sweeps the old name. A SQLite file
+        chosen through DATABASE_URL (here mine.db) and PostgreSQL leave every
+        build_center-* file in place, however old."""
+        db = tmp_path / "mine.db"
+        sqlite3.connect(db).close()
+        _settings(mocker, f"sqlite:///{db}")
+        out_dir = tmp_path / "backups"
+        out_dir.mkdir()
+        old_sqlite = self._aged(out_dir / "build_center-20200101-000000.sqlite.gz", 400)
+        old_pg = self._aged(out_dir / "build_center-20200101-000000.sql.gz", 400)
+
+        _, rotated = db_backup.backup(out_dir, retention_days=30)
+        assert rotated == 0 and old_sqlite.exists()
+
+        _settings(mocker, "postgresql://u@localhost/packwright")
+        TestPostgres._popen(mocker)
+        _, rotated = db_backup.backup(out_dir, retention_days=30)
+        assert rotated == 0 and old_pg.exists() and old_sqlite.exists()
+
+    @pytest.mark.unit
+    def test_tc_bak_032_failed_backup_keeps_old_named_backups(self, tmp_path, mocker):
+        """TC-BAK-032: rotation of the old name, too, runs only after a successful backup."""
+        _settings(mocker, f"sqlite:///{tmp_path / 'packwright.db'}")
+        out_dir = tmp_path / "backups"
+        out_dir.mkdir()
+        old = self._aged(out_dir / "build_center-20200101-000000.sqlite.gz", 400)
+
+        with pytest.raises(FileNotFoundError):
+            db_backup.backup(out_dir, retention_days=1)
+        assert old.exists()

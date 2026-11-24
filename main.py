@@ -59,6 +59,16 @@ if __name__ == "__main__":
         .replace("{version}", f"v{__version__}")
     )
 
+    from app.config import LegacyDatabaseConflict
+
+    try:
+        # Resolving the URL renames a pre-rename data/build_center.db to
+        # data/packwright.db, before alembic or the engine opens either file.
+        settings.async_database_url
+    except LegacyDatabaseConflict as exc:
+        print(f"\033[31m  {exc}\033[0m")
+        sys.exit(1)
+
     try:
         print("\033[90m  Applying database migrations...\033[0m")
         run_migrations()

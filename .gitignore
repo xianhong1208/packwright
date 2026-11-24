@@ -30,8 +30,9 @@ nuitka-report.xml
 /*.png
 /*.jpg
 
-# Local DB backups (contain password hashes and user-pasted env content)
-build_center_backups/
+# Local DB backups (contain password hashes and user-pasted env content).
+# The default BACKUP_DIR, data/backups, is already under /data/.
+/backups/
 
 # Claude Code local config
 .claude/

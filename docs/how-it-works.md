@@ -21,6 +21,7 @@ Console (React + antd)  ──HTTP / WebSocket──▶  FastAPI
 - **Sources.** A build is either a *local path* (confined to `LOCAL_SOURCE_ROOTS`) or a *Git URL*. Git mode validates the URL (no `file://`, `ssh://`, localhost, link-local or credential-bearing URLs), resolves the branch or tag to one commit and checks out exactly that commit (recorded on the build), and — for Python projects — bootstraps a `.venv` before building. git sends only the credentials stored in Packwright, never the server account's own git configuration or login.
 - **Token injection.** For a private repo the token for that host is looked up, decrypted, and handed to `git` only for that call, as an HTTP auth header scoped to the repository's origin (through `GIT_CONFIG_*` environment variables, so it is not on the command line either). It never appears in the URL, the stored build config or the log, and the API never returns it.
 - **Concurrency.** `MAX_CONCURRENT_BUILDS` bounds simultaneous builds (of every kind) behind a semaphore, and the rest queue; builds of one local folder run one at a time and wait for it without holding a slot; the process is intentionally single-worker because task state, WebSocket connections and the build semaphore live in process memory.
+- **Smoke test marker.** A binary being smoke-tested runs with `PACKWRIGHT_SMOKE_TEST=1`, so a program can skip work it should only do for real (a project's `.env` cannot turn it off).
 - **Cleanup.** A background loop deletes per-task workspaces and exported images by status and age, and (optionally) shrinks a successful build's workspace to just its output.
 
 ## The settings most installs touch
@@ -53,7 +54,7 @@ Packwright writes everything under a single `data/` directory. By default these 
 
 ```
 data/
-├── build_center.db     # SQLite database (users, roles, history, Git credentials)
+├── packwright.db       # SQLite database (users, roles, history, Git credentials)
 ├── workspace/          # one dir per build: clone, .venv, and the compiled output
 └── docker_images/      # exported Docker images, as <task-id>.tar.gz
 ```
@@ -68,7 +69,7 @@ data/
 GIT_WORKSPACE_DIR=/srv/packwright/workspace     # clones, builds, downloadable outputs
 DOCKER_IMAGES_DIR=/srv/packwright/docker_images # exported image tarballs
 # Move the database too (SQLite file, or point at PostgreSQL):
-DATABASE_URL=sqlite+aiosqlite:////srv/packwright/build_center.db
+DATABASE_URL=sqlite+aiosqlite:////srv/packwright/packwright.db
 ```
 
 Put `GIT_WORKSPACE_DIR` on the same filesystem as `BOOTSTRAP_UV_CACHE_DIR` so `uv` can hardlink instead of copying during dependency install.
@@ -136,7 +137,3 @@ Access tokens for private repositories are managed in the console (**Git credent
 - Tokens are encrypted at rest with `SETTINGS_ENCRYPTION_KEY` and never returned by the API — the UI shows only the last four characters.
 - When a build clones a URL, the token whose host matches exactly is selected automatically.
 - `GITLAB_TOKEN` in `.env` remains a fallback when no stored credential matches, sent only to the exact host in `GITLAB_TOKEN_HOST` (default `gitlab.com`; set it to your server's name for a self-hosted GitLab).
-
-## Names kept from Build Center
-
-Packwright was called *Build Center* up to v1.0.0. Names that live in existing data keep the old spelling, so nothing needs migrating: the SQLite file `data/build_center.db`, the default PostgreSQL database `build_center`, and the `BUILD_CENTER_SMOKE_TEST` variable that smoke-tested binaries still receive (alongside the new `PACKWRIGHT_SMOKE_TEST`). The systemd unit is now `deploy/packwright.service`.
